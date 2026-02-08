@@ -1835,7 +1835,7 @@ class PlexosDB:
         category = self.query("SELECT name from t_category WHERE category_id = ?", (category_id[0][0],))
         new_object_id = self.add_object(object_class, new_object_name, category=category[0][0])
         membership_mapping = self.copy_object_memberships(
-            object_class=object_class, original_name=new_object_name, new_name=new_object_name
+            object_class=object_class, original_name=original_object_name, new_name=new_object_name
         )
 
         # If we do not find a membership, we just look for the system membership
@@ -1849,8 +1849,11 @@ class PlexosDB:
             ]
             membership_mapping[system_membership_id] = new_membership_id
 
+        if not copy_properties:
+            return new_object_id
+
         data_ids = self.get_object_data_ids(object_class, name=original_object_name)
-        if not data_ids and copy_properties:
+        if not data_ids:
             logger.debug(f"No properties found for {original_object_name}")
             return new_object_id
 
