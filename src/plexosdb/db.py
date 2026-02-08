@@ -1838,16 +1838,10 @@ class PlexosDB:
             object_class=object_class, original_name=original_object_name, new_name=new_object_name
         )
 
-        # If we do not find a membership, we just look for the system membership
-        if not membership_mapping:
-            membership_mapping = {}
-            system_membership_id = self.list_object_memberships(object_class, original_object_name)[0][
-                "membership_id"
-            ]
-            new_membership_id = self.list_object_memberships(object_class, new_object_name)[0][
-                "membership_id"
-            ]
-            membership_mapping[system_membership_id] = new_membership_id
+        system_collection = get_default_collection(object_class)
+        old_sys_id = self.get_membership_id("System", original_object_name, system_collection)
+        new_sys_id = self.get_membership_id("System", new_object_name, system_collection)
+        membership_mapping[old_sys_id] = new_sys_id
 
         if not copy_properties:
             return new_object_id
@@ -1935,15 +1929,46 @@ class PlexosDB:
             self._db.execute("CREATE TEMPORARY TABLE temp_data_mapping (old_id INTEGER, new_id INTEGER)")
 
             self._db.execute("""
-                INSERT INTO temp_data_mapping
-                SELECT old_d.data_id AS old_id, new_d.data_id AS new_id
-                FROM t_data old_d
-                JOIN temp_mapping tm ON old_d.membership_id = tm.old_id
-                JOIN t_data new_d ON
-                    new_d.membership_id = tm.new_id AND
-                    new_d.property_id = old_d.property_id AND
-                    new_d.value = old_d.value
-                WHERE new_d.data_id NOT IN (SELECT data_id FROM t_tag)
+                INSERT INTO temp_data_mapping (old_id, new_id)
+                WITH
+                old_rows AS (
+                    SELECT
+                        d.data_id AS old_id,
+                        tm.new_id AS new_membership_id,
+                        d.property_id,
+                        d.value,
+                        d.state,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY d.membership_id, d.property_id, d.value, d.state
+                            ORDER BY d.data_id
+                        ) AS rn
+                    FROM t_data d
+                    JOIN temp_mapping tm ON d.membership_id = tm.old_id
+                ),
+                new_rows AS (
+                    SELECT
+                        d.data_id AS new_id,
+                        d.membership_id AS new_membership_id,
+                        d.property_id,
+                        d.value,
+                        d.state,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY d.membership_id, d.property_id, d.value, d.state
+                            ORDER BY d.data_id
+                        ) AS rn
+                    FROM t_data d
+                    WHERE d.membership_id IN (SELECT new_id FROM temp_mapping)
+                )
+                SELECT
+                    o.old_id,
+                    n.new_id
+                FROM old_rows o
+                JOIN new_rows n
+                  ON n.new_membership_id = o.new_membership_id
+                 AND n.property_id = o.property_id
+                 AND n.value = o.value
+                 AND n.state IS o.state
+                 AND n.rn = o.rn
             """)
 
             # Copy tags using data ID mapping
