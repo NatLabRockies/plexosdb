@@ -14,7 +14,7 @@ from loguru import logger
 
 from .checks import check_memberships_from_records
 from .db_manager import SQLiteManager
-from .enums import ClassEnum, CollectionEnum, Schema, get_default_collection, str2enum
+from .enums import ClassEnum, CollectionEnum, Schema, get_default_collection, str2enum, parse_class_enum, parse_collection_enum
 from .exceptions import (
     NameError,
     NoPropertiesError,
@@ -1866,13 +1866,11 @@ class PlexosDB:
         for membership in all_memberships:
             parent_name = membership["parent_name"]
             child_name = membership["child_name"]
-            parent_class = ClassEnum[membership["parent_class_name"]]
-            child_class = ClassEnum[membership["child_class_name"]]
-            collection = CollectionEnum[membership["collection_name"]]
+            parent_class = parse_class_enum(membership["parent_class_name"])
+            child_class  = parse_class_enum(membership["child_class_name"])
+            collection = parse_collection_enum(membership["collection_name"])
 
-            # Determine if original object was parent or child
-            if child_name == original_name:
-                # Original object is child, new object will be child
+            if child_class == object_class and child_name == original_name:
                 old_id = self.get_membership_id(parent_name, original_name, collection)
                 try:
                     new_id = self.add_membership(parent_class, child_class, parent_name, new_name, collection)
@@ -1880,8 +1878,7 @@ class PlexosDB:
                 except Exception as e:
                     logger.warning(f"Could not create child membership: {e}")
 
-            elif parent_name == original_name:
-                # Original object is parent, new object will be parent
+            elif parent_class == object_class and parent_name == original_name:
                 old_id = self.get_membership_id(original_name, child_name, collection)
                 try:
                     new_id = self.add_membership(parent_class, child_class, new_name, child_name, collection)
@@ -2852,7 +2849,9 @@ class PlexosDB:
             d.data_id
         """
         result = self._db.query(query, tuple(params))
-        assert result
+        # assert result
+        if not result:
+            return []
         return [row[0] for row in result]
 
     def get_object_properties(

@@ -158,3 +158,29 @@ def get_default_collection(class_enum: ClassEnum) -> CollectionEnum:
     if collection_name not in CollectionEnum.__members__:
         collection_name = class_enum.name
     return CollectionEnum[collection_name]
+
+
+def _parse_str_enum(enum_cls: type[Enum], value: str | Enum) -> Enum:
+    if isinstance(value, enum_cls):
+        return value
+
+    # Exact value match
+    for e in enum_cls:
+        if e.value == value:
+            return e
+
+    # Enum name without spaces 
+    key = value.replace(" ", "")
+    try:
+        return enum_cls[key]
+    except KeyError:
+        raise ValueError(f"{value!r} is not a valid {enum_cls.__name__}")
+    
+def parse_class_enum(value: str | ClassEnum) -> ClassEnum:
+    return _parse_str_enum(ClassEnum, value) 
+
+
+def parse_collection_enum(value: str | CollectionEnum) -> CollectionEnum:
+    return _parse_str_enum(CollectionEnum, value) 
+
+
