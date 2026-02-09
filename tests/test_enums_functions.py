@@ -359,3 +359,45 @@ def test_get_default_collection_for_supported_classes():
     for class_member in supported_classes:
         result = get_default_collection(class_member)
         assert isinstance(result, CollectionEnum)
+
+
+def test_schema_enum_name_and_label_properties():
+    """Test Schema enum name and label properties for all members."""
+    from plexosdb.enums import Schema
+
+    for member in Schema:
+        assert isinstance(member.name, str)
+        assert member.label is None or isinstance(member.label, str)
+
+
+def test_parse_str_enum_exact_value_and_spaces():
+    """Test _parse_str_enum for exact value and name with spaces."""
+    from plexosdb.enums import _parse_str_enum, ClassEnum
+
+    assert _parse_str_enum(ClassEnum, "Generator") == ClassEnum.Generator
+    assert _parse_str_enum(ClassEnum, "Data File") == ClassEnum.DataFile
+    assert _parse_str_enum(ClassEnum, "DataFile") == ClassEnum.DataFile
+
+
+def test_parse_str_enum_invalid_value_raises():
+    """Test _parse_str_enum raises ValueError for invalid value."""
+    from plexosdb.enums import _parse_str_enum, ClassEnum
+
+    with pytest.raises(ValueError):
+        _parse_str_enum(ClassEnum, "NotAClass")
+
+
+def test_parse_class_enum_and_collection_enum():
+    """Test parse_class_enum and parse_collection_enum utility functions."""
+    from plexosdb.enums import parse_class_enum, parse_collection_enum, ClassEnum, CollectionEnum
+
+    assert parse_class_enum("Generator") == ClassEnum.Generator
+    assert parse_class_enum(ClassEnum.Generator) == ClassEnum.Generator
+
+    assert parse_collection_enum("Generators") == CollectionEnum.Generators
+    assert parse_collection_enum(CollectionEnum.Generators) == CollectionEnum.Generators
+
+    with pytest.raises(ValueError):
+        parse_class_enum("NotAClass")
+    with pytest.raises(ValueError):
+        parse_collection_enum("NotACollection")

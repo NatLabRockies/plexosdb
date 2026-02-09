@@ -5,21 +5,6 @@ on:
     types: [opened, reopened, synchronize]
 
 jobs:
-  labeler:
-    name: apply labels
-    permissions:
-      contents: read
-      pull-requests: write
-      issues: write
-    runs-on: [ubuntu-latest]
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/labeler@v6.0.1
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          configuration-path: .github/labeler.yaml
-          sync-labels: true
-
   lint-commit-messages:
     name: lint commit message
     runs-on: [ubuntu-latest]

@@ -8,13 +8,22 @@ from importlib.resources import files
 from pathlib import Path
 from string import Template
 from typing import Any, Literal, TypedDict, cast
+from collections.abc import Sequence
 import warnings
 
 from loguru import logger
 
 from .checks import check_memberships_from_records
 from .db_manager import SQLiteManager
-from .enums import ClassEnum, CollectionEnum, Schema, get_default_collection, str2enum
+from .enums import (
+    ClassEnum,
+    CollectionEnum,
+    Schema,
+    get_default_collection,
+    str2enum,
+    parse_class_enum,
+    parse_collection_enum,
+)
 from .exceptions import (
     NameError,
     NoPropertiesError,
@@ -1835,22 +1844,19 @@ class PlexosDB:
         category = self.query("SELECT name from t_category WHERE category_id = ?", (category_id[0][0],))
         new_object_id = self.add_object(object_class, new_object_name, category=category[0][0])
         membership_mapping = self.copy_object_memberships(
-            object_class=object_class, original_name=new_object_name, new_name=new_object_name
+            object_class=object_class, original_name=original_object_name, new_name=new_object_name
         )
 
-        # If we do not find a membership, we just look for the system membership
-        if not membership_mapping:
-            membership_mapping = {}
-            system_membership_id = self.list_object_memberships(object_class, original_object_name)[0][
-                "membership_id"
-            ]
-            new_membership_id = self.list_object_memberships(object_class, new_object_name)[0][
-                "membership_id"
-            ]
-            membership_mapping[system_membership_id] = new_membership_id
+        system_collection = get_default_collection(object_class)
+        old_sys_id = self.get_membership_id("System", original_object_name, system_collection)
+        new_sys_id = self.get_membership_id("System", new_object_name, system_collection)
+        membership_mapping[old_sys_id] = new_sys_id
+
+        if not copy_properties:
+            return new_object_id
 
         data_ids = self.get_object_data_ids(object_class, name=original_object_name)
-        if not data_ids and copy_properties:
+        if not data_ids:
             logger.debug(f"No properties found for {original_object_name}")
             return new_object_id
 
@@ -1869,13 +1875,11 @@ class PlexosDB:
         for membership in all_memberships:
             parent_name = membership["parent_name"]
             child_name = membership["child_name"]
-            parent_class = ClassEnum[membership["parent_class_name"]]
-            child_class = ClassEnum[membership["child_class_name"]]
-            collection = CollectionEnum[membership["collection_name"]]
+            parent_class = parse_class_enum(membership["parent_class_name"])
+            child_class = parse_class_enum(membership["child_class_name"])
+            collection = parse_collection_enum(membership["collection_name"])
 
-            # Determine if original object was parent or child
-            if child_name == original_name:
-                # Original object is child, new object will be child
+            if child_class == object_class and child_name == original_name:
                 old_id = self.get_membership_id(parent_name, original_name, collection)
                 try:
                     new_id = self.add_membership(parent_class, child_class, parent_name, new_name, collection)
@@ -1883,8 +1887,7 @@ class PlexosDB:
                 except Exception as e:
                     logger.warning(f"Could not create child membership: {e}")
 
-            elif parent_name == original_name:
-                # Original object is parent, new object will be parent
+            elif parent_class == object_class and parent_name == original_name:
                 old_id = self.get_membership_id(original_name, child_name, collection)
                 try:
                     new_id = self.add_membership(parent_class, child_class, new_name, child_name, collection)
@@ -1932,15 +1935,46 @@ class PlexosDB:
             self._db.execute("CREATE TEMPORARY TABLE temp_data_mapping (old_id INTEGER, new_id INTEGER)")
 
             self._db.execute("""
-                INSERT INTO temp_data_mapping
-                SELECT old_d.data_id AS old_id, new_d.data_id AS new_id
-                FROM t_data old_d
-                JOIN temp_mapping tm ON old_d.membership_id = tm.old_id
-                JOIN t_data new_d ON
-                    new_d.membership_id = tm.new_id AND
-                    new_d.property_id = old_d.property_id AND
-                    new_d.value = old_d.value
-                WHERE new_d.data_id NOT IN (SELECT data_id FROM t_tag)
+                INSERT INTO temp_data_mapping (old_id, new_id)
+                WITH
+                old_rows AS (
+                    SELECT
+                        d.data_id AS old_id,
+                        tm.new_id AS new_membership_id,
+                        d.property_id,
+                        d.value,
+                        d.state,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY d.membership_id, d.property_id, d.value, d.state
+                            ORDER BY d.data_id
+                        ) AS rn
+                    FROM t_data d
+                    JOIN temp_mapping tm ON d.membership_id = tm.old_id
+                ),
+                new_rows AS (
+                    SELECT
+                        d.data_id AS new_id,
+                        d.membership_id AS new_membership_id,
+                        d.property_id,
+                        d.value,
+                        d.state,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY d.membership_id, d.property_id, d.value, d.state
+                            ORDER BY d.data_id
+                        ) AS rn
+                    FROM t_data d
+                    WHERE d.membership_id IN (SELECT new_id FROM temp_mapping)
+                )
+                SELECT
+                    o.old_id,
+                    n.new_id
+                FROM old_rows o
+                JOIN new_rows n
+                  ON n.new_membership_id = o.new_membership_id
+                 AND n.property_id = o.property_id
+                 AND n.value = o.value
+                 AND n.state IS o.state
+                 AND n.rn = o.rn
             """)
 
             # Copy tags using data ID mapping
@@ -2824,7 +2858,9 @@ class PlexosDB:
             d.data_id
         """
         result = self._db.query(query, tuple(params))
-        assert result
+        # assert result
+        if not result:
+            return []
         return [row[0] for row in result]
 
     def get_object_properties(
@@ -3627,9 +3663,30 @@ class PlexosDB:
         ['Generator1', 'Generator2']
         """
         class_id = self.get_class_id(class_enum)
-        query = f"SELECT name from {Schema.Objects.name} WHERE class_id = ?"
-        result = self._db.query(query, (class_id,))
-        return [d[0] for d in result]
+
+        params: Sequence[Any]
+        if category is None:
+            query = f"SELECT name FROM {Schema.Objects.name} WHERE class_id = ? ORDER BY name"
+            params = (class_id,)
+        else:
+            if not self.check_category_exists(class_enum, category):
+                msg = f"Category '{category}' does not exist for class {class_enum}."
+                raise NotFoundError(msg)
+
+            query = f"""
+            SELECT obj.name
+            FROM {Schema.Objects.name} AS obj
+            JOIN {Schema.Categories.name} AS cat
+                ON obj.category_id = cat.category_id
+            WHERE obj.class_id = ?
+            AND cat.name = ?
+            ORDER BY obj.name
+            """
+            params = (class_id, category)
+
+        result = self._db.query(query, params)
+        assert result is not None
+        return [row[0] for row in result]
 
     def list_parent_objects(
         self,
