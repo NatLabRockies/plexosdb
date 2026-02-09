@@ -161,6 +161,7 @@ def get_default_collection(class_enum: ClassEnum) -> CollectionEnum:
 
 
 def _parse_str_enum(enum_cls: type[Enum], value: str | Enum) -> Enum:
+    """Parse a string or Enum to an Enum instance of the specified enum class."""
     if isinstance(value, enum_cls):
         return value
 
