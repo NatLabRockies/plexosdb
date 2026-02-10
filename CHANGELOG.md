@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.1](https://github.com/NatLabRockies/plexosdb/compare/v1.3.0...v1.3.1) (2026-02-10)
+
+
+### 🐛 Bug Fixes
+
+* copy_object and list_objects_by_class ([#90](https://github.com/NatLabRockies/plexosdb/issues/90)) ([a11783e](https://github.com/NatLabRockies/plexosdb/commit/a11783edda469f5ad8f0dc6a5185139ce51fc1b7))
+
+
+### 📦 Build
+
+* **deps-dev:** bump ipython from 9.7.0 to 9.8.0 ([#86](https://github.com/NatLabRockies/plexosdb/issues/86)) ([50c97c5](https://github.com/NatLabRockies/plexosdb/commit/50c97c59e169860e9eace86dfaf0aeb62f795de2))
+* **deps-dev:** bump pytest from 9.0.1 to 9.0.2 ([#87](https://github.com/NatLabRockies/plexosdb/issues/87)) ([07e697b](https://github.com/NatLabRockies/plexosdb/commit/07e697b6e142521e84394901e8360cf28d8b95d1))
+* **deps:** bump actions/download-artifact from 6 to 7 ([#89](https://github.com/NatLabRockies/plexosdb/issues/89)) ([41ab2b4](https://github.com/NatLabRockies/plexosdb/commit/41ab2b47bbee8371aab0ca8a88a7dfcb5fa544d6))
+* **deps:** bump actions/upload-artifact from 5 to 6 ([#88](https://github.com/NatLabRockies/plexosdb/issues/88)) ([fc840f8](https://github.com/NatLabRockies/plexosdb/commit/fc840f85991f803817a7910a09ca0ff06c6f4713))
+
 ## [1.3.0](https://github.com/NREL/plexosdb/compare/v1.2.2...v1.3.0) (2025-12-11)
 
 
