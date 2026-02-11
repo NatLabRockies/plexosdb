@@ -83,6 +83,39 @@ def test_delete_property_with_scenario(db_base: PlexosDB):
     assert properties[0]["scenario_name"] is None
 
 
+def test_delete_property_with_renamed_system_object(db_base: PlexosDB):
+    from plexosdb.enums import ClassEnum, CollectionEnum
+
+    db = db_base
+    object_name = "BW01"
+    property_name = "Max Capacity"
+
+    system_name = db.list_objects_by_class(ClassEnum.System)[0]
+    db.add_object(ClassEnum.Generator, object_name)
+    db.add_property(
+        ClassEnum.Generator,
+        object_name,
+        property_name,
+        150.0,
+        collection_enum=CollectionEnum.Generators,
+        parent_class_enum=ClassEnum.System,
+        parent_object_name=system_name,
+    )
+
+    if system_name == "System":
+        db.update_object(ClassEnum.System, "System", new_name="NEM")
+
+    db.delete_property(
+        ClassEnum.Generator,
+        object_name,
+        property_name=property_name,
+        collection=CollectionEnum.Generators,
+        parent_class=ClassEnum.System,
+    )
+
+    assert not db.has_properties(ClassEnum.Generator, object_name)
+
+
 def test_delete_property_fails_with_nonexistent_object(db_base: PlexosDB):
     from plexosdb.enums import ClassEnum
     from plexosdb.exceptions import NotFoundError
