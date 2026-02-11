@@ -53,6 +53,7 @@ def db_instance():
     """Create a base DB instance that lasts the entire test session."""
     db = PlexosDB()
     yield db
+    db._db.close()
 
 
 @pytest.fixture()
@@ -63,6 +64,7 @@ def db_instance_with_xml(data_folder, tmp_path):
     shutil.copy(xml_fname, xml_copy)
     db = PlexosDB.from_xml(xml_path=xml_copy)
     yield db
+    db._db.close()
     xml_copy.unlink()
 
 
@@ -152,6 +154,7 @@ def db_instance_with_schema() -> PlexosDB:
             "INSERT INTO t_property_report(property_id, collection_id, name) VALUES (1, 1, 'Units')"
         )
     yield db
+    db._db.close()
 
 
 @pytest.fixture(scope="function")

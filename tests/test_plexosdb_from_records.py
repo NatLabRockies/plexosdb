@@ -245,3 +245,30 @@ def test_add_properties_from_records_respects_parent_membership(db_with_topology
         )
 
     assert db._db.fetchone("SELECT COUNT(*) FROM t_data")[0] == 0
+
+
+def test_add_properties_from_records_non_system_parent(db_with_topology: PlexosDB):
+    from plexosdb import ClassEnum, CollectionEnum
+
+    db = db_with_topology
+
+    db.add_object(ClassEnum.Reserve, "TestReserve")
+    db.add_membership(
+        ClassEnum.Reserve,
+        ClassEnum.Region,
+        "TestReserve",
+        "region-01",
+        CollectionEnum.Regions,
+    )
+
+    records = [{"name": "region-01", "property": "Load Risk", "value": 5.0}]
+    db.add_properties_from_records(
+        records,
+        object_class=ClassEnum.Region,
+        parent_class=ClassEnum.Reserve,
+        collection=CollectionEnum.Regions,
+        scenario="Base",
+    )
+
+    data_count = db._db.fetchone("SELECT COUNT(*) FROM t_data")[0]
+    assert data_count == 1
