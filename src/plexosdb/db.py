@@ -3343,7 +3343,9 @@ class PlexosDB:
         if property_names:
             check_collection = collection or (get_default_collection(class_enum) if class_enum else None)
             props = (
-                self._validate_properties(property_names, check_collection, class_enum)
+                self._validate_properties(
+                    property_names, check_collection, class_enum, parent_class=parent_class
+                )
                 if check_collection and class_enum
                 else normalize_names(property_names)
             )
@@ -4348,11 +4350,16 @@ class PlexosDB:
         return valid_names
 
     def _validate_properties(
-        self, property_names: str | Iterable[str], collection: CollectionEnum, class_enum: ClassEnum
+        self,
+        property_names: str | Iterable[str],
+        collection: CollectionEnum,
+        class_enum: ClassEnum,
+        *,
+        parent_class: ClassEnum | None = None,
     ) -> list[str]:
         """Validate properties exist for collection and return normalized list."""
         props = normalize_names(property_names)
-        if not self.check_property_exists(collection, class_enum, props):
+        if not self.check_property_exists(collection, class_enum, props, parent_class=parent_class):
             msg = (
                 f"Invalid property {props} for collection={collection}. "
                 "Use `list_valid_properties()` to check valid properties."
