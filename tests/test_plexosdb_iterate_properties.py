@@ -105,3 +105,45 @@ def test_iterate_properties_yields_property_records(db_thermal_gen: PlexosDB) ->
     assert len(results) > 0
     for record in results:
         assert isinstance(record, dict)
+
+
+def test_iterate_properties_with_non_system_parent_class(
+    db_with_reserve_collection_property: PlexosDB,
+) -> None:
+    """Test that parent_class context is propagated for property validation."""
+    from plexosdb import ClassEnum, CollectionEnum
+
+    db = db_with_reserve_collection_property
+
+    results = list(
+        db.iterate_properties(
+            class_enum=ClassEnum.Region,
+            object_names="region-01",
+            property_names=["Load Risk"],
+            parent_class=ClassEnum.Reserve,
+            collection=CollectionEnum.Regions,
+        )
+    )
+
+    assert len(results) == 1
+    assert results[0]["property"] == "Load Risk"
+
+
+def test_get_object_properties_with_non_system_parent_class(
+    db_with_reserve_collection_property: PlexosDB,
+) -> None:
+    """Test that get_object_properties respects parent_class_enum for validation."""
+    from plexosdb import ClassEnum, CollectionEnum
+
+    db = db_with_reserve_collection_property
+
+    props = db.get_object_properties(
+        ClassEnum.Region,
+        "region-01",
+        property_names=["Load Risk"],
+        parent_class_enum=ClassEnum.Reserve,
+        collection_enum=CollectionEnum.Regions,
+    )
+
+    assert len(props) == 1
+    assert props[0]["property"] == "Load Risk"
