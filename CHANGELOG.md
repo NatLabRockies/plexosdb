@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.2](https://github.com/NatLabRockies/plexosdb/compare/v1.3.1...v1.3.2) (2026-02-12)
+
+
+### 🐛 Bug Fixes
+
+* Add capability of having a system object name different than system ([#96](https://github.com/NatLabRockies/plexosdb/issues/96)) ([6f3e408](https://github.com/NatLabRockies/plexosdb/commit/6f3e40827b2cc39445761a0822d31a58e4e7f126))
+* Propagate `parent_class_enum` when it is not the system get_object_properties() and iterate_properties()  reject valid properties when parent_class_enum is not System. ([#100](https://github.com/NatLabRockies/plexosdb/issues/100)) ([7200897](https://github.com/NatLabRockies/plexosdb/commit/72008973493d086ba1901c6a4e88f3a68da135dd))
+
 ## [1.3.1](https://github.com/NatLabRockies/plexosdb/compare/v1.3.0...v1.3.1) (2026-02-10)
 
 
