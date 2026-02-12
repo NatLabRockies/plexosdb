@@ -303,6 +303,7 @@ def test_iter_dicts_reraises_sqlite_error() -> None:
     from plexosdb.db_manager import SQLiteManager
 
     db = SQLiteManager()
+    original_conn = db._con
     mock_conn = MagicMock()
     mock_cursor = MagicMock()
     mock_cursor.execute.side_effect = sqlite3.Error("Query failed")
@@ -313,12 +314,15 @@ def test_iter_dicts_reraises_sqlite_error() -> None:
     with pytest.raises(sqlite3.Error):
         list(db.iter_dicts("SELECT * FROM nonexistent"))
 
+    original_conn.close()
+
 
 def test_iter_dicts_cursor_cleanup_on_error() -> None:
     """Test that cursor is closed even when error occurs during iteration."""
     from plexosdb.db_manager import SQLiteManager
 
     db = SQLiteManager()
+    original_conn = db._con
     mock_conn = MagicMock()
     mock_cursor = MagicMock()
     mock_cursor.execute.side_effect = sqlite3.Error("Query failed")
@@ -330,6 +334,7 @@ def test_iter_dicts_cursor_cleanup_on_error() -> None:
         list(db.iter_dicts("SELECT * FROM test"))
 
     mock_cursor.close.assert_called_once()
+    original_conn.close()
 
 
 def test_fetchmany_happy_path(db_with_large_dataset: SQLiteManager) -> None:

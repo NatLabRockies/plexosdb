@@ -32,11 +32,13 @@ from .exceptions import (
 from .utils import (
     apply_scenario_tags,
     create_membership_record,
+    get_system_object_name,
     insert_property_texts,
     insert_property_values,
     no_space,
     normalize_names,
     plan_property_inserts,
+    resolve_membership_id,
 )
 from .xml_handler import XMLHandler
 
@@ -695,7 +697,8 @@ class PlexosDB:
 
         if not collection_enum:
             collection_enum = get_default_collection(class_enum)
-        _ = self.add_membership(ClassEnum.System, class_enum, "System", name, collection_enum)
+        system_name = get_system_object_name(self)
+        _ = self.add_membership(ClassEnum.System, class_enum, system_name, name, collection_enum)
         return object_id
 
     def add_objects(
@@ -756,7 +759,8 @@ class PlexosDB:
         collection_enum = get_default_collection(class_enum)
         object_ids = self.get_objects_id(names, class_enum=class_enum)
         parent_class_id = self.get_class_id(ClassEnum.System)
-        parent_object_id = self.get_object_id(ClassEnum.System, "System")
+        system_name = get_system_object_name(self)
+        parent_object_id = self.get_object_id(ClassEnum.System, system_name)
         collection_id = self.get_collection_id(
             collection_enum, parent_class_enum=ClassEnum.System, child_class_enum=class_enum
         )
@@ -1013,7 +1017,8 @@ class PlexosDB:
             Class enumeration of the parent object. If None, defaults to ClassEnum.System,
             by default None
         parent_object_name : str | None, optional
-            Name of the parent object. If None, defaults to "System", by default None
+            Name of the parent object. If None, membership is resolved from
+            `parent_class_enum`, `collection_enum`, and `object_name`.
 
         Returns
         -------
@@ -1079,7 +1084,14 @@ class PlexosDB:
             child_class_enum=object_class_enum,
             collection_enum=collection_enum,
         )
-        membership_id = self.get_membership_id(parent_object_name or "System", object_name, collection_enum)
+        membership_id = resolve_membership_id(
+            self,
+            object_name,
+            object_class=object_class_enum,
+            collection=collection_enum,
+            parent_class=parent_class_enum,
+            parent_object_name=parent_object_name,
+        )
 
         query = f"INSERT INTO {Schema.Data.name}(membership_id, property_id, value) values (?, ?, ?)"
         _ = self._db.execute(query, (membership_id, property_id, value))
@@ -1848,8 +1860,9 @@ class PlexosDB:
         )
 
         system_collection = get_default_collection(object_class)
-        old_sys_id = self.get_membership_id("System", original_object_name, system_collection)
-        new_sys_id = self.get_membership_id("System", new_object_name, system_collection)
+        system_name = get_system_object_name(self)
+        old_sys_id = self.get_membership_id(system_name, original_object_name, system_collection)
+        new_sys_id = self.get_membership_id(system_name, new_object_name, system_collection)
         membership_mapping[old_sys_id] = new_sys_id
 
         if not copy_properties:
@@ -2119,6 +2132,7 @@ class PlexosDB:
         property_name: str,
         collection: CollectionEnum | None = None,
         parent_class: ClassEnum | None = None,
+        parent_object_name: str | None = None,
         scenario: str | None = None,
     ) -> None:
         """Delete a property from an object.
@@ -2141,6 +2155,9 @@ class PlexosDB:
         parent_class : ClassEnum | None, optional
             Parent class enumeration for the property. If None, defaults to
             ClassEnum.System, by default None
+        parent_object_name : str | None, optional
+            Parent object name. If None, membership is resolved by parent class,
+            child class, collection, and child object name.
         scenario : str | None, optional
             Name of the scenario to filter by. If specified, only deletes
             property data associated with this scenario, by default None
@@ -2194,9 +2211,14 @@ class PlexosDB:
             collection_enum=collection,
         )
 
-        # For parent object name, default to "System" if not specified
-        parent_object_name = "System"  # This matches the pattern used in add_property
-        membership_id = self.get_membership_id(parent_object_name, object_name, collection)
+        membership_id = resolve_membership_id(
+            self,
+            object_name,
+            object_class=object_class,
+            collection=collection,
+            parent_class=parent_class,
+            parent_object_name=parent_object_name,
+        )
 
         # Build the delete query
         if scenario is not None:

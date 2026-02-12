@@ -12,10 +12,11 @@ from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
+from .enums import ClassEnum
 from .exceptions import NotFoundError
 
 if TYPE_CHECKING:
-    from plexosdb import ClassEnum, CollectionEnum, PlexosDB
+    from plexosdb import CollectionEnum, PlexosDB
     from plexosdb.db_manager import SQLiteManager
 
 
@@ -282,7 +283,13 @@ def plan_property_inserts(
         collection, parent_class_enum=parent_class, child_class_enum=object_class
     )
     collection_properties = _fetch_collection_properties(db, collection_id=collection_id)
-    name_to_membership = _resolve_membership_map(db, normalized_records, object_class=object_class)
+    name_to_membership = _resolve_membership_map(
+        db,
+        normalized_records,
+        object_class=object_class,
+        parent_class=parent_class,
+        collection=collection,
+    )
     property_id_map = {prop: pid for prop, pid in collection_properties}
 
     params, metadata_map = _build_property_rows(
@@ -304,17 +311,46 @@ def _resolve_membership_map(
     normalized_records: list[dict[str, Any]],
     *,
     object_class: ClassEnum,
+    parent_class: ClassEnum,
+    collection: CollectionEnum,
 ) -> dict[str, int]:
     """Resolve membership ids for each object name."""
     component_names = tuple({d["name"] for d in normalized_records if d.get("name") is not None})
-    try:
-        memberships = db.get_memberships_system(component_names, object_class=object_class)
-    except Exception as exc:
-        missing = ", ".join(sorted(name for name in component_names if name))
-        raise NotFoundError(
-            f"Objects not found: {missing}. Add them with `add_object` or `add_objects` before "
-            "adding properties."
-        ) from exc
+    if not component_names:
+        return {}
+
+    memberships: list[tuple[str, int]] | list[dict[str, Any]]
+    if parent_class == ClassEnum.System:
+        try:
+            memberships = db.get_memberships_system(
+                component_names,
+                object_class=object_class,
+                collection=collection,
+            )
+        except Exception as exc:
+            missing = ", ".join(sorted(name for name in component_names if name))
+            raise NotFoundError(
+                f"Objects not found: {missing}. Add them with `add_object` or `add_objects` before "
+                "adding properties."
+            ) from exc
+    else:
+        collection_id = db.get_collection_id(
+            collection, parent_class_enum=parent_class, child_class_enum=object_class
+        )
+        parent_class_id = db.get_class_id(parent_class)
+        child_class_id = db.get_class_id(object_class)
+        placeholders = ",".join("?" for _ in component_names)
+        query = f"""
+            SELECT child_object.name, mem.membership_id
+            FROM t_membership AS mem
+            INNER JOIN t_object AS child_object ON child_object.object_id = mem.child_object_id
+            WHERE mem.parent_class_id = ?
+              AND mem.child_class_id = ?
+              AND mem.collection_id = ?
+              AND child_object.name IN ({placeholders})
+        """
+        params: tuple[Any, ...] = (parent_class_id, child_class_id, collection_id, *component_names)
+        memberships = db._db.fetchall(query, params)
 
     if not memberships:
         missing = ", ".join(sorted(name for name in component_names if name))
@@ -323,7 +359,123 @@ def _resolve_membership_map(
             "adding properties."
         )
 
-    return {membership["name"]: membership["membership_id"] for membership in memberships}
+    name_to_membership: dict[str, int] = {}
+    ambiguous_objects: set[str] = set()
+    for membership in memberships:
+        if isinstance(membership, dict):
+            object_name = membership["name"]
+            membership_id = membership["membership_id"]
+        else:
+            object_name = membership[0]
+            membership_id = membership[1]
+        existing_membership_id = name_to_membership.get(object_name)
+        if existing_membership_id is not None and existing_membership_id != membership_id:
+            ambiguous_objects.add(object_name)
+            continue
+        name_to_membership[object_name] = membership_id
+
+    if ambiguous_objects:
+        ambiguous_names = ", ".join(sorted(ambiguous_objects))
+        raise ValueError(
+            "Multiple memberships found for objects in the same parent class/collection: "
+            f"{ambiguous_names}. Resolve membership ambiguity before bulk insert."
+        )
+
+    logger.trace("Resolved {} memberships for collection {}", len(name_to_membership), collection.value)
+    return name_to_membership
+
+
+def get_system_object_name(db: PlexosDB) -> str:
+    """Return the canonical System object name for this model.
+
+    Parameters
+    ----------
+    db : PlexosDB
+        Database instance to query.
+
+    Returns
+    -------
+    str
+        The name of the System object.
+
+    Raises
+    ------
+    NotFoundError
+        If no System object exists in the model.
+    ValueError
+        If multiple System objects exist and none is named "System".
+    """
+    system_objects = db.list_objects_by_class(ClassEnum.System)
+    if not system_objects:
+        raise NotFoundError("No System object found in the model.")
+    if len(system_objects) == 1:
+        logger.trace("Resolved System object: {}", system_objects[0])
+        return system_objects[0]
+    if "System" in system_objects:
+        logger.trace("Multiple System objects found, defaulting to 'System'")
+        return "System"
+    raise ValueError(
+        "Multiple System objects found and no default could be inferred. "
+        "Pass an explicit `parent_object_name`."
+    )
+
+
+def resolve_membership_id(
+    db: PlexosDB,
+    object_name: str,
+    *,
+    object_class: ClassEnum,
+    collection: CollectionEnum,
+    parent_class: ClassEnum,
+    parent_object_name: str | None = None,
+) -> int:
+    """Resolve a single membership ID for property operations.
+
+    Parameters
+    ----------
+    db : PlexosDB
+        Database instance to query.
+    object_name : str
+        Name of the child object.
+    object_class : ClassEnum
+        Class of the child object.
+    collection : CollectionEnum
+        Collection defining the membership relationship.
+    parent_class : ClassEnum
+        Class of the parent object.
+    parent_object_name : str | None, optional
+        Explicit parent object name. If provided, uses direct lookup.
+
+    Returns
+    -------
+    int
+        The membership ID.
+
+    Raises
+    ------
+    NotFoundError
+        If no matching membership is found.
+    ValueError
+        If multiple memberships exist (ambiguous).
+    """
+    if parent_object_name is not None:
+        logger.trace("Resolving membership via explicit parent: {}", parent_object_name)
+        return db.get_membership_id(parent_object_name, object_name, collection)
+
+    mapping = _resolve_membership_map(
+        db,
+        [{"name": object_name}],
+        object_class=object_class,
+        parent_class=parent_class,
+        collection=collection,
+    )
+    if object_name not in mapping:
+        raise NotFoundError(
+            f"No membership found for '{object_name}' in collection '{collection.value}' "
+            f"with parent class '{parent_class.value}'."
+        )
+    logger.trace("Resolved membership_id={} for {}", mapping[object_name], object_name)
+    return mapping[object_name]
 
 
 def _build_property_rows(

@@ -224,3 +224,51 @@ def test_add_properties_from_records_unknown_property(db_instance_with_schema: P
     )
 
     assert db._db.fetchone("SELECT COUNT(*) FROM t_data")[0] == 0
+
+
+def test_add_properties_from_records_respects_parent_membership(db_with_topology: PlexosDB):
+    from plexosdb import ClassEnum, CollectionEnum
+    from plexosdb.exceptions import NotFoundError
+
+    db = db_with_topology
+    system_name = db.list_objects_by_class(ClassEnum.System)[0]
+    system_membership_id = db.get_membership_id(system_name, "node-01", CollectionEnum.Nodes)
+    db._db.execute("DELETE FROM t_membership WHERE membership_id = ?", (system_membership_id,))
+
+    with pytest.raises(NotFoundError, match="Objects not found"):
+        db.add_properties_from_records(
+            [{"name": "node-01", "property": "Load", "value": 123.0}],
+            object_class=ClassEnum.Node,
+            parent_class=ClassEnum.System,
+            collection=CollectionEnum.Nodes,
+            scenario="Base Case",
+        )
+
+    assert db._db.fetchone("SELECT COUNT(*) FROM t_data")[0] == 0
+
+
+def test_add_properties_from_records_non_system_parent(db_with_topology: PlexosDB):
+    from plexosdb import ClassEnum, CollectionEnum
+
+    db = db_with_topology
+
+    db.add_object(ClassEnum.Reserve, "TestReserve")
+    db.add_membership(
+        ClassEnum.Reserve,
+        ClassEnum.Region,
+        "TestReserve",
+        "region-01",
+        CollectionEnum.Regions,
+    )
+
+    records = [{"name": "region-01", "property": "Load Risk", "value": 5.0}]
+    db.add_properties_from_records(
+        records,
+        object_class=ClassEnum.Region,
+        parent_class=ClassEnum.Reserve,
+        collection=CollectionEnum.Regions,
+        scenario="Base",
+    )
+
+    data_count = db._db.fetchone("SELECT COUNT(*) FROM t_data")[0]
+    assert data_count == 1
