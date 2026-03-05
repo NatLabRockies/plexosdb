@@ -189,6 +189,68 @@ def test_bulk_insert_memberships_from_records(db_base: PlexosDB):
         _ = db.add_memberships_from_records(memberships)
 
 
+def test_bulk_insert_memberships_from_records_respects_chunksize(
+    db_instance_with_schema: PlexosDB,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from plexosdb import ClassEnum, CollectionEnum
+
+    db = db_instance_with_schema
+    parent_names = [f"ChunkGen_{idx}" for idx in range(5)]
+    child_names = [f"ChunkNode_{idx}" for idx in range(5)]
+
+    db.add_objects(ClassEnum.Generator, *parent_names)
+    db.add_objects(ClassEnum.Node, *child_names)
+
+    parent_object_ids = db.get_objects_id(parent_names, class_enum=ClassEnum.Generator)
+    child_object_ids = db.get_objects_id(child_names, class_enum=ClassEnum.Node)
+    parent_class_id = db.get_class_id(ClassEnum.Generator)
+    child_class_id = db.get_class_id(ClassEnum.Node)
+    collection_id = db.get_collection_id(
+        CollectionEnum.Nodes,
+        parent_class_enum=ClassEnum.Generator,
+        child_class_enum=ClassEnum.Node,
+    )
+    memberships = [
+        {
+            "collection_id": collection_id,
+            "parent_class_id": parent_class_id,
+            "child_class_id": child_class_id,
+            "child_object_id": child_id,
+            "parent_object_id": parent_id,
+        }
+        for parent_id, child_id in zip(parent_object_ids, child_object_ids)
+    ]
+
+    observed_batch_sizes: list[int] = []
+    original_executemany = db._db.executemany
+
+    def spy_executemany(query, params_seq):
+        observed_batch_sizes.append(len(params_seq))
+        return original_executemany(query, params_seq)
+
+    monkeypatch.setattr(db._db, "executemany", spy_executemany)
+    db.add_memberships_from_records(memberships, chunksize=2)
+
+    assert observed_batch_sizes == [2, 2, 1]
+
+
+def test_bulk_insert_memberships_from_records_rejects_non_positive_chunksize(
+    db_instance_with_schema: PlexosDB,
+):
+    db = db_instance_with_schema
+    membership = {
+        "parent_class_id": 2,
+        "parent_object_id": 1,
+        "collection_id": 3,
+        "child_class_id": 3,
+        "child_object_id": 1,
+    }
+
+    with pytest.raises(ValueError, match="chunksize must be >= 1"):
+        db.add_memberships_from_records([membership], chunksize=0)
+
+
 def test_add_properties_from_records_no_records(db_instance_with_schema: PlexosDB, caplog):
     """Gracefully handle empty payload."""
     from plexosdb import ClassEnum, CollectionEnum

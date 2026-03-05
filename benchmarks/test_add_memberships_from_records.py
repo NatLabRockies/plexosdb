@@ -28,11 +28,12 @@ def _insert_objects(
 
 @pytest.mark.benchmark
 @pytest.mark.parametrize(
-    ("record_count", "chunksize"),
+    ("record_count", "chunksize", "rounds"),
     [
-        pytest.param(100, 100, id="small"),
-        pytest.param(1_000, 1_000, id="medium"),
-        pytest.param(10_000, 10_000, id="large"),
+        pytest.param(100, 100, 10, id="small"),
+        pytest.param(1_000, 1_000, 10, id="medium"),
+        pytest.param(10_000, 10_000, 10, id="large"),
+        pytest.param(300_000, 10_000, 2, id="xlarge_300k"),
     ],
 )
 def test_add_memberships_from_records_benchmark(
@@ -40,6 +41,7 @@ def test_add_memberships_from_records_benchmark(
     db_instance_with_schema: PlexosDB,
     record_count: int,
     chunksize: int,
+    rounds: int,
 ) -> None:
     """Benchmark `add_memberships_from_records` across different payload sizes."""
     db = db_instance_with_schema
@@ -53,7 +55,7 @@ def test_add_memberships_from_records_benchmark(
     parent_ids = _insert_objects(
         db,
         class_id=parent_class_id,
-        count=record_count,
+        count=1,
         prefix=f"benchmark_parent_{record_count}",
         start_id=10_000,
     )
@@ -67,12 +69,12 @@ def test_add_memberships_from_records_benchmark(
     records = [
         {
             "parent_class_id": parent_class_id,
-            "parent_object_id": parent_id,
+            "parent_object_id": parent_ids[0],
             "collection_id": collection_id,
             "child_class_id": child_class_id,
             "child_object_id": child_id,
         }
-        for parent_id, child_id in zip(parent_ids, child_ids)
+        for child_id in child_ids
     ]
 
     def _reset_memberships() -> None:
@@ -89,7 +91,7 @@ def test_add_memberships_from_records_benchmark(
         args=(records,),
         kwargs={"chunksize": chunksize},
         setup=_reset_memberships,
-        rounds=10,
+        rounds=rounds,
         iterations=1,
     )
     assert result is True

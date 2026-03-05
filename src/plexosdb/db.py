@@ -13,7 +13,6 @@ import warnings
 
 from loguru import logger
 
-from .checks import check_memberships_from_records
 from .db_manager import SQLiteManager
 from .enums import (
     ClassEnum,
@@ -31,6 +30,7 @@ from .exceptions import (
 )
 from .utils import (
     apply_scenario_tags,
+    batched,
     create_membership_record,
     get_system_object_name,
     insert_property_texts,
@@ -585,18 +585,53 @@ class PlexosDB:
         >>> db.add_memberships_from_records(records)
         True
         """
-        if not check_memberships_from_records(records):
-            msg = "Some of the records do not have all the required fields. "
-            msg += "Check construction of records."
-            raise KeyError(msg)
+        if not records:
+            logger.debug("No membership records provided")
+            return True
+
+        if chunksize < 1:
+            msg = f"chunksize must be >= 1, received {chunksize}"
+            raise ValueError(msg)
+
         query = f"""
         INSERT INTO {Schema.Memberships.name}
             (parent_class_id,parent_object_id, collection_id, child_class_id, child_object_id)
         VALUES
-            (:parent_class_id, :parent_object_id, :collection_id, :child_class_id, :child_object_id)
+            (?, ?, ?, ?, ?)
         """
-        query_status = self._db.executemany(query, records)
-        assert query_status
+        error_msg = "Some of the records do not have all the required fields. Check construction of records."
+
+        def prepare_batch(
+            batch_records: Sequence[dict[str, int]],
+        ) -> list[tuple[int, int, int, int, int]]:
+            params: list[tuple[int, int, int, int, int]] = []
+            for record in batch_records:
+                # Keep strict validation semantics: exact keys, no missing or extra fields.
+                if len(record) != 5:
+                    raise KeyError(error_msg)
+                try:
+                    params.append(
+                        (
+                            record["parent_class_id"],
+                            record["parent_object_id"],
+                            record["collection_id"],
+                            record["child_class_id"],
+                            record["child_object_id"],
+                        )
+                    )
+                except KeyError as exc:
+                    raise KeyError(error_msg) from exc
+            return params
+
+        with self._db.transaction():
+            if chunksize >= len(records):
+                query_status = self._db.executemany(query, prepare_batch(records))
+                assert query_status
+            else:
+                for batch in batched(records, chunksize):
+                    query_status = self._db.executemany(query, prepare_batch(batch))
+                    assert query_status
+
         logger.debug("Added {} memberships.", len(records))
         return True
 
