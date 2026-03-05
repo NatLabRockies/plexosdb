@@ -251,6 +251,30 @@ def test_bulk_insert_memberships_from_records_rejects_non_positive_chunksize(
         db.add_memberships_from_records([membership], chunksize=0)
 
 
+def test_bulk_insert_memberships_from_records_accepts_empty_records(
+    db_instance_with_schema: PlexosDB,
+):
+    db = db_instance_with_schema
+
+    assert db.add_memberships_from_records([]) is True
+
+
+def test_bulk_insert_memberships_from_records_invalid_keys_shape(
+    db_instance_with_schema: PlexosDB,
+):
+    db = db_instance_with_schema
+    invalid_membership = {
+        "parent_class_id": 2,
+        "parent_object_id": 1,
+        "collection_id": 3,
+        "child_class_id": 3,
+        "bad_key": 1,
+    }
+
+    with pytest.raises(KeyError, match="Some of the records do not have all the required fields"):
+        db.add_memberships_from_records([invalid_membership])
+
+
 def test_add_properties_from_records_no_records(db_instance_with_schema: PlexosDB, caplog):
     """Gracefully handle empty payload."""
     from plexosdb import ClassEnum, CollectionEnum
