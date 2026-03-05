@@ -604,6 +604,7 @@ class PlexosDB:
         def prepare_batch(
             batch_records: Sequence[dict[str, int]],
         ) -> list[tuple[int, int, int, int, int]]:
+            """Validate records and map each membership dict to positional SQL parameters."""
             params: list[tuple[int, int, int, int, int]] = []
             for record in batch_records:
                 # Keep strict validation semantics: exact keys, no missing or extra fields.
