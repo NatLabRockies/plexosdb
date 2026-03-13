@@ -11,7 +11,7 @@ from .profiles import NORMALIZED_SOLAR_PROFILE, NORMALIZED_WIND_PROFILE
 
 
 @pytest.fixture(scope="session")
-def master_xml_files(data_folder, tmp_path_factory) -> dict[str, Path]:
+def master_xml_files(data_folder, tmp_path_factory) -> dict[str, Path]:  # type: ignore
     zip_path = data_folder / "master_files.zip"
     extract_dir = tmp_path_factory.getbasetemp() / "master_xml_cache"
     extract_dir.mkdir(exist_ok=True)

@@ -163,7 +163,7 @@ markers = [
     "export: Functions that export the database.",
     "listing: Functions that list elements of the  database.",
     "object_operations: Operations to objects in the database.",
-    "fast: Run test with only master_v9.2R6 XML for fast development testing"
+    "fast: Run test with only master_v10.0R2 XML for fast development testing"
 ]
 
 [tool.coverage.run]

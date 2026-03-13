@@ -90,7 +90,7 @@ def db_instance_with_schema() -> Generator[PlexosDB, None, None]:
             "INSERT INTO t_property(property_id, collection_id, unit_id, name) "
             "VALUES (3,1,1, 'Rating Factor')"
         )
-        db._db.execute("INSERT INTO t_config(element, value) VALUES ('Version', '9.2')")
+        db._db.execute("INSERT INTO t_config(element, value) VALUES ('Version', '10.0')")
         db._db.execute("INSERT INTO t_attribute(attribute_id, class_id, name) VALUES( 1, 2, 'Latitude')")
         db._db.execute(
             "INSERT INTO t_property_report(property_id, collection_id, name) VALUES (1, 1, 'Units')"

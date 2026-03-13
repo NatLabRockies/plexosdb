@@ -24,14 +24,13 @@ pytest_plugins = [
 def pytest_generate_tests(metafunc):
     """
     Parametrize _master_xml_param fixture with XML versions.
-    The v9.2R6 version is marked with 'fast' for quick testing.
-    Run with -m fast to only test the v9.2R6 version.
-    Run without -m fast to test all three XML versions.
+    The v10.0R2 version is marked with 'fast' for quick testing.
+    Run with -m fast to only test the v10.0R2 version.
+    Run without -m fast to test all XML versions.
     """
     if "_master_xml_param" in metafunc.fixturenames:
         params = [
-            pytest.param("v9.2R6", marks=pytest.mark.fast),
-            "v10.0R2",
+            pytest.param("v10.0R2", marks=pytest.mark.fast),
             "v11.0R4",
         ]
 
@@ -69,7 +68,7 @@ def db_instance_with_xml(data_folder, tmp_path):
 
 
 @pytest.fixture(scope="function")
-def db_instance_with_schema() -> PlexosDB:
+def db_instance_with_schema() -> PlexosDB:  # type: ignore
     """Create a base DB instance that lasts the entire test session."""
     db = PlexosDB()
     db.create_schema()
@@ -148,7 +147,7 @@ def db_instance_with_schema() -> PlexosDB:
             "INSERT INTO t_property(property_id, collection_id, unit_id, name) "
             "VALUES (3,1,1, 'Rating Factor')"
         )
-        db._db.execute("INSERT INTO t_config(element, value) VALUES ('Version', '9.2')")
+        db._db.execute("INSERT INTO t_config(element, value) VALUES ('Version', '10.0')")
         db._db.execute("INSERT INTO t_attribute(attribute_id, class_id, name) VALUES( 1, 2, 'Latitude')")
         db._db.execute(
             "INSERT INTO t_property_report(property_id, collection_id, name) VALUES (1, 1, 'Units')"
