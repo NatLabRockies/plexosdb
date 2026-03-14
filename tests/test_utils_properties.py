@@ -886,3 +886,129 @@ def test_plan_property_inserts_raises_on_no_memberships(db_with_topology: Plexos
             collection=CollectionEnum.Generators,
             parent_class=ClassEnum.System,
         )
+
+
+def test_insert_property_values_chunks_over_900_membership_ids(db_base: PlexosDB) -> None:
+    """insert_property_values passes a tuple (not list) to fetchall when >900 unique membership IDs.
+
+    Regression test: the chunk was previously a list[int], which is incompatible with
+    SQLiteManager.fetchall's expected tuple[Any, ...] parameter type.
+    """
+    from plexosdb import ClassEnum, CollectionEnum
+    from plexosdb.utils import insert_property_values, plan_property_inserts
+
+    db = db_base
+    names = [f"ChunkInsGen_{i}" for i in range(950)]
+    db.add_objects(ClassEnum.Generator, names)
+
+    records = [{"name": n, "property": "Max Capacity", "value": float(i)} for i, n in enumerate(names)]
+    prepared = plan_property_inserts(
+        db,
+        records,
+        object_class=ClassEnum.Generator,
+        collection=CollectionEnum.Generators,
+        parent_class=ClassEnum.System,
+    )
+    with db._db.transaction():
+        data_id_map = insert_property_values(db, prepared.params, metadata_map=prepared.metadata_map)
+
+    assert len(data_id_map) == 950
+    assert all(obj_name != "" for _, obj_name in data_id_map.values())
+
+
+def test_resolve_membership_map_empty_names_returns_empty(db_instance_with_schema: PlexosDB) -> None:
+    """_resolve_membership_map returns {} immediately when all record names are None (line 320)."""
+    from plexosdb import ClassEnum, CollectionEnum
+    from plexosdb.utils import _resolve_membership_map
+
+    db = db_instance_with_schema
+    result = _resolve_membership_map(
+        db,
+        [{"name": None, "property": "Max Capacity", "value": 1.0}],
+        object_class=ClassEnum.Generator,
+        collection=CollectionEnum.Generators,
+        parent_class=ClassEnum.System,
+    )
+    assert result == {}
+
+
+def test_resolve_membership_map_get_memberships_raises(
+    monkeypatch, db_instance_with_schema: PlexosDB
+) -> None:
+    """Unexpected exception from get_memberships_system is wrapped as NotFoundError."""
+    from plexosdb import ClassEnum, CollectionEnum
+    from plexosdb.exceptions import NotFoundError
+    from plexosdb.utils import _resolve_membership_map
+
+    db = db_instance_with_schema
+    db.add_object(ClassEnum.Generator, "TriggerGen")
+
+    def raise_error(*a, **kw):
+        raise RuntimeError("db error")
+
+    monkeypatch.setattr(db, "get_memberships_system", raise_error)
+
+    with pytest.raises(NotFoundError, match="Objects not found"):
+        _resolve_membership_map(
+            db,
+            [{"name": "TriggerGen", "property": "Max Capacity", "value": 1.0}],
+            object_class=ClassEnum.Generator,
+            collection=CollectionEnum.Generators,
+            parent_class=ClassEnum.System,
+        )
+
+
+def test_resolve_membership_map_ambiguous_raises(monkeypatch, db_with_topology: PlexosDB) -> None:
+    """Same object name with two different membership IDs raises ValueError."""
+    from plexosdb import ClassEnum, CollectionEnum
+    from plexosdb.utils import _resolve_membership_map
+
+    db = db_with_topology
+
+    # Simulate a non-system fetchall returning the same name with two different IDs
+    monkeypatch.setattr(db._db, "fetchall", lambda *a, **kw: [("node-01", 100), ("node-01", 200)])
+
+    with pytest.raises(ValueError, match="Multiple memberships"):
+        _resolve_membership_map(
+            db,
+            [{"name": "node-01", "property": "Load", "value": 1.0}],
+            object_class=ClassEnum.Node,
+            collection=CollectionEnum.Nodes,
+            parent_class=ClassEnum.Generator,
+        )
+
+
+def test_resolve_membership_id_name_not_in_mapping(monkeypatch, db_instance_with_schema: PlexosDB) -> None:
+    """resolve_membership_id raises NotFoundError when map is non-empty but lacks the name (line 473)."""
+    from plexosdb import ClassEnum, CollectionEnum
+    from plexosdb.exceptions import NotFoundError
+    from plexosdb.utils import resolve_membership_id
+
+    db = db_instance_with_schema
+    db.add_object(ClassEnum.Generator, "MyGen")
+
+    # Non-empty memberships list passes the `if not memberships` check, but name is different
+    monkeypatch.setattr(
+        db,
+        "get_memberships_system",
+        lambda *a, **kw: [{"name": "OtherGen", "membership_id": 999}],
+    )
+
+    with pytest.raises(NotFoundError, match="No membership found"):
+        resolve_membership_id(
+            db,
+            "MyGen",
+            object_class=ClassEnum.Generator,
+            collection=CollectionEnum.Generators,
+            parent_class=ClassEnum.System,
+        )
+
+
+def test_persist_metadata_skips_missing_data_id(db_with_topology: PlexosDB) -> None:
+    """_persist_metadata_for_data silently skips keys absent from data_id_map (line 685)."""
+    from plexosdb.utils import _persist_metadata_for_data
+
+    db = db_with_topology
+    metadata_map = {(999, 1, 99.0): {"band": 2, "date_from": None, "date_to": None}}
+
+    _persist_metadata_for_data(db, metadata_map=metadata_map, data_id_map={})

@@ -358,3 +358,20 @@ def test_add_properties_from_records_non_system_parent(db_with_topology: PlexosD
 
     data_count = db._db.fetchone("SELECT COUNT(*) FROM t_data")[0]
     assert data_count == 1
+
+
+def test_get_memberships_system_chunks_over_900_names(db_base: PlexosDB):
+    """get_memberships_system passes a tuple (not list) to fetchall_dict when >900 names.
+
+    Regression test: the params were previously built as a list[Any], which is incompatible
+    with SQLiteManager.fetchall_dict's expected tuple[Any, ...] parameter type.
+    """
+    from plexosdb import ClassEnum
+
+    db = db_base
+    names = [f"ChunkGen_{i}" for i in range(950)]
+    db.add_objects(ClassEnum.Generator, names)
+
+    result = db.get_memberships_system(names, object_class=ClassEnum.Generator)
+    assert len(result) == 950
+    assert {r["name"] for r in result} == set(names)
