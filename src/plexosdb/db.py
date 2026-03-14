@@ -934,7 +934,7 @@ class PlexosDB:
 
         with self._db.transaction():
             data_id_map = insert_property_values(self, params, metadata_map=metadata_map)
-            apply_scenario_tags(self, params, scenario=scenario, chunksize=chunksize)
+            apply_scenario_tags(self, params, scenario=scenario, chunksize=chunksize, data_id_map=data_id_map)
 
             if has_datafile_text:
                 insert_property_texts(
@@ -2764,8 +2764,12 @@ class PlexosDB:
             If any of the object_names do not exist.
         """
         names = normalize_names(*object_names)
-        object_ids = tuple(self.get_object_id(object_class, name=name, category=category) for name in names)
-        query_string = """
+        if not names:
+            return []
+
+        class_id = self.get_class_id(object_class)  # 1 query instead of N
+
+        base_query = """
             SELECT
                 mem.membership_id,
                 mem.child_class_id,
@@ -2773,36 +2777,36 @@ class PlexosDB:
                 mem.collection_id,
                 child_class.name AS class,
                 collections.name AS collection_name
-            FROM
-                t_membership AS mem
-            INNER JOIN
-                t_object AS parent_object ON mem.parent_object_id = parent_object.object_id
-            INNER JOIN
-                t_object AS child_object ON mem.child_object_id = child_object.object_id
-            LEFT JOIN
-                t_class AS parent_class ON mem.parent_class_id = parent_class.class_id
-            LEFT JOIN
-                t_class AS child_class ON mem.child_class_id = child_class.class_id
-            LEFT JOIN
-                t_collection AS collections ON mem.collection_id = collections.collection_id
-            """
-        conditions = []
-        if len(object_ids) == 1:
-            conditions.append(
-                f"(child_object.object_id = {object_ids[0]} OR parent_object.object_id = {object_ids[0]})"
-            )
-        else:
-            conditions.append(
-                f"(child_object.object_id in {object_ids} OR parent_object.object_id in {object_ids})"
-            )
-        parent_class = ClassEnum.System
+            FROM t_membership AS mem
+            INNER JOIN t_object AS parent_object ON mem.parent_object_id = parent_object.object_id
+            INNER JOIN t_object AS child_object ON mem.child_object_id = child_object.object_id
+            LEFT JOIN t_class AS parent_class ON mem.parent_class_id = parent_class.class_id
+            LEFT JOIN t_class AS child_class ON mem.child_class_id = child_class.class_id
+            LEFT JOIN t_collection AS collections ON mem.collection_id = collections.collection_id
+            WHERE mem.child_class_id = ?
+            AND child_object.name IN ({ph})
+        """
+
+        extra = ""
+        extra_params: list[Any] = []
         if collection:
-            conditions.append(
-                f"parent_class.name = '{parent_class.value}' and collections.name = '{collection.value}'"
+            extra = " AND parent_class.name = ? AND collections.name = ?"
+            extra_params = [ClassEnum.System.value, collection.value]
+
+        # Specify bound parameter limit
+        CHUNK = 900  # noqa: N806
+        all_rows: list[dict[str, Any]] = []
+        for i in range(0, len(names), CHUNK):
+            chunk = names[i : i + CHUNK]
+            ph = ",".join("?" * len(chunk))
+            params = (class_id, *chunk, *extra_params)
+            all_rows.extend(
+                self._db.fetchall_dict(
+                    base_query.format(ph=ph) + extra,
+                    params,
+                )
             )
-        if conditions:
-            query_string += " WHERE " + " AND ".join(conditions)
-        return self._db.fetchall_dict(query_string)
+        return all_rows
 
     def get_metadata(
         self,

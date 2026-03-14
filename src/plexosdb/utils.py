@@ -544,20 +544,32 @@ def insert_property_values(
 
     db._db.executemany("INSERT into t_data(membership_id, property_id, value) values (?,?,?)", params)
 
-    data_ids_query = """
-        SELECT d.data_id, o.name
-        FROM t_data d
-        JOIN t_membership m ON d.membership_id = m.membership_id
-        JOIN t_object o ON m.child_object_id = o.object_id
-        WHERE d.membership_id = ? AND d.property_id = ? AND d.value = ?
-    """
-    data_id_map = {}
-    for membership_id, property_id, value in params:
-        result = db._db.fetchone(data_ids_query, (membership_id, property_id, value))
-        if result:
-            data_id = result[0]
-            obj_name = result[1]
-            data_id_map[(membership_id, property_id, value)] = (data_id, obj_name)
+    last_id = db._db.last_insert_rowid()
+    first_id = last_id - len(params) + 1
+
+    unique_membership_ids = list({mid for mid, _, _ in params})
+    membership_to_name: dict[int, str] = {}
+    # Specify bound parameter limit
+    CHUNK = 900  # noqa: N806
+    for i in range(0, len(unique_membership_ids), CHUNK):
+        chunk = tuple(unique_membership_ids[i : i + CHUNK])
+        ph = ",".join("?" * len(chunk))
+        rows = db._db.fetchall(
+            f"""SELECT m.membership_id, o.name
+                FROM t_membership m
+                JOIN t_object o ON m.child_object_id = o.object_id
+                WHERE m.membership_id IN ({ph})""",
+            chunk,
+        )
+        for mid, name in rows:
+            membership_to_name[mid] = name
+
+    data_id_map: dict[tuple[int, int, Any], tuple[int, str]] = {}
+    for i, (membership_id, property_id, value) in enumerate(params):
+        data_id_map[(membership_id, property_id, value)] = (
+            first_id + i,
+            membership_to_name.get(membership_id, ""),
+        )
 
     if metadata_map:
         _persist_metadata_for_data(db, metadata_map=metadata_map, data_id_map=data_id_map)
@@ -572,6 +584,7 @@ def apply_scenario_tags(
     *,
     scenario: str,
     chunksize: int,
+    data_id_map: dict[tuple[int, int, Any], tuple[int, str]] | None = None,
 ) -> None:
     """Insert scenario tags for property data.
 
@@ -594,18 +607,22 @@ def apply_scenario_tags(
     else:
         scenario_id = db.get_scenario_id(scenario)
 
-    for batch in batched(params, chunksize):
-        batched_list = list(batch)
-        scenario_query = f"""
-            INSERT into t_tag(data_id, object_id)
-            SELECT
-                d.data_id as data_id,
-                {scenario_id} as object_id
-            FROM
-              t_data d
-            WHERE d.membership_id = ? AND d.property_id = ? AND d.value = ?
-        """
-        db._db.executemany(scenario_query, batched_list)
+    if data_id_map is not None:
+        tag_rows = [(data_id_map[key][0], scenario_id) for key in params if key in data_id_map]
+        for batch in batched(tag_rows, chunksize):
+            db._db.executemany(
+                "INSERT INTO t_tag(data_id, object_id) VALUES (?, ?)",
+                list(batch),
+            )
+    else:
+        for batch in batched(params, chunksize):
+            scenario_query = f"""
+                INSERT into t_tag(data_id, object_id)
+                SELECT d.data_id, {scenario_id}
+                FROM t_data d
+                WHERE d.membership_id = ? AND d.property_id = ? AND d.value = ?
+            """
+            db._db.executemany(scenario_query, list(batch))
 
 
 def insert_property_texts(
