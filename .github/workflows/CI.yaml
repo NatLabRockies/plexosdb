@@ -73,6 +73,52 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
 
+  benchmarks:
+    name: Benchmarks
+    needs: pre-commit
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          version: ${{ env.UV_VERSION }}
+
+      - name: Set up Python 3.13
+        run: uv python install 3.13
+
+      - name: Install dependencies
+        run: uv sync --all-groups
+
+      - name: Run benchmarks
+        run: uv run pytest benchmarks/ -k "not xlarge_300k" --benchmark-only --benchmark-json=benchmark-results.json --no-cov
+
+      - name: Download previous benchmark data
+        uses: actions/cache@v4
+        with:
+          path: ./cache
+          key: ${{ runner.os }}-benchmark-${{ github.ref_name }}-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-benchmark-${{ github.ref_name }}-
+
+      - name: Publish benchmark results
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: pytest
+          output-file-path: benchmark-results.json
+          external-data-json-path: ./cache/benchmark-data.json
+          fail-on-alert: false
+          comment-on-alert: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          alert-threshold: "200%"
+          summary-always: true
+
   package:
     name: Package smoke test
     needs: pytest

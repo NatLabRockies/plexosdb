@@ -549,7 +549,6 @@ class PlexosDB:
         See Also
         --------
         add_membership : Add a single membership between two objects
-        check_memberships_from_records : Validate membership records format
         create_membership_record : Helper to create membership record dictionaries
 
         Examples
@@ -2738,10 +2737,9 @@ class PlexosDB:
         self,
         *object_names: Iterable[str] | str,
         object_class: ClassEnum,
-        category: str | None = None,
         collection: CollectionEnum | None = None,
     ) -> list[dict[str, Any]]:
-        """Retrieve system memberships for the given object(s).
+        """Retrieve memberships for the requested object names.
 
         Parameters
         ----------
@@ -2751,17 +2749,15 @@ class PlexosDB:
         object_class : ClassEnum
             Class of the objects.
         collection : CollectionEnum | None, optional
-            Collection to filter memberships.
+            Collection used to filter memberships. When provided, results are
+            limited to memberships under the System parent class for that
+            collection.
 
         Returns
         -------
-        list[tuple]
-            A list of tuples representing memberships of the object to the system.
-
-        Raises
-        ------
-        KeyError
-            If any of the object_names do not exist.
+        list[dict[str, Any]]
+            Membership rows for the requested object names in ``object_class``.
+            Names that do not exist are ignored.
         """
         names = normalize_names(*object_names)
         if not names:
