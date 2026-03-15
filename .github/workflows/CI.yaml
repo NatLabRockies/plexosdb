@@ -100,12 +100,16 @@ jobs:
         run: uv run pytest benchmarks/ -k "not xlarge_300k" --benchmark-only --benchmark-json=benchmark-results.json --no-cov
 
       - name: Download previous benchmark data
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ./cache
-          key: ${{ runner.os }}-benchmark-${{ github.ref_name }}-${{ github.run_id }}
+          key: ${{ runner.os }}-benchmark-${{ github.head_ref || github.ref_name }}-${{ github.run_id }}
           restore-keys: |
-            ${{ runner.os }}-benchmark-${{ github.ref_name }}-
+            ${{ runner.os }}-benchmark-${{ github.head_ref || github.ref_name }}-
+            ${{ runner.os }}-benchmark-main-
+
+      - name: Initialize benchmark data file
+        run: mkdir -p cache && test -f cache/benchmark-data.json || echo '[]' > cache/benchmark-data.json
 
       - name: Publish benchmark results
         uses: benchmark-action/github-action-benchmark@v1
