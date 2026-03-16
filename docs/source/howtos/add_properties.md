@@ -1,6 +1,7 @@
 # Adding Properties to Objects
 
-Properties define attributes of objects in your PLEXOS model, such as a generator's capacity or a node's location.
+Properties define attributes of objects in your PLEXOS model, such as a
+generator's capacity or a node's location.
 
 ## Basic Property Addition
 
@@ -82,7 +83,8 @@ db.add_property(
 
 ## Bulk Adding Properties
 
-For efficiency when adding many properties at once (use the flat format; the nested format is accepted but deprecated and will emit a warning):
+For efficiency when adding many properties at once (use the flat format; the
+nested format is accepted but deprecated and will emit a warning):
 
 ```python
 # Flat format (recommended)

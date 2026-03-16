@@ -1,6 +1,7 @@
 # Importing and Exporting Data
 
-PlexosDB provides methods for importing data from XML files and exporting to XML or CSV formats.
+PlexosDB provides methods for importing data from XML files and exporting to XML
+or CSV formats.
 
 ## Importing from XML
 

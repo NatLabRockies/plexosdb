@@ -1,6 +1,7 @@
 # Creating a database from an existing XML file
 
-PlexosDB allows you to create a database from an existing XML file using a few simple steps.
+PlexosDB allows you to create a database from an existing XML file using a few
+simple steps.
 
 ## Basic Usage
 

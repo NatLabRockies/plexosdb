@@ -17,7 +17,6 @@ db.create_schema()
 db.add_scenario("TestScenario")
 ```
 
-
 ## Creating Scenario Properties
 
 Scenarios are automatically created when adding properties with a scenario name:

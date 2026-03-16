@@ -28,7 +28,8 @@ pip install git+https://github.com/NREL/plexosdb.git
 
 ## Using uv
 
-[uv](https://github.com/astral-sh/uv) is a new, fast Python package installer and resolver. To install plexosdb using uv:
+[uv](https://github.com/astral-sh/uv) is a new, fast Python package installer
+and resolver. To install plexosdb using uv:
 
 ```bash
 # Install uv if you haven't already
@@ -50,7 +51,8 @@ plexosdb requires:
 
 ## Verification
 
-After installation, you can verify that plexosdb was installed correctly by running:
+After installation, you can verify that plexosdb was installed correctly by
+running:
 
 ```python
 import plexosdb

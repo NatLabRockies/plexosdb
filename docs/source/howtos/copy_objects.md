@@ -1,6 +1,7 @@
 # Copying Objects
 
-PlexosDB allows you to create copies of existing objects along with their properties, memberships, and related property records.
+PlexosDB allows you to create copies of existing objects along with their
+properties, memberships, and related property records.
 
 ## Basic Object Copying
 
@@ -70,7 +71,8 @@ new_object_id = db.copy_object(
 
 ## Copying Memberships
 
-When copying an object, PlexosDB also attempts to copy its memberships (except any that cannot be recreated due to model constraints):
+When copying an object, PlexosDB also attempts to copy its memberships (except
+any that cannot be recreated due to model constraints):
 
 ```python
 # First create some objects with memberships

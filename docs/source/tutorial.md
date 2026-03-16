@@ -1,6 +1,8 @@
 # Tutorial
 
-This tutorial provides a step-by-step introduction to PlexosDB, guiding you through the essential concepts and operations for working with PLEXOS energy market simulation models.
+This tutorial provides a step-by-step introduction to PlexosDB, guiding you
+through the essential concepts and operations for working with PLEXOS energy
+market simulation models.
 
 ## Prerequisites
 
@@ -38,7 +40,8 @@ This creates an empty database with the PLEXOS schema structure ready for data.
 
 ## Working with Objects
 
-Objects represent entities in your energy model such as generators, nodes, and regions.
+Objects represent entities in your energy model such as generators, nodes, and
+regions.
 
 ### Adding Objects
 
@@ -58,7 +61,8 @@ print(f"Generators: {generators}")
 
 ### Adding Properties
 
-Properties define characteristics of objects like capacity, cost, or operational parameters:
+Properties define characteristics of objects like capacity, cost, or operational
+parameters:
 
 ```python
 # Add capacity property to the generator
@@ -88,7 +92,8 @@ for prop in properties:
 
 ## Working with XML Files
 
-PlexosDB can import existing PLEXOS XML files and export databases back to XML format.
+PlexosDB can import existing PLEXOS XML files and export databases back to XML
+format.
 
 ### Importing from XML
 
@@ -110,7 +115,8 @@ db.to_xml("/path/to/output_model.xml")
 
 ## Working with Scenarios
 
-Scenarios allow you to model different operational conditions or future projections:
+Scenarios allow you to model different operational conditions or future
+projections:
 
 ```python
 # Add a scenario

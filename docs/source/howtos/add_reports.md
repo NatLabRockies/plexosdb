@@ -1,10 +1,13 @@
 # How to Add Report Configurations
 
-This guide demonstrates how to add report configurations to your PLEXOS model using the PlexosDB API.
+This guide demonstrates how to add report configurations to your PLEXOS model
+using the PlexosDB API.
 
 ## Basic Report Configuration
 
-Reports in PLEXOS define what data will be available for post-processing after simulation runs. Each report must be associated with a Report object and specify which properties should be reported from which collections.
+Reports in PLEXOS define what data will be available for post-processing after
+simulation runs. Each report must be associated with a Report object and specify
+which properties should be reported from which collections.
 
 ```python
 from plexosdb import PlexosDB
@@ -87,7 +90,8 @@ for prop in ["Generation", "Available Capacity"]:
 
 ## Understanding Phase IDs
 
-The `phase_id` parameter specifies which simulation phase to create the report for:
+The `phase_id` parameter specifies which simulation phase to create the report
+for:
 
 - `1`: ST (Short Term)
 - `2`: MT (Medium Term)

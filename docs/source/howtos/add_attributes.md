@@ -6,6 +6,7 @@ table.
 ## Listing available attributes per `ClassEnum`
 
 To see the list of available attributes per `ClassEnum` use:
+
 ```python
 from plexosdb import PlexosDB, ClassEnum
 db = PlexosDB.from_xml("/path/to/your/xml")

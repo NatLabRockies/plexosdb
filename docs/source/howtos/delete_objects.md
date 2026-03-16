@@ -1,10 +1,13 @@
 # Deleting Objects and Properties from the Database
 
-This guide demonstrates how to delete objects and properties from the PlexosDB database.
+This guide demonstrates how to delete objects and properties from the PlexosDB
+database.
 
 ## Deleting Objects
 
-When you delete an object, all its associated data (properties, memberships, etc.) are automatically removed due to foreign key constraints with cascade deletion.
+When you delete an object, all its associated data (properties, memberships,
+etc.) are automatically removed due to foreign key constraints with cascade
+deletion.
 
 ```python
 from plexosdb import PlexosDB
@@ -28,7 +31,8 @@ db.delete_object(ClassEnum.Generator, name="TestGenerator")
 
 ## Deleting Properties
 
-You can delete specific properties from objects without removing the object itself. This provides fine-grained control over data management.
+You can delete specific properties from objects without removing the object
+itself. This provides fine-grained control over data management.
 
 ### Basic Property Deletion
 
@@ -52,7 +56,8 @@ db.delete_property(ClassEnum.Generator, "PowerPlant1", property_name="Min Stable
 
 ### Scenario-Specific Property Deletion
 
-When properties have scenario-specific values, you can delete only the property data associated with a particular scenario:
+When properties have scenario-specific values, you can delete only the property
+data associated with a particular scenario:
 
 ```python
 # Add properties with different scenarios
@@ -92,9 +97,12 @@ db.delete_property(
 
 ### Cascade Deletion Behavior
 
-- **Object deletion**: Removes the object and ALL associated data (properties, memberships, text data, etc.)
-- **Property deletion**: Removes only the specified property data, including associated text, tags, and date ranges
-- **Scenario-specific deletion**: Removes only property data tagged with the specified scenario
+- **Object deletion**: Removes the object and ALL associated data (properties,
+  memberships, text data, etc.)
+- **Property deletion**: Removes only the specified property data, including
+  associated text, tags, and date ranges
+- **Scenario-specific deletion**: Removes only property data tagged with the
+  specified scenario
 
 ### Error Handling
 
@@ -122,9 +130,12 @@ except NameError as e:
 ## Best Practices
 
 1. **Backup data**: Always backup your database before performing bulk deletions
-2. **Verify existence**: Check that objects and properties exist before attempting deletion
-3. **Use transactions**: For complex operations, wrap deletions in database transactions
-4. **Scenario management**: Be specific about scenarios when deleting scenario-based properties
+2. **Verify existence**: Check that objects and properties exist before
+   attempting deletion
+3. **Use transactions**: For complex operations, wrap deletions in database
+   transactions
+4. **Scenario management**: Be specific about scenarios when deleting
+   scenario-based properties
 
 ```python
 # Example of safe deletion with verification

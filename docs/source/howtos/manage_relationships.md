@@ -1,6 +1,7 @@
 # Managing Object Relationships
 
-In PLEXOS, objects can have relationships with each other. These relationships are managed through memberships in PlexosDB.
+In PLEXOS, objects can have relationships with each other. These relationships
+are managed through memberships in PlexosDB.
 
 ## Creating Relationships (Memberships)
 

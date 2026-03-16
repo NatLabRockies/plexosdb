@@ -1,6 +1,7 @@
 # Adding Objects to the Database
 
-Objects in PlexosDB represent entities in your PLEXOS model like generators, regions, and nodes.
+Objects in PlexosDB represent entities in your PLEXOS model like generators,
+regions, and nodes.
 
 ## Basic Object Creation
 

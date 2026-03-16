@@ -1,6 +1,7 @@
 # Querying the Database
 
-PlexosDB provides various methods to efficiently retrieve data from your PLEXOS model.
+PlexosDB provides various methods to efficiently retrieve data from your PLEXOS
+model.
 
 ## Getting Object Properties
 

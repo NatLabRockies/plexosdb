@@ -38,10 +38,10 @@ dependencies = [
 ]
 
 [project.urls]
-Documentation = "https://github.com/NREL/plexosdb#readme"
-Issues = "https://github.com/NREL/plexosdb/issues"
-Source = "https://github.com/NREL/plexosdb"
-Changelog = "https://github.com/NREL/plexosdb/blob/master/CHANGELOG.md"
+Documentation = "https://natlabrockies.github.io/plexosdb/"
+Issues = "https://github.com/NatLabRockies/plexosdb/issues"
+Source = "https://github.com/NatLabRockies/plexosdb"
+Changelog = "https://github.com/NatLabRockies/plexosdb/blob/main/CHANGELOG.md"
 
 [build-system]
 requires = ["uv_build>=0.8.22,<0.9.0"]

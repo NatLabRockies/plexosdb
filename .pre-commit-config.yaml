@@ -21,17 +21,32 @@ repos:
         language: system
         types_or: [python, pyi]
 
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v6.0.0
+  - repo: local
     hooks:
-      - id: end-of-file-fixer
+      - id: prettier
+        name: prettier
+        entry: prettier --write --ignore-unknown
+        language: node
+        additional_dependencies: ["prettier@3"]
+        types: [markdown]
+
+  - repo: builtin
+    hooks:
       - id: trailing-whitespace
       - id: check-added-large-files
-      - id: check-merge-conflict
-      - id: check-yaml
-      - id: check-toml
-      - id: check-json
+      - id: end-of-file-fixer
       - id: check-case-conflict
+      - id: fix-byte-order-marker
+      - id: check-json
+      - id: check-toml
+      - id: check-yaml
+      - id: check-xml
+      - id: mixed-line-ending
+      - id: check-symlinks
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: no-commit-to-branch
+      - id: check-executables-have-shebangs
 
   - repo: https://github.com/commitizen-tools/commitizen
     rev: v4.10.0
@@ -50,9 +65,7 @@ repos:
         pass_filenames: false
         stages: [pre-push]
 
-
   - repo: https://github.com/astral-sh/uv-pre-commit
-    # uv version.
     rev: 0.9.4
     hooks:
       - id: uv-lock
