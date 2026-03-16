@@ -163,6 +163,9 @@ instance/
 # Sphinx documentation
 docs/_build/
 
+# Implementation plans (local only)
+docs/plans/
+
 # PyBuilder
 .pybuilder/
 target/
