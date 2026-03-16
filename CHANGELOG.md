@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.3](https://github.com/NatLabRockies/plexosdb/compare/v1.3.2...v1.3.3) (2026-03-16)
+
+
+### 🐛 Bug Fixes
+
+* **ci:** harden all workflows per zizmor audit ([#105](https://github.com/NatLabRockies/plexosdb/issues/105)) ([67ca845](https://github.com/NatLabRockies/plexosdb/commit/67ca84584d1e66410dc66b014a9b710a24b00b95))
+
+
+### ⚡ Performance
+
+* Improving performance of adding memberships from records ([#104](https://github.com/NatLabRockies/plexosdb/issues/104)) ([1ea4a39](https://github.com/NatLabRockies/plexosdb/commit/1ea4a39612a1bef1a0f290eaeb40441874a2b8f0))
+
+
+### 📦 Build
+
+* **deps:** bump actions/download-artifact from 7 to 8 ([#101](https://github.com/NatLabRockies/plexosdb/issues/101)) ([0e572a0](https://github.com/NatLabRockies/plexosdb/commit/0e572a07a930f6e25f196e98fc879f65f7dd9daa))
+* **deps:** bump actions/upload-artifact from 6 to 7 ([#102](https://github.com/NatLabRockies/plexosdb/issues/102)) ([22b8374](https://github.com/NatLabRockies/plexosdb/commit/22b8374aa7ed9d29eb36258a6a5ad16feb2e21c5))
+
 ## [1.3.2](https://github.com/NatLabRockies/plexosdb/compare/v1.3.1...v1.3.2) (2026-02-12)
 
 ### 🐛 Bug Fixes
