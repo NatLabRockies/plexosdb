@@ -13,9 +13,9 @@ env:
 permissions: {}
 
 jobs:
-  pre-commit:
+  prek:
     runs-on: ubuntu-latest
-    name: Pre-commit hooks (lint/format/spell/type, all files)
+    name: Prek hooks (lint/format/spell/type, all files)
     permissions:
       contents: read
     steps:
@@ -38,13 +38,13 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-groups
 
-      - name: Run pre-commit
-        run: uv run pre-commit run --show-diff-on-failure --color=always --all-files --hook-stage push
+      - name: Run prek
+        run: uv run prek run --show-diff-on-failure --color=always --all-files --hook-stage pre-push
 
 
   pytest:
     name: Tests ${{ matrix.os }} / py${{ matrix.python }}
-    needs: pre-commit
+    needs: prek
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
@@ -84,7 +84,7 @@ jobs:
 
   benchmarks:
     name: Benchmarks
-    needs: pre-commit
+    needs: prek
     runs-on: ubuntu-latest
     continue-on-error: true
     permissions:

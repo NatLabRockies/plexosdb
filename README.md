@@ -71,10 +71,10 @@ cd plexosdb
 uv sync --all-groups
 ```
 
-Install the pre-commit hooks so your code is checked before making commits:
+Install the git hooks so your code is checked before making commits:
 
 ```console
-uv run pre-commit install
+uv run prek install
 ```
 
 Run the test suite:
