@@ -3,6 +3,11 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to publish (e.g. v1.3.3)"
+        required: true
 
 concurrency:
   group: release-please
@@ -37,13 +42,13 @@ jobs:
     permissions:
       contents: read
     needs: release-please
-    if: needs.release-please.outputs.release_created
+    if: needs.release-please.outputs.release_created || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout release commit
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
-          ref: ${{ needs.release-please.outputs.release_tag }}
+          ref: ${{ needs.release-please.outputs.release_tag || inputs.tag }}
           fetch-depth: 0
           persist-credentials: false
 
