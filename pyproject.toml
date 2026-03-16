@@ -63,8 +63,8 @@ docs = [
 ]
 dev = [
     "ipython>=9.2.0",
-    "mypy>=1.15.0",
     "prek>=0.3.3",
+    "ty>=0.0.23",
     "pytest>=8.3.5",
     "pytest-benchmark>=5.1.0",
     "pytest-coverage>=0.0",
@@ -80,9 +80,15 @@ include-package-data = true
 [tool.setuptools.packages.find]
 where = ["src"]
 
-[tool.mypy]
-strict = true
+[tool.ty.src]
+include = ["src/plexosdb"]
 exclude = ["tests/"]
+
+[tool.ty.environment]
+python-version = "3.11"
+
+[tool.ty.terminal]
+output-format = "full"
 
 [tool.ruff]
 line-length = 110

@@ -42,9 +42,31 @@ jobs:
         run: uv run prek run --show-diff-on-failure --color=always --all-files --hook-stage pre-push
 
 
+  ty:
+    runs-on: ubuntu-latest
+    name: Type check (ty)
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@b75dde52aef63a238519e7aecbbe79a4a52e4315 # v7
+        with:
+          enable-cache: true
+          version: ${{ env.UV_VERSION }}
+
+      - name: Install dependencies
+        run: uv sync --all-groups
+
+      - name: Run ty
+        run: uv run ty check --output-format github ./src/plexosdb
+
   pytest:
     name: Tests ${{ matrix.os }} / py${{ matrix.python }}
-    needs: prek
+    needs: [prek, ty]
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
@@ -84,7 +106,7 @@ jobs:
 
   benchmarks:
     name: Benchmarks
-    needs: prek
+    needs: [prek, ty]
     runs-on: ubuntu-latest
     continue-on-error: true
     permissions:
