@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.4](https://github.com/NatLabRockies/plexosdb/compare/v1.3.3...v1.3.4) (2026-03-16)
+
+
+### 🧩 CI
+
+* use release/v1 tag for pypa/gh-action-pypi-publish ([#107](https://github.com/NatLabRockies/plexosdb/issues/107)) ([c4e58b8](https://github.com/NatLabRockies/plexosdb/commit/c4e58b8dc062f3302216b3caa7c9c6c1cc423c86))
+
 ## [1.3.3](https://github.com/NatLabRockies/plexosdb/compare/v1.3.2...v1.3.3) (2026-03-16)
 
 
