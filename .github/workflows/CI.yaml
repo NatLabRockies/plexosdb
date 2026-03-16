@@ -10,22 +10,27 @@ concurrency:
 env:
   UV_VERSION: "0.9.4"
 
+permissions: {}
+
 jobs:
   pre-commit:
     runs-on: ubuntu-latest
     name: Pre-commit hooks (lint/format/spell/type, all files)
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version-file: "pyproject.toml"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@b75dde52aef63a238519e7aecbbe79a4a52e4315 # v7
         with:
           enable-cache: true
           version: ${{ env.UV_VERSION }}
@@ -41,6 +46,8 @@ jobs:
     name: Tests ${{ matrix.os }} / py${{ matrix.python }}
     needs: pre-commit
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -50,10 +57,12 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@b75dde52aef63a238519e7aecbbe79a4a52e4315 # v7
         with:
           enable-cache: true
           version: ${{ env.UV_VERSION }}
@@ -69,7 +78,7 @@ jobs:
           uv run pytest --cov --cov-report=xml
 
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
 
@@ -82,10 +91,12 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@b75dde52aef63a238519e7aecbbe79a4a52e4315 # v7
         with:
           enable-cache: true
           version: ${{ env.UV_VERSION }}
@@ -100,7 +111,7 @@ jobs:
         run: uv run pytest benchmarks/ -k "not xlarge_300k" --benchmark-only --benchmark-json=benchmark-results.json --no-cov
 
       - name: Download previous benchmark data
-        uses: actions/cache@v5
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5
         with:
           path: ./cache
           key: ${{ runner.os }}-benchmark-${{ github.head_ref || github.ref_name }}-${{ github.run_id }}
@@ -112,7 +123,7 @@ jobs:
         run: mkdir -p cache && test -f cache/benchmark-data.json || echo '[]' > cache/benchmark-data.json
 
       - name: Publish benchmark results
-        uses: benchmark-action/github-action-benchmark@v1
+        uses: benchmark-action/github-action-benchmark@a7bc2366eda11037936ea57d811a43b3418d3073 # v1
         with:
           tool: pytest
           output-file-path: benchmark-results.json
@@ -127,17 +138,21 @@ jobs:
     name: Package smoke test
     needs: pytest
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version-file: "pyproject.toml"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@b75dde52aef63a238519e7aecbbe79a4a52e4315 # v7
         with:
           version: ${{ env.UV_VERSION }}
           enable-cache: true

@@ -4,18 +4,23 @@ on:
   pull_request:
     types: [opened, reopened, synchronize]
 
+permissions: {}
+
 jobs:
   lint-commit-messages:
     name: lint commit message
     runs-on: [ubuntu-latest]
+    permissions:
+      contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
+          persist-credentials: false
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@b75dde52aef63a238519e7aecbbe79a4a52e4315 # v7
       - name: Commitizen check
         run: |
           uvx --from commitizen cz check --rev-range HEAD^!
@@ -26,6 +31,6 @@ jobs:
     permissions:
       pull-requests: read
     steps:
-      - uses: amannn/action-semantic-pull-request@v6.1.1
+      - uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
