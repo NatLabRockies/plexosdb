@@ -81,6 +81,9 @@ jobs:
     steps:
       - name: Download all the dists
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: python-package-distributions
+          path: dist/
 
       - name: Publish package to TestPyPI
         uses: pypa/gh-action-pypi-publish@release/v1
