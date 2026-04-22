@@ -1141,7 +1141,7 @@ docs = [
 
 [package.metadata]
 requires-dist = [
-    { name = "fastmcp", specifier = ">=2.0.0" },
+    { name = "fastmcp", specifier = ">=3.0.0" },
     { name = "loguru" },
 ]
 
