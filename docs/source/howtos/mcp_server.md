@@ -45,6 +45,29 @@ uv run plexosdb-mcp
 
 If it starts successfully, it will wait for MCP client requests.
 
+## 2a) Start with uvx (recommended for installed package usage)
+
+`uvx` runs the console script in an isolated environment, so users do not need to clone
+the repo or create a local virtualenv.
+
+Run from a published package:
+
+```console
+uvx --from plexosdb plexosdb-mcp
+```
+
+Pin a specific version in production:
+
+```console
+uvx --from plexosdb==1.3.4 plexosdb-mcp
+```
+
+Run from your local checkout (useful before publishing):
+
+```console
+uvx --from . plexosdb-mcp
+```
+
 ## 2b) Use production CLI mode (no Node.js required)
 
 You can run one-shot CLI commands directly without any MCP client:
@@ -64,6 +87,12 @@ A simple way to test is with the MCP Inspector:
 
 ```console
 npx @modelcontextprotocol/inspector uv run plexosdb-mcp
+```
+
+Or with `uvx` as the server command:
+
+```console
+npx @modelcontextprotocol/inspector uvx --from plexosdb plexosdb-mcp
 ```
 
 `npx` is only required for Inspector UI testing. It is not required for production use of
@@ -101,9 +130,8 @@ Most MCP clients support a JSON server entry with command + args. Use this shape
 {
   "mcpServers": {
     "plexosdb": {
-      "command": "uv",
-      "args": ["run", "plexosdb-mcp"],
-      "cwd": "/absolute/path/to/plexosdb"
+      "command": "uvx",
+      "args": ["--from", "plexosdb==1.3.4", "plexosdb-mcp"]
     }
   }
 }
