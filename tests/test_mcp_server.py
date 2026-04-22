@@ -13,6 +13,7 @@ class FakeFastMCP:
     """Minimal FastMCP stand-in for unit testing tool registration."""
 
     def __init__(self, name: str) -> None:
+        """Initialize fake server metadata and tool registry."""
         self.name = name
         self.tools: dict[str, object] = {}
         self.ran = False
@@ -35,6 +36,7 @@ class FakeDB:
     """Simple DB facade used by tool-level MCP tests."""
 
     def __init__(self) -> None:
+        """Initialize captured state for fake DB operations."""
         self.saved_path: str | None = None
         self.csv_path: str | None = None
         self.csv_tables: list[str] | None = None
@@ -338,6 +340,7 @@ class FakeState:
     """State object for exercising all registered tools."""
 
     def __init__(self) -> None:
+        """Initialize fake session state and backing fake DB."""
         self.db = FakeDB()
         self.read_only = False
 
@@ -368,6 +371,7 @@ class StubStdin:
     """Stub stdin with configurable TTY behavior."""
 
     def __init__(self, is_tty: bool) -> None:
+        """Store whether stdin should report itself as a TTY."""
         self._is_tty = is_tty
 
     def isatty(self) -> bool:
