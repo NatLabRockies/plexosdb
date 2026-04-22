@@ -423,6 +423,23 @@ def test_open_xml_session_and_invalid_session(data_folder) -> None:
     _ = state.close_session(session_id)
 
 
+def test_single_active_session_replaces_previous(data_folder) -> None:
+    """Creating a new session invalidates the previous session ID."""
+    state = MCPServerState()
+
+    first = state.create_empty_session()["session_id"]
+    xml_path = data_folder / "plexosdb.xml"
+    second = state.open_xml_session(str(xml_path))["session_id"]
+
+    assert first != second
+    assert state.active_session_count == 1
+
+    with pytest.raises(ValueError, match="Unknown session_id"):
+        _ = state.get_db(first)
+
+    _ = state.close_session(second)
+
+
 def test_build_mcp_server_raises_without_fastmcp(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(mcp_server, "FastMCP", None)
 

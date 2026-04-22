@@ -26,57 +26,58 @@ except ImportError:  # pragma: no cover - exercised only when optional dependenc
 
 
 class MCPServerState:
-    """State manager for active PlexosDB sessions."""
+    """State manager for a single active PlexosDB session."""
 
     def __init__(self, *, read_only: bool = False) -> None:
         """Initialize the MCP server state."""
-        self._sessions: dict[str, PlexosDB] = {}
+        self._active_session_id: str | None = None
+        self._active_db: PlexosDB | None = None
         self.read_only = read_only
 
     @property
     def active_session_count(self) -> int:
-        """Return the number of currently active sessions."""
-        return len(self._sessions)
+        """Return whether there is an active session (0 or 1)."""
+        return 1 if self._active_db is not None else 0
+
+    def _replace_active_session(self, db: PlexosDB, source: str) -> dict[str, Any]:
+        """Replace the active session with a new one and return metadata."""
+        if self._active_db is not None:
+            self._active_db._db.close()
+
+        session_id = str(uuid4())
+        self._active_session_id = session_id
+        self._active_db = db
+        return {
+            "session_id": session_id,
+            "version": _serialize_version(db.version),
+            "source": source,
+        }
 
     def create_empty_session(self) -> dict[str, Any]:
         """Create a new in-memory PlexosDB session with schema initialized."""
         db = PlexosDB(new_db=True)
         db.create_schema()
         _bootstrap_empty_model(db)
-
-        session_id = str(uuid4())
-        self._sessions[session_id] = db
-        return {
-            "session_id": session_id,
-            "version": _serialize_version(db.version),
-            "source": "empty",
-        }
+        return self._replace_active_session(db, source="empty")
 
     def open_xml_session(self, xml_path: str) -> dict[str, Any]:
         """Create a new session by loading an XML model file."""
         db = PlexosDB.from_xml(xml_path=xml_path)
-
-        session_id = str(uuid4())
-        self._sessions[session_id] = db
-        return {
-            "session_id": session_id,
-            "version": _serialize_version(db.version),
-            "source": str(Path(xml_path)),
-        }
+        return self._replace_active_session(db, source=str(Path(xml_path)))
 
     def get_db(self, session_id: str) -> PlexosDB:
         """Resolve and return a session DB handle."""
-        try:
-            return self._sessions[session_id]
-        except KeyError as exc:
+        if self._active_session_id != session_id or self._active_db is None:
             msg = f"Unknown session_id: {session_id}. Create a session first."
-            raise ValueError(msg) from exc
+            raise ValueError(msg)
+        return self._active_db
 
     def close_session(self, session_id: str) -> dict[str, Any]:
         """Close and remove a session from memory."""
         db = self.get_db(session_id)
         db._db.close()
-        del self._sessions[session_id]
+        self._active_session_id = None
+        self._active_db = None
         return {
             "session_id": session_id,
             "closed": True,

@@ -52,7 +52,8 @@ If installed via `uv add mcp-server-plexosdb`, run:
 uv run plexosdb-mcp
 ```
 
-If running from this repo checkout without publishing, run the standalone package project:
+If running from this repo checkout without publishing, run the standalone
+package project:
 
 ```console
 uv run --project src/mcp-server-plexosdb plexosdb-mcp
@@ -166,7 +167,12 @@ shape:
   "mcpServers": {
     "plexosdb": {
       "command": "uvx",
-      "args": ["--from", "mcp-server-plexosdb==0.1.0", "plexosdb-mcp", "--read-only"]
+      "args": [
+        "--from",
+        "mcp-server-plexosdb==0.1.0",
+        "plexosdb-mcp",
+        "--read-only"
+      ]
     }
   }
 }
@@ -179,6 +185,9 @@ After adding the server entry, reconnect the client and run `health`.
 
 ## Notes
 
+- The MCP server keeps only one active session at a time.
+- Calling `create_empty_session` or `open_xml_session` replaces any existing
+  active session and returns a new `session_id`.
 - Keep the same `session_id` for all operations in one editing flow.
 - Call `close_session` when done to release in-memory DB resources.
 - `add_property` requires that the target property is valid for the
