@@ -35,11 +35,7 @@ classifiers = [
 ]
 dependencies = [
     "loguru",
-    "fastmcp>=3.0.0",
 ]
-
-[project.scripts]
-plexosdb-mcp = "plexosdb.mcp_server:main"
 
 [project.urls]
 Documentation = "https://natlabrockies.github.io/plexosdb/"

@@ -24,7 +24,21 @@ support.
 
 ## 1) Install dependencies
 
-From the project root:
+Install the package you need:
+
+- Core library only:
+
+```console
+uv add plexosdb
+```
+
+- MCP server package (includes MCP CLI entrypoint):
+
+```console
+uv add mcp-server-plexosdb
+```
+
+For local development from this repository:
 
 ```console
 uv sync --all-groups
@@ -32,10 +46,16 @@ uv sync --all-groups
 
 ## 2) Start the MCP server
 
-Run the server over stdio:
+If installed via `uv add mcp-server-plexosdb`, run:
 
 ```console
 uv run plexosdb-mcp
+```
+
+If running from this repo checkout without publishing, run the standalone package project:
+
+```console
+uv run --project src/mcp-server-plexosdb plexosdb-mcp
 ```
 
 If it starts successfully, it will wait for MCP client requests.
@@ -60,19 +80,19 @@ to clone the repo or create a local virtualenv.
 Run from a published package:
 
 ```console
-uvx --from plexosdb plexosdb-mcp
+uvx --from mcp-server-plexosdb plexosdb-mcp
 ```
 
 Pin a specific version in production:
 
 ```console
-uvx --from plexosdb==1.3.4 plexosdb-mcp
+uvx --from mcp-server-plexosdb==0.1.0 plexosdb-mcp
 ```
 
 Read-only with uvx:
 
 ```console
-uvx --from plexosdb==1.3.4 plexosdb-mcp --read-only
+uvx --from mcp-server-plexosdb==0.1.0 plexosdb-mcp --read-only
 ```
 
 Run from your local checkout (useful before publishing):
@@ -106,7 +126,7 @@ npx @modelcontextprotocol/inspector uv run plexosdb-mcp
 Or with `uvx` as the server command:
 
 ```console
-npx @modelcontextprotocol/inspector uvx --from plexosdb plexosdb-mcp
+npx @modelcontextprotocol/inspector uvx --from mcp-server-plexosdb plexosdb-mcp
 ```
 
 `npx` is only required for Inspector UI testing. It is not required for
@@ -146,7 +166,7 @@ shape:
   "mcpServers": {
     "plexosdb": {
       "command": "uvx",
-      "args": ["--from", "plexosdb==1.3.4", "plexosdb-mcp", "--read-only"]
+      "args": ["--from", "mcp-server-plexosdb==0.1.0", "plexosdb-mcp", "--read-only"]
     }
   }
 }
