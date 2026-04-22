@@ -28,6 +28,7 @@ class MCPServerState:
     """State manager for active PlexosDB sessions."""
 
     def __init__(self) -> None:
+        """Initialize the MCP server state."""
         self._sessions: dict[str, PlexosDB] = {}
 
     @property
