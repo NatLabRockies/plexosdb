@@ -22,4 +22,5 @@ manage_relationships
 copy_objects
 bulk_operations
 remove_non_ascii
+mcp_server
 ```
