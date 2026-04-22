@@ -36,9 +36,14 @@ class FakeDB:
 
     def __init__(self) -> None:
         self.saved_path: str | None = None
+        self.csv_path: str | None = None
+        self.csv_tables: list[str] | None = None
         self.last_add_object: dict[str, object] | None = None
         self.last_add_property: dict[str, object] | None = None
         self.last_query_sql: str | None = None
+        self.deleted_object: tuple[ClassEnum, str] | None = None
+        self.deleted_property: dict[str, object] | None = None
+        self.updated_object: dict[str, object] | None = None
 
     def list_objects_by_class(self, class_enum: ClassEnum) -> list[str]:
         """Return deterministic object names for a class."""
@@ -147,9 +152,76 @@ class FakeDB:
             }
         ]
 
+    def list_object_memberships(
+        self,
+        class_enum: ClassEnum,
+        /,
+        name: str,
+        category: str | None = None,
+        collection: CollectionEnum | None = None,
+        exclude_system_membership: bool = False,
+    ) -> list[dict[str, object]]:
+        """Return deterministic membership records."""
+        _ = category
+        return [
+            {
+                "name": name,
+                "class": class_enum.value,
+                "collection": (collection.value if collection else "Generators"),
+                "exclude_system": exclude_system_membership,
+            }
+        ]
+
+    def list_child_objects(
+        self,
+        object_name: str,
+        /,
+        *,
+        parent_class: ClassEnum,
+        child_class: ClassEnum | None = None,
+        collection: CollectionEnum | None = None,
+    ) -> list[dict[str, object]]:
+        """Return deterministic child-object records."""
+        return [
+            {
+                "parent": object_name,
+                "parent_class": parent_class.value,
+                "child_class": (child_class or ClassEnum.Node).value,
+                "collection": (collection.value if collection else "Nodes"),
+            }
+        ]
+
+    def list_parent_objects(
+        self,
+        object_name: str,
+        /,
+        *,
+        child_class: ClassEnum,
+        parent_class: ClassEnum | None = None,
+        collection: CollectionEnum | None = None,
+    ) -> list[dict[str, object]]:
+        """Return deterministic parent-object records."""
+        return [
+            {
+                "child": object_name,
+                "child_class": child_class.value,
+                "parent_class": (parent_class or ClassEnum.System).value,
+                "collection": (collection.value if collection else "Generators"),
+            }
+        ]
+
     def list_scenarios(self) -> list[str]:
         """Return deterministic scenarios."""
         return ["Base", "High"]
+
+    def list_models(self) -> list[str]:
+        """Return deterministic model names."""
+        return ["Model-A"]
+
+    def list_scenarios_by_model(self, model_name: str) -> list[str]:
+        """Return deterministic scenarios by model."""
+        assert model_name == "Model-A"
+        return ["Base"]
 
     def list_valid_properties(
         self,
@@ -181,12 +253,93 @@ class FakeDB:
         self.last_query_sql = query_string
         return [{"row": 1, "params": params}]
 
+    def iterate_properties(
+        self,
+        /,
+        *,
+        class_enum: ClassEnum | None = None,
+        object_names: list[str] | None = None,
+        property_names: list[str] | None = None,
+        parent_class: ClassEnum | None = None,
+        collection: CollectionEnum | None = None,
+        category: str | None = None,
+        batch_size: int = 1000,
+    ):
+        """Yield deterministic property rows."""
+        yield {
+            "class": (class_enum.value if class_enum else None),
+            "objects": object_names,
+            "properties": property_names,
+            "parent_class": (parent_class.value if parent_class else None),
+            "collection": (collection.value if collection else None),
+            "category": category,
+            "batch_size": batch_size,
+        }
+
+    def add_scenario(self, name: str, category: str | None = None) -> int:
+        """Return deterministic scenario ID."""
+        _ = category
+        assert name == "Base"
+        return 404
+
+    def update_object(
+        self,
+        class_enum: ClassEnum,
+        object_name: str,
+        *,
+        new_name: str,
+        new_category: str | None = None,
+        new_description: str | None = None,
+    ) -> bool:
+        """Capture object update requests and return success."""
+        self.updated_object = {
+            "class_enum": class_enum,
+            "object_name": object_name,
+            "new_name": new_name,
+            "new_category": new_category,
+            "new_description": new_description,
+        }
+        return True
+
+    def delete_object(self, class_enum: ClassEnum, /, *, name: str) -> None:
+        """Capture deleted object info."""
+        self.deleted_object = (class_enum, name)
+
+    def delete_property(
+        self,
+        object_class: ClassEnum,
+        object_name: str,
+        /,
+        *,
+        property_name: str,
+        collection: CollectionEnum | None = None,
+        parent_class: ClassEnum | None = None,
+        parent_object_name: str | None = None,
+        scenario: str | None = None,
+    ) -> None:
+        """Capture deleted property info."""
+        self.deleted_property = {
+            "object_class": object_class,
+            "object_name": object_name,
+            "property_name": property_name,
+            "collection": collection,
+            "parent_class": parent_class,
+            "parent_object_name": parent_object_name,
+            "scenario": scenario,
+        }
+
+    def to_csv(self, target_path: str, /, *, tables: list[str] | None = None) -> None:
+        """Capture CSV export call."""
+        self.csv_path = target_path
+        self.csv_tables = tables
+
 
 class FakeState:
     """State object for exercising all registered tools."""
 
     def __init__(self) -> None:
         self.db = FakeDB()
+        self.read_only = False
 
     @property
     def active_session_count(self) -> int:
@@ -281,7 +434,7 @@ def test_build_mcp_server_registers_and_runs_all_tools(monkeypatch: pytest.Monke
     assert mcp.name == "plexosdb"
 
     health = mcp.tools["health"]()
-    assert health == {"ok": True, "active_sessions": 7}
+    assert health == {"ok": True, "active_sessions": 7, "read_only": False}
 
     created = mcp.tools["create_empty_session"]()
     assert created["session_id"] == "s-empty"
@@ -358,9 +511,46 @@ def test_build_mcp_server_registers_and_runs_all_tools(monkeypatch: pytest.Monke
     units = mcp.tools["list_units"]("sid")
     assert units["count"] == 1
 
+    memberships = mcp.tools["list_object_memberships"]("sid", "Generator", "Gen-1")
+    assert memberships["count"] == 1
+
+    children = mcp.tools["list_child_objects"]("sid", "Gen-1", "Generator")
+    assert children["count"] == 1
+
+    parents = mcp.tools["list_parent_objects"]("sid", "Node-1", "Node")
+    assert parents["count"] == 1
+
+    models = mcp.tools["list_models"]("sid")
+    assert models["count"] == 1
+
+    model_scenarios = mcp.tools["list_scenarios_by_model"]("sid", "Model-A")
+    assert model_scenarios["count"] == 1
+
+    iter_props = mcp.tools["iterate_properties"]("sid", class_name="Generator", limit=2)
+    assert iter_props["count"] == 1
+
     rows = mcp.tools["query_readonly"]("sid", "SELECT 1")
     assert rows["count"] == 1
     assert state.db.last_query_sql == "SELECT 1"
+
+    added_scenario = mcp.tools["add_scenario"]("sid", "Base")
+    assert added_scenario["scenario_id"] == 404
+
+    updated = mcp.tools["update_object"]("sid", "Generator", "Gen-1", "Gen-2")
+    assert updated["ok"] is True
+
+    deleted_obj = mcp.tools["delete_object"]("sid", "Generator", "Gen-2")
+    assert deleted_obj["deleted"] is True
+
+    deleted_prop = mcp.tools["delete_property"]("sid", "Generator", "Gen-1", "Max Capacity")
+    assert deleted_prop["deleted"] is True
+
+    csv_export = mcp.tools["to_csv"]("sid", "/tmp/csv", tables=["t_object"])
+    assert csv_export["exported"] is True
+
+    config = mcp.tools["get_server_config"]()
+    assert config["read_only"] is False
+    assert "discovery" in config["categories"]
 
     closed = mcp.tools["close_session"]("sid")
     assert closed["closed"] is True
@@ -381,6 +571,21 @@ def test_tool_input_validation_errors(monkeypatch: pytest.MonkeyPatch) -> None:
         _ = mcp.tools["query_readonly"]("sid", "DELETE FROM t_object")
 
 
+def test_read_only_blocks_write_tools(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(mcp_server, "FastMCP", FakeFastMCP)
+    state = FakeState()
+    mcp = mcp_server.build_mcp_server(state, read_only=True)
+
+    health = mcp.tools["health"]()
+    assert health["read_only"] is True
+
+    with pytest.raises(PermissionError, match="disabled in read-only mode"):
+        _ = mcp.tools["add_object"]("sid", "Generator", "Gen-1")
+
+    with pytest.raises(PermissionError, match="disabled in read-only mode"):
+        _ = mcp.tools["save_xml"]("sid", "/tmp/out.xml")
+
+
 def test_main_prints_hint_when_launched_interactively(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -397,7 +602,7 @@ def test_main_prints_hint_when_launched_interactively(
 def test_main_runs_server_when_not_interactive(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(mcp_server.sys, "stdin", StubStdin(False))
     fake_mcp = FakeFastMCP(name="plexosdb")
-    monkeypatch.setattr(mcp_server, "build_mcp_server", lambda: fake_mcp)
+    monkeypatch.setattr(mcp_server, "build_mcp_server", lambda **_: fake_mcp)
 
     mcp_server.main()
 
@@ -407,7 +612,7 @@ def test_main_runs_server_when_not_interactive(monkeypatch: pytest.MonkeyPatch) 
 def test_main_runs_server_with_allow_tty(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(mcp_server.sys, "stdin", StubStdin(True))
     fake_mcp = FakeFastMCP(name="plexosdb")
-    monkeypatch.setattr(mcp_server, "build_mcp_server", lambda: fake_mcp)
+    monkeypatch.setattr(mcp_server, "build_mcp_server", lambda **_: fake_mcp)
 
     mcp_server.main(["--allow-tty"])
 

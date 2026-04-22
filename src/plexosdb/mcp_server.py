@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 from plexosdb import PlexosDB
@@ -27,9 +28,10 @@ except ImportError:  # pragma: no cover - exercised only when optional dependenc
 class MCPServerState:
     """State manager for active PlexosDB sessions."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, read_only: bool = False) -> None:
         """Initialize the MCP server state."""
         self._sessions: dict[str, PlexosDB] = {}
+        self.read_only = read_only
 
     @property
     def active_session_count(self) -> int:
@@ -103,10 +105,23 @@ def _parse_collection_name(collection_name: str) -> CollectionEnum:
         return parse_collection_enum(collection_name)
     except ValueError as exc:
         msg = (
-            f"Invalid collection_name '{collection_name}'. "
-            "Use an exact CollectionEnum value or member name."
+            f"Invalid collection_name '{collection_name}'. Use an exact CollectionEnum value or member name."
         )
         raise ValueError(msg) from exc
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    """Read a boolean feature flag from environment variables."""
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _ensure_writable(server_state: MCPServerState, tool_name: str) -> None:
+    """Raise when a write tool is used in read-only mode."""
+    if server_state.read_only:
+        raise PermissionError(f"Tool '{tool_name}' is disabled in read-only mode")
 
 
 def _bootstrap_empty_model(db: PlexosDB) -> None:
@@ -168,6 +183,7 @@ def _register_session_tools(mcp: Any, server_state: MCPServerState) -> None:
         return {
             "ok": True,
             "active_sessions": server_state.active_session_count,
+            "read_only": server_state.read_only,
         }
 
     @mcp.tool()
@@ -187,7 +203,7 @@ def _register_session_tools(mcp: Any, server_state: MCPServerState) -> None:
 
 
 def _register_object_tools(mcp: Any, server_state: MCPServerState) -> None:
-    """Register object and membership management tools on the MCP server."""
+    """Register object and membership discovery tools on the MCP server."""
 
     @mcp.tool()
     def list_objects_by_class(session_id: str, class_name: str) -> dict[str, Any]:
@@ -211,6 +227,7 @@ def _register_object_tools(mcp: Any, server_state: MCPServerState) -> None:
         description: str | None = None,
     ) -> dict[str, Any]:
         """Add an object to the target session."""
+        _ensure_writable(server_state, "add_object")
         db = server_state.get_db(session_id)
         class_enum = _parse_class_name(class_name)
 
@@ -245,6 +262,7 @@ def _register_object_tools(mcp: Any, server_state: MCPServerState) -> None:
         collection_name: str,
     ) -> dict[str, Any]:
         """Add a membership edge between two objects."""
+        _ensure_writable(server_state, "add_membership")
         db = server_state.get_db(session_id)
         parent_class_enum = _parse_class_name(parent_class_name)
         child_class_enum = _parse_class_name(child_class_name)
@@ -263,9 +281,83 @@ def _register_object_tools(mcp: Any, server_state: MCPServerState) -> None:
             "collection_name": collection_enum.value,
         }
 
+    @mcp.tool()
+    def list_object_memberships(
+        session_id: str,
+        class_name: str,
+        name: str,
+        collection_name: str | None = None,
+        exclude_system_membership: bool = False,
+    ) -> dict[str, Any]:
+        """List memberships for a specific object."""
+        db = server_state.get_db(session_id)
+        class_enum = _parse_class_name(class_name)
+        collection = _parse_collection_name(collection_name) if collection_name else None
+        memberships = db.list_object_memberships(
+            class_enum,
+            name=name,
+            collection=collection,
+            exclude_system_membership=exclude_system_membership,
+        )
+        return {
+            "session_id": session_id,
+            "count": len(memberships),
+            "memberships": memberships,
+        }
 
-def _register_property_tools(mcp: Any, server_state: MCPServerState) -> None:
-    """Register property/query/export tools on the MCP server."""
+    @mcp.tool()
+    def list_child_objects(
+        session_id: str,
+        object_name: str,
+        parent_class_name: str,
+        child_class_name: str | None = None,
+        collection_name: str | None = None,
+    ) -> dict[str, Any]:
+        """List child objects for a parent object."""
+        db = server_state.get_db(session_id)
+        parent_class = _parse_class_name(parent_class_name)
+        child_class = _parse_class_name(child_class_name) if child_class_name else None
+        collection = _parse_collection_name(collection_name) if collection_name else None
+        children = db.list_child_objects(
+            object_name,
+            parent_class=parent_class,
+            child_class=child_class,
+            collection=collection,
+        )
+        return {
+            "session_id": session_id,
+            "count": len(children),
+            "children": children,
+        }
+
+    @mcp.tool()
+    def list_parent_objects(
+        session_id: str,
+        object_name: str,
+        child_class_name: str,
+        parent_class_name: str | None = None,
+        collection_name: str | None = None,
+    ) -> dict[str, Any]:
+        """List parent objects for a child object."""
+        db = server_state.get_db(session_id)
+        child_class = _parse_class_name(child_class_name)
+        parent_class = _parse_class_name(parent_class_name) if parent_class_name else None
+        collection = _parse_collection_name(collection_name) if collection_name else None
+        parents = db.list_parent_objects(
+            object_name,
+            child_class=child_class,
+            parent_class=parent_class,
+            collection=collection,
+        )
+        return {
+            "session_id": session_id,
+            "count": len(parents),
+            "parents": parents,
+        }
+
+
+def _register_edit_tools(mcp: Any, server_state: MCPServerState) -> None:
+    """Register model editing tools on the MCP server."""
 
     @mcp.tool()
     def add_property(
@@ -280,6 +372,7 @@ def _register_property_tools(mcp: Any, server_state: MCPServerState) -> None:
         parent_object_name: str | None = None,
     ) -> dict[str, Any]:
         """Add a property value for an object in the target session."""
+        _ensure_writable(server_state, "add_property")
         db = server_state.get_db(session_id)
         class_enum = _parse_class_name(class_name)
         collection_enum = _parse_collection_name(collection_name) if collection_name else None
@@ -304,6 +397,91 @@ def _register_property_tools(mcp: Any, server_state: MCPServerState) -> None:
         }
 
     @mcp.tool()
+    def add_scenario(session_id: str, name: str, category: str | None = None) -> dict[str, Any]:
+        """Add a scenario object to the target session."""
+        _ensure_writable(server_state, "add_scenario")
+        db = server_state.get_db(session_id)
+        scenario_id = db.add_scenario(name, category=category)
+        return {
+            "session_id": session_id,
+            "scenario_id": scenario_id,
+            "name": name,
+        }
+
+    @mcp.tool()
+    def update_object(
+        session_id: str,
+        class_name: str,
+        object_name: str,
+        new_name: str,
+        new_category: str | None = None,
+        new_description: str | None = None,
+    ) -> dict[str, Any]:
+        """Update object name/category/description."""
+        _ensure_writable(server_state, "update_object")
+        db = server_state.get_db(session_id)
+        class_enum = _parse_class_name(class_name)
+        ok = db.update_object(
+            class_enum,
+            object_name,
+            new_name=new_name,
+            new_category=new_category,
+            new_description=new_description,
+        )
+        return {
+            "session_id": session_id,
+            "ok": bool(ok),
+            "name": new_name,
+        }
+
+    @mcp.tool()
+    def delete_object(session_id: str, class_name: str, name: str) -> dict[str, Any]:
+        """Delete an object from the target session."""
+        _ensure_writable(server_state, "delete_object")
+        db = server_state.get_db(session_id)
+        class_enum = _parse_class_name(class_name)
+        db.delete_object(class_enum, name=name)
+        return {
+            "session_id": session_id,
+            "deleted": True,
+            "name": name,
+            "class_name": class_enum.value,
+        }
+
+    @mcp.tool()
+    def delete_property(
+        session_id: str,
+        class_name: str,
+        object_name: str,
+        property_name: str,
+        collection_name: str | None = None,
+        parent_class_name: str | None = None,
+        parent_object_name: str | None = None,
+        scenario: str | None = None,
+    ) -> dict[str, Any]:
+        """Delete a property value from an object."""
+        _ensure_writable(server_state, "delete_property")
+        db = server_state.get_db(session_id)
+        class_enum = _parse_class_name(class_name)
+        collection = _parse_collection_name(collection_name) if collection_name else None
+        parent_class = _parse_class_name(parent_class_name) if parent_class_name else None
+        db.delete_property(
+            class_enum,
+            object_name,
+            property_name=property_name,
+            collection=collection,
+            parent_class=parent_class,
+            parent_object_name=parent_object_name,
+            scenario=scenario,
+        )
+        return {
+            "session_id": session_id,
+            "deleted": True,
+            "object_name": object_name,
+            "property_name": property_name,
+        }
+
+    @mcp.tool()
     def get_object_properties(
         session_id: str,
         class_name: str,
@@ -322,20 +500,9 @@ def _register_property_tools(mcp: Any, server_state: MCPServerState) -> None:
             "properties": properties,
         }
 
-    @mcp.tool()
-    def save_xml(session_id: str, output_path: str) -> dict[str, Any]:
-        """Export the target session database to a PLEXOS XML file."""
-        db = server_state.get_db(session_id)
-        ok = db.to_xml(output_path)
-        return {
-            "session_id": session_id,
-            "output_path": str(Path(output_path)),
-            "ok": bool(ok),
-        }
 
-
-def _register_discovery_tools(mcp: Any, server_state: MCPServerState) -> None:
-    """Register discovery and reporting tools on the MCP server."""
+def _register_discovery_catalog_tools(mcp: Any, server_state: MCPServerState) -> None:
+    """Register catalog/listing discovery tools."""
 
     @mcp.tool()
     def list_classes(session_id: str) -> dict[str, Any]:
@@ -377,6 +544,29 @@ def _register_discovery_tools(mcp: Any, server_state: MCPServerState) -> None:
         }
 
     @mcp.tool()
+    def list_models(session_id: str) -> dict[str, Any]:
+        """List models defined in the current session model."""
+        db = server_state.get_db(session_id)
+        models = db.list_models()
+        return {
+            "session_id": session_id,
+            "count": len(models),
+            "models": models,
+        }
+
+    @mcp.tool()
+    def list_scenarios_by_model(session_id: str, model_name: str) -> dict[str, Any]:
+        """List scenarios linked to a specific model."""
+        db = server_state.get_db(session_id)
+        scenarios = db.list_scenarios_by_model(model_name)
+        return {
+            "session_id": session_id,
+            "model_name": model_name,
+            "count": len(scenarios),
+            "scenarios": scenarios,
+        }
+
+    @mcp.tool()
     def list_valid_properties(
         session_id: str,
         collection_name: str,
@@ -403,7 +593,10 @@ def _register_discovery_tools(mcp: Any, server_state: MCPServerState) -> None:
     def list_reports(session_id: str) -> dict[str, Any]:
         """List report definitions available in the current session model."""
         db = server_state.get_db(session_id)
-        reports = db.list_reports()
+        try:
+            reports = db.list_reports()
+        except NotImplementedError:
+            reports = []
         return {
             "session_id": session_id,
             "count": len(reports),
@@ -420,6 +613,10 @@ def _register_discovery_tools(mcp: Any, server_state: MCPServerState) -> None:
             "count": len(units),
             "units": units,
         }
+
+
+def _register_discovery_query_tools(mcp: Any, server_state: MCPServerState) -> None:
+    """Register query and property discovery tools."""
 
     @mcp.tool()
     def query_readonly(
@@ -440,20 +637,146 @@ def _register_discovery_tools(mcp: Any, server_state: MCPServerState) -> None:
             "rows": rows,
         }
 
+    @mcp.tool()
+    def iterate_properties(
+        session_id: str,
+        class_name: str | None = None,
+        object_names: list[str] | None = None,
+        property_names: list[str] | None = None,
+        parent_class_name: str | None = None,
+        collection_name: str | None = None,
+        category: str | None = None,
+        batch_size: int = 1000,
+        limit: int = 500,
+    ) -> dict[str, Any]:
+        """Iterate object properties and return up to limit records."""
+        db = server_state.get_db(session_id)
+        class_enum = _parse_class_name(class_name) if class_name else None
+        parent_class = _parse_class_name(parent_class_name) if parent_class_name else None
+        collection = _parse_collection_name(collection_name) if collection_name else None
 
-def build_mcp_server(state: MCPServerState | None = None) -> Any:
+        rows: list[dict[str, Any]] = []
+        for idx, row in enumerate(
+            db.iterate_properties(
+                class_enum=class_enum,
+                object_names=object_names,
+                property_names=property_names,
+                parent_class=parent_class,
+                collection=collection,
+                category=category,
+                batch_size=batch_size,
+            )
+        ):
+            if idx >= limit:
+                break
+            rows.append(cast(dict[str, Any], row))
+
+        return {
+            "session_id": session_id,
+            "count": len(rows),
+            "rows": rows,
+            "limit": limit,
+        }
+
+
+def _register_discovery_tools(mcp: Any, server_state: MCPServerState) -> None:
+    """Register discovery and reporting tools on the MCP server."""
+    _register_discovery_catalog_tools(mcp, server_state)
+    _register_discovery_query_tools(mcp, server_state)
+
+
+def _register_export_tools(mcp: Any, server_state: MCPServerState) -> None:
+    """Register export tools on the MCP server."""
+
+    @mcp.tool()
+    def save_xml(session_id: str, output_path: str) -> dict[str, Any]:
+        """Export the target session database to a PLEXOS XML file."""
+        _ensure_writable(server_state, "save_xml")
+        db = server_state.get_db(session_id)
+        ok = db.to_xml(output_path)
+        return {
+            "session_id": session_id,
+            "output_path": str(Path(output_path)),
+            "ok": bool(ok),
+        }
+
+    @mcp.tool()
+    def to_csv(session_id: str, output_path: str, tables: list[str] | None = None) -> dict[str, Any]:
+        """Export table data to CSV files under output_path."""
+        _ensure_writable(server_state, "to_csv")
+        db = server_state.get_db(session_id)
+        db.to_csv(output_path, tables=tables)
+        return {
+            "session_id": session_id,
+            "output_path": str(Path(output_path)),
+            "exported": True,
+        }
+
+
+def _register_admin_tools(mcp: Any, server_state: MCPServerState) -> None:
+    """Register administrative and server-introspection tools."""
+
+    @mcp.tool()
+    def get_server_config() -> dict[str, Any]:
+        """Return server runtime configuration for host diagnostics."""
+        return {
+            "read_only": server_state.read_only,
+            "active_sessions": server_state.active_session_count,
+            "categories": {
+                "session": ["health", "create_empty_session", "open_xml_session", "close_session"],
+                "discovery": [
+                    "list_classes",
+                    "list_collections",
+                    "list_scenarios",
+                    "list_models",
+                    "list_scenarios_by_model",
+                    "list_valid_properties",
+                    "list_reports",
+                    "list_units",
+                    "list_objects_by_class",
+                    "list_object_memberships",
+                    "list_child_objects",
+                    "list_parent_objects",
+                    "get_object_properties",
+                    "iterate_properties",
+                    "query_readonly",
+                ],
+                "edit": [
+                    "add_object",
+                    "add_membership",
+                    "add_property",
+                    "add_scenario",
+                    "update_object",
+                    "delete_object",
+                    "delete_property",
+                ],
+                "export": ["save_xml", "to_csv"],
+                "admin": ["get_server_config"],
+            },
+        }
+
+
+def build_mcp_server(state: MCPServerState | None = None, *, read_only: bool | None = None) -> Any:
     """Build and return the MCP server instance."""
     if FastMCP is None:
         msg = "fastmcp is not installed. Install dependencies and run again."
         raise RuntimeError(msg)
 
-    server_state = state or MCPServerState()
+    resolved_read_only = read_only if read_only is not None else _env_flag("PLEXOSDB_MCP_READ_ONLY", False)
+    if state is None:
+        server_state = MCPServerState(read_only=resolved_read_only)
+    else:
+        state.read_only = resolved_read_only
+        server_state = state
+
     mcp = FastMCP(name="plexosdb")
 
     _register_session_tools(mcp, server_state)
     _register_object_tools(mcp, server_state)
-    _register_property_tools(mcp, server_state)
+    _register_edit_tools(mcp, server_state)
     _register_discovery_tools(mcp, server_state)
+    _register_export_tools(mcp, server_state)
+    _register_admin_tools(mcp, server_state)
 
     return mcp
 
@@ -465,6 +788,11 @@ def _parse_cli_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--allow-tty",
         action="store_true",
         help="Allow startup from an interactive terminal (advanced/debug usage).",
+    )
+    parser.add_argument(
+        "--read-only",
+        action="store_true",
+        help="Disable write and export MCP tools for safer production hosts.",
     )
     parser.add_argument(
         "--cli-command",
@@ -522,7 +850,7 @@ def main(argv: list[str] | None = None) -> None:
         print("Or run with --allow-tty if you intentionally want to keep it running in this terminal.")
         return
 
-    server = build_mcp_server()
+    server = build_mcp_server(read_only=args.read_only)
     server.run()
 
 
