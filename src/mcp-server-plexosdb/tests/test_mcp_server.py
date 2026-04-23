@@ -5,8 +5,8 @@ import pytest
 
 from plexosdb import ClassEnum
 from plexosdb.enums import CollectionEnum
-from plexosdb.mcp_server import MCPServerState
-import plexosdb.mcp_server as mcp_server
+from mcp_server_plexosdb import MCPServerState
+import mcp_server_plexosdb.server as mcp_server
 
 
 class FakeFastMCP:

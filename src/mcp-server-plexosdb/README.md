@@ -14,4 +14,5 @@ uv add mcp-server-plexosdb
 uv run plexosdb-mcp
 ```
 
-This package wraps the MCP server implementation from `plexosdb.mcp_server`.
+This package provides the MCP server implementation for plexosdb
+(`mcp_server_plexosdb.server`).

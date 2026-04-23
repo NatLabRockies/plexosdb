@@ -25,3 +25,12 @@ packages = ["src/mcp_server_plexosdb"]
 
 [tool.uv.sources]
 plexosdb = { path = "../../", editable = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
