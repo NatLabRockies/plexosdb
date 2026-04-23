@@ -1,3 +1,5 @@
+"""Unit tests for the mcp-server-plexosdb MCP server implementation."""
+
 from __future__ import annotations
 
 import json
@@ -22,6 +24,7 @@ class FakeFastMCP:
         """Return decorator that registers a function by name."""
 
         def decorator(func):
+            """Register the decorated function in the fake tool registry."""
             self.tools[func.__name__] = func
             return func
 
@@ -380,6 +383,7 @@ class StubStdin:
 
 
 def test_create_empty_session_and_close() -> None:
+    """Create then close an empty session and verify session bookkeeping."""
     state = MCPServerState()
 
     created = state.create_empty_session()
@@ -404,6 +408,7 @@ def test_create_empty_session_and_close() -> None:
 
 
 def test_open_xml_session_and_invalid_session(data_folder) -> None:
+    """Open an XML-backed session and verify unknown session IDs raise."""
     state = MCPServerState()
     xml_path = data_folder / "plexosdb.xml"
 
@@ -441,6 +446,7 @@ def test_single_active_session_replaces_previous(data_folder) -> None:
 
 
 def test_build_mcp_server_raises_without_fastmcp(monkeypatch: pytest.MonkeyPatch) -> None:
+    """build_mcp_server raises when the optional fastmcp dependency is missing."""
     monkeypatch.setattr(mcp_server, "FastMCP", None)
 
     with pytest.raises(RuntimeError, match="fastmcp is not installed"):
@@ -448,6 +454,7 @@ def test_build_mcp_server_raises_without_fastmcp(monkeypatch: pytest.MonkeyPatch
 
 
 def test_build_mcp_server_registers_and_runs_all_tools(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify every registered MCP tool dispatches into the underlying state."""
     monkeypatch.setattr(mcp_server, "FastMCP", FakeFastMCP)
     state = FakeState()
 
@@ -578,6 +585,7 @@ def test_build_mcp_server_registers_and_runs_all_tools(monkeypatch: pytest.Monke
 
 
 def test_tool_input_validation_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Invalid class/collection names and unsafe SQL queries raise ValueError."""
     monkeypatch.setattr(mcp_server, "FastMCP", FakeFastMCP)
     state = FakeState()
     mcp = mcp_server.build_mcp_server(state)
@@ -593,6 +601,7 @@ def test_tool_input_validation_errors(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_read_only_blocks_write_tools(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Read-only mode disables write/export tools but keeps read tools usable."""
     monkeypatch.setattr(mcp_server, "FastMCP", FakeFastMCP)
     state = FakeState()
     mcp = mcp_server.build_mcp_server(state, read_only=True)
@@ -611,6 +620,7 @@ def test_main_prints_hint_when_launched_interactively(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    """main() prints usage hint when stdin is a TTY without --allow-tty."""
     monkeypatch.setattr(mcp_server.sys, "stdin", StubStdin(True))
 
     mcp_server.main()
@@ -621,6 +631,7 @@ def test_main_prints_hint_when_launched_interactively(
 
 
 def test_main_runs_server_when_not_interactive(monkeypatch: pytest.MonkeyPatch) -> None:
+    """main() starts the FastMCP server when stdin is piped (non-TTY)."""
     monkeypatch.setattr(mcp_server.sys, "stdin", StubStdin(False))
     fake_mcp = FakeFastMCP(name="plexosdb")
     monkeypatch.setattr(mcp_server, "build_mcp_server", lambda **_: fake_mcp)
@@ -631,6 +642,7 @@ def test_main_runs_server_when_not_interactive(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_main_runs_server_with_allow_tty(monkeypatch: pytest.MonkeyPatch) -> None:
+    """--allow-tty bypasses the TTY guard and starts the FastMCP server."""
     monkeypatch.setattr(mcp_server.sys, "stdin", StubStdin(True))
     fake_mcp = FakeFastMCP(name="plexosdb")
     monkeypatch.setattr(mcp_server, "build_mcp_server", lambda **_: fake_mcp)
@@ -641,6 +653,7 @@ def test_main_runs_server_with_allow_tty(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 def test_main_cli_health_outputs_json(capsys: pytest.CaptureFixture[str]) -> None:
+    """--cli-command health prints a JSON health payload to stdout."""
     mcp_server.main(["--cli-command", "health"])
     out = capsys.readouterr().out.strip()
 
@@ -650,6 +663,7 @@ def test_main_cli_health_outputs_json(capsys: pytest.CaptureFixture[str]) -> Non
 
 
 def test_main_cli_create_empty_session_outputs_json(capsys: pytest.CaptureFixture[str]) -> None:
+    """--cli-command create-empty-session prints a JSON session payload."""
     mcp_server.main(["--cli-command", "create-empty-session"])
     out = capsys.readouterr().out.strip()
 
@@ -662,6 +676,7 @@ def test_main_cli_open_xml_session_outputs_json(
     capsys: pytest.CaptureFixture[str],
     data_folder,
 ) -> None:
+    """--cli-command open-xml-session loads an XML and prints session JSON."""
     xml_path = data_folder / "plexosdb.xml"
 
     mcp_server.main(["--cli-command", "open-xml-session", "--xml-path", str(xml_path)])
@@ -673,5 +688,6 @@ def test_main_cli_open_xml_session_outputs_json(
 
 
 def test_main_cli_open_xml_session_requires_path() -> None:
+    """--cli-command open-xml-session raises when --xml-path is omitted."""
     with pytest.raises(ValueError, match="--xml-path is required"):
         mcp_server.main(["--cli-command", "open-xml-session"])
