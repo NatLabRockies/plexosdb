@@ -2563,7 +2563,7 @@ class PlexosDB:
         --------
         >>> db = PlexosDB()
         >>> db.create_schema()
-        >>> db.get_collection_id(CollectionEnum.SystemGenerators, ClassEnum.System, ClassEnum.Generator)
+        >>> db.get_collection_id(CollectionEnum.Generators, ClassEnum.System, ClassEnum.Generator)
         25  # Example ID
         """
         query = """
@@ -2631,9 +2631,9 @@ class PlexosDB:
         >>> db.add_object(ClassEnum.System, "System")
         >>> db.add_object(ClassEnum.Generator, "Generator1")
         >>> db.add_membership(
-        ...     "System", "Generator1", ClassEnum.System, ClassEnum.Generator, CollectionEnum.SystemGenerators
+        ...     "System", "Generator1", ClassEnum.System, ClassEnum.Generator, CollectionEnum.Generators
         ... )
-        >>> db.get_membership_id("System", "Generator1", CollectionEnum.SystemGenerators)
+        >>> db.get_membership_id("System", "Generator1", CollectionEnum.Generators)
         1
         """
         query = f"""
