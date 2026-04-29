@@ -2419,6 +2419,8 @@ class PlexosDB:
         parent_class_enum: ClassEnum | None = None,
         collection_enum: CollectionEnum | None = None,
         category: str | None = None,
+        scenario: str | Iterable[str] | None = None,
+        scenario_category: str | Iterable[str] | None = None,
     ) -> list[PropertyRecord]:
         """Retrieve properties for a specific object.
 
@@ -2441,6 +2443,10 @@ class PlexosDB:
             (if not specified, the default collection for the class is used)
         category : str | None, optional
             Category to filter by, by default None
+        scenario : str | Iterable[str] | None, optional
+            Scenario name(s) to filter properties by, by default None
+        scenario_category : str | Iterable[str] | None, optional
+            Scenario category name(s) to filter properties by, by default None
 
         Returns
         -------
@@ -2494,6 +2500,8 @@ class PlexosDB:
                 collection=collection_enum,
                 parent_class=parent_class_enum,
                 category=category,
+                scenario=scenario,
+                scenario_category=scenario_category,
             )
         )
 
@@ -2798,6 +2806,8 @@ class PlexosDB:
         parent_class: ClassEnum | None = None,
         collection: CollectionEnum | None = None,
         category: str | None = None,
+        scenario: str | Iterable[str] | None = None,
+        scenario_category: str | Iterable[str] | None = None,
         batch_size: int = 1000,
     ) -> Iterator[PropertyRecord]:
         """Iterate through properties with chunked processing to handle large datasets efficiently.
@@ -2819,6 +2829,12 @@ class PlexosDB:
             Parent class enumeration for filtering properties, defaults to ClassEnum.System
         collection : CollectionEnum | None, optional
             Collection enumeration to filter properties by
+        category : str | None, optional
+            Category name to filter objects by
+        scenario : str | Iterable[str] | None, optional
+            Scenario name(s) to filter property rows by
+        scenario_category : str | Iterable[str] | None, optional
+            Scenario category name(s) to filter property rows by
         batch_size : int, optional
             Number of records to process in each database query chunk, by default 1000
 
@@ -2884,6 +2900,16 @@ class PlexosDB:
         if category and class_enum and not checks_module.check_category_exists(self, class_enum, category):
             msg = f"Category '{category}' does not exist for class {class_enum}."
             raise NotFoundError(msg)
+
+        if scenario:
+            scenarios = normalize_names(scenario)
+            joined = ", ".join(f"'{s}'" for s in scenarios)
+            conditions.append(f"scenario.name IN ({joined})")
+
+        if scenario_category:
+            scenario_categories = normalize_names(scenario_category)
+            joined = ", ".join(f"'{c}'" for c in scenario_categories)
+            conditions.append(f"scenario.category_name IN ({joined})")
 
         where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
         query = Template(PROPERTY_QUERY).safe_substitute(where_clause=where_clause)

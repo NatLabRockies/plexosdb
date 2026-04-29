@@ -147,3 +147,90 @@ def test_get_object_properties_with_non_system_parent_class(
 
     assert len(props) == 1
     assert props[0]["property"] == "Load Risk"
+
+
+def _setup_scenario_tagged_generator_properties(db: PlexosDB) -> None:
+    from plexosdb import ClassEnum
+
+    db.add_scenario("ScenarioA", category="CatA")
+    db.add_scenario("ScenarioB", category="CatB")
+    db.add_scenario("ScenarioC", category="CatA")
+
+    db.add_property(ClassEnum.Generator, "thermal-01", "Heat Rate", 10.0, band=1, scenario="ScenarioA")
+    db.add_property(ClassEnum.Generator, "thermal-01", "Heat Rate", 11.0, band=2, scenario="ScenarioB")
+    db.add_property(ClassEnum.Generator, "thermal-01", "Heat Rate", 12.0, band=3, scenario="ScenarioC")
+
+
+def test_iterate_properties_filters_by_scenario(db_with_topology: PlexosDB) -> None:
+    from plexosdb import ClassEnum, CollectionEnum
+
+    db = db_with_topology
+    _setup_scenario_tagged_generator_properties(db)
+    results = list(
+        db.iterate_properties(
+            class_enum=ClassEnum.Generator,
+            object_names="thermal-01",
+            property_names="Heat Rate",
+            collection=CollectionEnum.Generators,
+            scenario="ScenarioB",
+        )
+    )
+
+    assert len(results) == 1
+    assert results[0]["scenario_name"] == "ScenarioB"
+
+
+def test_iterate_properties_filters_by_scenario_category(db_with_topology: PlexosDB) -> None:
+    from plexosdb import ClassEnum, CollectionEnum
+
+    db = db_with_topology
+    _setup_scenario_tagged_generator_properties(db)
+    results = list(
+        db.iterate_properties(
+            class_enum=ClassEnum.Generator,
+            object_names="thermal-01",
+            property_names="Heat Rate",
+            collection=CollectionEnum.Generators,
+            scenario_category="CatA",
+        )
+    )
+
+    assert len(results) == 2
+    assert {row["scenario_name"] for row in results} == {"ScenarioA", "ScenarioC"}
+
+
+def test_get_object_properties_filters_by_scenario(db_with_topology: PlexosDB) -> None:
+    from plexosdb import ClassEnum, CollectionEnum
+
+    db = db_with_topology
+    _setup_scenario_tagged_generator_properties(db)
+    props = db.get_object_properties(
+        ClassEnum.Generator,
+        "thermal-01",
+        property_names="Heat Rate",
+        collection_enum=CollectionEnum.Generators,
+        scenario="ScenarioA",
+    )
+
+    assert len(props) == 1
+    assert props[0]["scenario_name"] == "ScenarioA"
+
+
+def test_get_object_properties_filters_by_scenario_and_category(
+    db_with_topology: PlexosDB,
+) -> None:
+    from plexosdb import ClassEnum, CollectionEnum
+
+    db = db_with_topology
+    _setup_scenario_tagged_generator_properties(db)
+    props = db.get_object_properties(
+        ClassEnum.Generator,
+        "thermal-01",
+        property_names="Heat Rate",
+        collection_enum=CollectionEnum.Generators,
+        scenario="ScenarioC",
+        scenario_category="CatA",
+    )
+
+    assert len(props) == 1
+    assert props[0]["scenario_name"] == "ScenarioC"
