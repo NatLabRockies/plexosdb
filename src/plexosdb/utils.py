@@ -666,7 +666,12 @@ def insert_property_texts(
     text_map = _build_text_lookup(records, field_name=field_name)
     class_id = db.get_class_id(text_class)
     texts_to_insert = _collect_text_rows(
-        params, data_id_map, metadata_map=metadata_map, text_map=text_map, class_id=class_id
+        params,
+        data_id_map,
+        metadata_map=metadata_map,
+        text_map=text_map,
+        class_id=class_id,
+        field_name=field_name,
     )
 
     if texts_to_insert:
@@ -752,6 +757,7 @@ def _collect_text_rows(
     metadata_map: dict[tuple[int, int, Any, int], dict[str, Any]] | None,
     text_map: dict[tuple[str, str | None], Any],
     class_id: int,
+    field_name: str,
 ) -> list[tuple[int, int, Any]]:
     """Convert params and metadata into t_text insert rows."""
     texts_to_insert: list[tuple[int, int, Any]] = []
@@ -761,6 +767,13 @@ def _collect_text_rows(
         data_id, obj_name = data_id_map.get(row_key, (None, None))
         if not data_id or not obj_name:
             continue
+
+        # Prefer row-keyed metadata so duplicate-value rows keep distinct text payloads.
+        if metadata_map:
+            row_text = metadata_map.get(row_key, {}).get(field_name)
+            if row_text is not None:
+                texts_to_insert.append((data_id, class_id, row_text))
+                continue
 
         property_name = metadata_map.get(row_key, {}).get("property_name") if metadata_map else None
         lookup_keys = [(obj_name, property_name), (obj_name, None)]
