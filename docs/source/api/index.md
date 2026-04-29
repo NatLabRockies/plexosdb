@@ -20,6 +20,9 @@ transmission_attributes
 pasa_attributes
 diagnostic_attributes
 horizon_attributes
+mt_schedule_attributes
+st_schedule_attributes
+lt_plan_attributes
 enums
 exceptions
 utils
