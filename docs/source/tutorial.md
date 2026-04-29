@@ -50,9 +50,9 @@ structure is created. For `add_object(...)` and related workflows, use
 - `seed_defaults=True`: seeds minimal classes/collections/System object so
   methods like `add_object` work immediately on a fresh database.
 - `schema="..."`: execute custom SQL schema content directly from a string.
-- `version="..."`: sets `t_config.Version` for the created database (default is
-  `"9.2"`). Use `version=None` when schema setup is followed by XML import that
-  provides its own version.
+- `version="..."`: updates `t_config.Version` (default `"9.2"`) when that row
+  exists in schema data. Use `version=None` when schema setup is followed by XML
+  import that provides its own version.
 
 ```python
 from plexosdb import PlexosDB

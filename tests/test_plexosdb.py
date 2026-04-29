@@ -37,10 +37,17 @@ def test_create_schema_with_seed_defaults_supports_add_object():
     assert object_id > 0
 
 
-def test_create_schema_sets_default_version_in_config():
-    """create_schema should persist default Version=9.2 for fresh databases."""
+def test_create_schema_sets_default_version_in_config_when_row_exists():
+    """create_schema should update existing Version row to default 9.2."""
+    schema = """
+    CREATE TABLE IF NOT EXISTS t_config (
+        element TEXT PRIMARY KEY,
+        value   TEXT
+    );
+    INSERT INTO t_config(element, value) VALUES ('Version', '0.0');
+    """
     db = PlexosDB()
-    db.create_schema()
+    db.create_schema(schema=schema)
 
     result = db.query("SELECT value FROM t_config WHERE element = ?", ("Version",))
     assert result
@@ -48,9 +55,16 @@ def test_create_schema_sets_default_version_in_config():
 
 
 def test_create_schema_accepts_custom_version_in_config():
-    """create_schema should allow overriding Version through version parameter."""
+    """create_schema should apply custom version when Version row exists."""
+    schema = """
+    CREATE TABLE IF NOT EXISTS t_config (
+        element TEXT PRIMARY KEY,
+        value   TEXT
+    );
+    INSERT INTO t_config(element, value) VALUES ('Version', '0.0');
+    """
     db = PlexosDB()
-    db.create_schema(version="11.0")
+    db.create_schema(schema=schema, version="11.0")
 
     result = db.query("SELECT value FROM t_config WHERE element = ?", ("Version",))
     assert result

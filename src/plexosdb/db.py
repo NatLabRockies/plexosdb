@@ -1624,9 +1624,8 @@ class PlexosDB:
             If True, seed minimal classes/collections/System object after schema creation
             so workflows like add_object work without loading XML, by default False
         version : str | None, optional
-            Version value to persist in ``t_config`` under ``Version``. Defaults to
-            ``"9.2"`` for fresh databases created from schema only. Pass ``None``
-            to skip setting the ``Version`` config value.
+            Version value to apply to ``t_config`` under ``Version``. Defaults to
+            ``"9.2"``. Pass ``None`` to skip version updates.
 
         Returns
         -------
@@ -1687,12 +1686,8 @@ class PlexosDB:
                 self._db.execute("UPDATE t_config SET value = ? WHERE element = ?", ("1", "Dynamic"))
                 if version is not None:
                     self._db.execute(
-                        """
-                        INSERT INTO t_config(element, value)
-                        VALUES (?, ?)
-                        ON CONFLICT(element) DO UPDATE SET value = excluded.value
-                        """,
-                        ("Version", version),
+                        "UPDATE t_config SET value = ? WHERE element = ?",
+                        (version, "Version"),
                     )
             if seed_defaults:
                 self._seed_default_model_data()

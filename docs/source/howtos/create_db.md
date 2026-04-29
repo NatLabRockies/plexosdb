@@ -28,15 +28,12 @@ from plexosdb import PlexosDB
 
 db = PlexosDB()
 db.create_schema()
-
-# Default version in t_config is 9.2
-assert db.query("SELECT value FROM t_config WHERE element='Version'")[0][0] == "9.2"
 ```
 
 ## Set schema version explicitly
 
-Use `version="..."` when creating a fresh schema-only database and you want a
-specific `t_config.Version` value.
+Use `version="..."` when your schema includes a `t_config` row for `Version` and
+you want to update that value during schema creation.
 
 ```python
 from plexosdb import PlexosDB
