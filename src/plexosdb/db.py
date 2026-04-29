@@ -1638,6 +1638,20 @@ class PlexosDB:
         >>> db = PlexosDB()
         >>> db.create_schema()
         True
+
+        >>> db = PlexosDB()
+        >>> db.create_schema(seed_defaults=True)
+        True
+
+        >>> custom_schema = '''
+        ... CREATE TABLE IF NOT EXISTS t_config (
+        ...     element TEXT PRIMARY KEY,
+        ...     value TEXT
+        ... );
+        ... '''
+        >>> db = PlexosDB()
+        >>> db.create_schema(schema=custom_schema)
+        True
         """
         if not schema:
             logger.debug("Using default schema")

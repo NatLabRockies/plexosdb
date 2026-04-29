@@ -38,6 +38,78 @@ db.create_schema()
 
 This creates an empty database with the PLEXOS schema structure ready for data.
 
+### create_schema options: seed_defaults and schema
+
+`create_schema` supports two useful parameters:
+
+- `seed_defaults=True`: seeds minimal classes/collections/System object so
+  methods like `add_object` work immediately on a fresh database.
+- `schema="..."`: execute custom SQL schema content directly from a string.
+
+```python
+from plexosdb import PlexosDB
+from plexosdb.enums import ClassEnum
+
+db = PlexosDB()
+db.create_schema(seed_defaults=True)
+
+# Works immediately because defaults were seeded
+db.add_object(ClassEnum.Generator, "Generator1")
+```
+
+Custom schema string example (copy/paste):
+
+```python
+from plexosdb import PlexosDB
+from plexosdb.enums import ClassEnum
+
+schema = """
+CREATE TABLE IF NOT EXISTS t_config (
+    element TEXT PRIMARY KEY,
+    value   TEXT
+);
+
+CREATE TABLE IF NOT EXISTS t_class (
+    class_id INTEGER PRIMARY KEY,
+    name TEXT,
+    description TEXT,
+    is_enabled INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS t_category (
+    category_id INTEGER PRIMARY KEY,
+    class_id INTEGER,
+    name TEXT,
+    rank INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS t_object (
+    object_id INTEGER PRIMARY KEY,
+    name TEXT,
+    class_id INTEGER,
+    category_id INTEGER,
+    GUID TEXT,
+    description TEXT
+);
+
+INSERT INTO t_class(class_id, name, description, is_enabled)
+VALUES (1, 'System', 'System class', 1),
+       (2, 'Generator', 'Generator class', 1);
+
+INSERT INTO t_category(category_id, class_id, name, rank)
+VALUES (1, 1, '-', 1),
+       (2, 2, '-', 1);
+
+INSERT INTO t_object(object_id, name, class_id, category_id, GUID)
+VALUES (1, 'System', 1, 1, '00000000-0000-0000-0000-000000000001');
+"""
+
+db = PlexosDB()
+db.create_schema(schema=schema)
+
+# The schema string can be as small or as complete as your workflow requires.
+```
+
 ## Working with Objects
 
 Objects represent entities in your energy model such as generators, nodes, and
