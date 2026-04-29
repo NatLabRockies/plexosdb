@@ -36,38 +36,61 @@ All notable changes to this project will be documented in this file.
 
 ## [1.3.4](https://github.com/NatLabRockies/plexosdb/compare/v1.3.3...v1.3.4) (2026-03-27)
 
-
 ### 🧩 CI
 
-* use release/v1 tag for pypa/gh-action-pypi-publish ([#107](https://github.com/NatLabRockies/plexosdb/issues/107)) ([c4e58b8](https://github.com/NatLabRockies/plexosdb/commit/c4e58b8dc062f3302216b3caa7c9c6c1cc423c86))
-
+- use release/v1 tag for pypa/gh-action-pypi-publish
+  ([#107](https://github.com/NatLabRockies/plexosdb/issues/107))
+  ([c4e58b8](https://github.com/NatLabRockies/plexosdb/commit/c4e58b8dc062f3302216b3caa7c9c6c1cc423c86))
 
 ### 📦 Build
 
-* **deps:** bump actions/cache from 5.0.3 to 5.0.4 ([#115](https://github.com/NatLabRockies/plexosdb/issues/115)) ([1ff162a](https://github.com/NatLabRockies/plexosdb/commit/1ff162afe66dfe3bcad7d0dbb0a534b4a9d3374a))
-* **deps:** bump astral-sh/setup-uv from 7.5.0 to 7.6.0 ([#117](https://github.com/NatLabRockies/plexosdb/issues/117)) ([13fb3cf](https://github.com/NatLabRockies/plexosdb/commit/13fb3cfb4c7a2affd7df504a2e152c9a2b0c1295))
-* **deps:** bump astral-sh/setup-uv from b75dde52aef63a238519e7aecbbe79a4a52e4315 to e06108dd0aef18192324c70427afc47652e63a82 ([#114](https://github.com/NatLabRockies/plexosdb/issues/114)) ([96f3975](https://github.com/NatLabRockies/plexosdb/commit/96f397540b06e68e45075a5d700d2b0a91ebe112))
-* **deps:** bump codecov/codecov-action from 5.5.2 to 5.5.3 ([#116](https://github.com/NatLabRockies/plexosdb/issues/116)) ([c86c8e2](https://github.com/NatLabRockies/plexosdb/commit/c86c8e254a85909043c8a7b25a10ff7d169d1e02))
-* **deps:** bump googleapis/release-please-action from c3fc4de07084f75a2b61a5b933069bda6edf3d5c to 16a9c90856f42705d54a6fda1823352bdc62cf38 ([#112](https://github.com/NatLabRockies/plexosdb/issues/112)) ([4150d56](https://github.com/NatLabRockies/plexosdb/commit/4150d56065f41cf916912daf9cda39281cf4e3df))
-* **deps:** bump peaceiris/actions-gh-pages from e9c66a37f080288a11235e32cbe2dc5fb3a679cc to 4f9cc6602d3f66b9c108549d475ec49e8ef4d45e ([#113](https://github.com/NatLabRockies/plexosdb/issues/113)) ([c697f1d](https://github.com/NatLabRockies/plexosdb/commit/c697f1d7642dac4c16cd5ea9e11e327d684ff548))
+- **deps:** bump actions/cache from 5.0.3 to 5.0.4
+  ([#115](https://github.com/NatLabRockies/plexosdb/issues/115))
+  ([1ff162a](https://github.com/NatLabRockies/plexosdb/commit/1ff162afe66dfe3bcad7d0dbb0a534b4a9d3374a))
+- **deps:** bump astral-sh/setup-uv from 7.5.0 to 7.6.0
+  ([#117](https://github.com/NatLabRockies/plexosdb/issues/117))
+  ([13fb3cf](https://github.com/NatLabRockies/plexosdb/commit/13fb3cfb4c7a2affd7df504a2e152c9a2b0c1295))
+- **deps:** bump astral-sh/setup-uv from
+  b75dde52aef63a238519e7aecbbe79a4a52e4315 to
+  e06108dd0aef18192324c70427afc47652e63a82
+  ([#114](https://github.com/NatLabRockies/plexosdb/issues/114))
+  ([96f3975](https://github.com/NatLabRockies/plexosdb/commit/96f397540b06e68e45075a5d700d2b0a91ebe112))
+- **deps:** bump codecov/codecov-action from 5.5.2 to 5.5.3
+  ([#116](https://github.com/NatLabRockies/plexosdb/issues/116))
+  ([c86c8e2](https://github.com/NatLabRockies/plexosdb/commit/c86c8e254a85909043c8a7b25a10ff7d169d1e02))
+- **deps:** bump googleapis/release-please-action from
+  c3fc4de07084f75a2b61a5b933069bda6edf3d5c to
+  16a9c90856f42705d54a6fda1823352bdc62cf38
+  ([#112](https://github.com/NatLabRockies/plexosdb/issues/112))
+  ([4150d56](https://github.com/NatLabRockies/plexosdb/commit/4150d56065f41cf916912daf9cda39281cf4e3df))
+- **deps:** bump peaceiris/actions-gh-pages from
+  e9c66a37f080288a11235e32cbe2dc5fb3a679cc to
+  4f9cc6602d3f66b9c108549d475ec49e8ef4d45e
+  ([#113](https://github.com/NatLabRockies/plexosdb/issues/113))
+  ([c697f1d](https://github.com/NatLabRockies/plexosdb/commit/c697f1d7642dac4c16cd5ea9e11e327d684ff548))
 
 ## [1.3.3](https://github.com/NatLabRockies/plexosdb/compare/v1.3.2...v1.3.3) (2026-03-16)
 
-
 ### 🐛 Bug Fixes
 
-* **ci:** harden all workflows per zizmor audit ([#105](https://github.com/NatLabRockies/plexosdb/issues/105)) ([67ca845](https://github.com/NatLabRockies/plexosdb/commit/67ca84584d1e66410dc66b014a9b710a24b00b95))
-
+- **ci:** harden all workflows per zizmor audit
+  ([#105](https://github.com/NatLabRockies/plexosdb/issues/105))
+  ([67ca845](https://github.com/NatLabRockies/plexosdb/commit/67ca84584d1e66410dc66b014a9b710a24b00b95))
 
 ### ⚡ Performance
 
-* Improving performance of adding memberships from records ([#104](https://github.com/NatLabRockies/plexosdb/issues/104)) ([1ea4a39](https://github.com/NatLabRockies/plexosdb/commit/1ea4a39612a1bef1a0f290eaeb40441874a2b8f0))
-
+- Improving performance of adding memberships from records
+  ([#104](https://github.com/NatLabRockies/plexosdb/issues/104))
+  ([1ea4a39](https://github.com/NatLabRockies/plexosdb/commit/1ea4a39612a1bef1a0f290eaeb40441874a2b8f0))
 
 ### 📦 Build
 
-* **deps:** bump actions/download-artifact from 7 to 8 ([#101](https://github.com/NatLabRockies/plexosdb/issues/101)) ([0e572a0](https://github.com/NatLabRockies/plexosdb/commit/0e572a07a930f6e25f196e98fc879f65f7dd9daa))
-* **deps:** bump actions/upload-artifact from 6 to 7 ([#102](https://github.com/NatLabRockies/plexosdb/issues/102)) ([22b8374](https://github.com/NatLabRockies/plexosdb/commit/22b8374aa7ed9d29eb36258a6a5ad16feb2e21c5))
+- **deps:** bump actions/download-artifact from 7 to 8
+  ([#101](https://github.com/NatLabRockies/plexosdb/issues/101))
+  ([0e572a0](https://github.com/NatLabRockies/plexosdb/commit/0e572a07a930f6e25f196e98fc879f65f7dd9daa))
+- **deps:** bump actions/upload-artifact from 6 to 7
+  ([#102](https://github.com/NatLabRockies/plexosdb/issues/102))
+  ([22b8374](https://github.com/NatLabRockies/plexosdb/commit/22b8374aa7ed9d29eb36258a6a5ad16feb2e21c5))
 
 ## [1.3.2](https://github.com/NatLabRockies/plexosdb/compare/v1.3.1...v1.3.2) (2026-02-12)
 

@@ -1560,7 +1560,7 @@ class PlexosDB:
             self._db.execute("DROP TABLE IF EXISTS temp_mapping")
             self._db.execute("DROP TABLE IF EXISTS temp_data_mapping")
         return True
-    
+
     def _copy_object_attributes(self, old_object_id: int, new_object_id: int) -> bool:
         """Copy attribute values from one object to another."""
         query = """
