@@ -13,6 +13,13 @@ behavior.
 :maxdepth: 2
 
 plexosdb
+model_attributes
+production_attributes
+performance_attributes
+transmission_attributes
+pasa_attributes
+diagnostic_attributes
+horizon_attributes
 enums
 exceptions
 utils

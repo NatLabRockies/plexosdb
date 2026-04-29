@@ -1,0 +1,56 @@
+# Performance Attributes Reference
+
+This page documents the PLEXOS Performance class attributes and their default
+values, validation rules, and descriptions.
+
+Use this reference when setting configuration values through PlexosDB
+attributes, for example with `add_attribute`, `get_attribute`, and
+`list_attributes`.
+
+## Performance Attributes
+
+| Name | Units | Default Value | Validation Rule | Description |
+| --- | --- | --- | --- | --- |
+| Barrier Convergence Tolerance | - | 1E-08 | Between 0 And 1 | Termination criteria for the Barrier algorithm |
+| Carry over MIP Time | Yes/No | 0 | In (0,-1) | If unused MIP Max Time is carried over to the next MIP solve allowing more time on harder problems |
+| Cold Start Optimizer 1 | - | 0 | In (0,1,4,5,6,9,10) | First priority optimizer used to solve problems from a cold-start. |
+| Cold Start Optimizer 2 | - | 0 | In (0,1,4,5,6) | Second priority optimizer used to solve problems from a cold-start. |
+| Cold Start Optimizer 3 | - | 0 | In (0,1,4,5,6) | Third priority optimizer used to solve problems from a cold-start. |
+| Concurrent Mode | - | 0 | In (0,1) | Mode for the concurrent optimizer |
+| Crossover | Yes/No | -1 | In (0,-1) | If crossover is used to transform the interior solution produced by barrier into a basic solution |
+| Feasibility Repair Failure | - | 0 | In (0,1) | Action to take if an infeasible problem cannot be repaired. |
+| Feasibility Tolerance | - | 0 | >= 0 | Allowable violation of variable bounds (0 = solver default value) |
+| Hint Mode | - | 0 | In (0,1,2) | Controls how variable hints are used by the solver |
+| Hot Start Optimizer 1 | - | 0 | In (0,1,4,5,6,9,10) | First priority optimizer used to solve problems from a hot-start. |
+| Hot Start Optimizer 2 | - | 0 | In (0,1,4,5,6) | Second priority optimizer used to solve problems from a hot-start. |
+| Hot Start Optimizer 3 | - | 0 | In (0,1,4,5,6) | Third priority optimizer used to solve problems from a hot-start. |
+| Maximum Monitored MIP Iterations | - | -1 |  | Maximum number of monitored row/column iterations with MIP enabled |
+| Maximum Parallel Tasks | - | -1 | >= -1 | Maximum number of parallel optimizations run concurrently, where -1 means one task per CPU. |
+| Maximum Threads | - | -1 | >= -1 | Maximum number of threads used simultaneously by all simplex and interior point optimizers, where -1 means all available threads. |
+| MIP Absolute Gap | - | 0 | >= 0 | Absolute tolerance on the gap between the best integer objective and the objective of the best node remaining |
+| MIP Focus | - | 0 | In (0,1,2,3) | High-level solution strategy for the MIP solver |
+| MIP Hard Stop | s | -1 | >= -1 | Hard limit on the mixed integer programming time when using MIP Max Relative Gap and MIP Max Time is a soft limit |
+| MIP Improve Start Gap | - | 0 | >= 0 | Switch strategy to improving the best integer solution when this gap is reached. |
+| MIP Interrupt | Yes/No | 0 | In (0,-1) | If the MIP search can be interrupted by pressing the CTRL-P key combination |
+| MIP Max Absolute Gap | - | 0 | >= 0 | When set to a value greater than zero, the MIP Max Time is treated as a soft constraint with optimization continuing until the MIP Max Absolute Gap is reached. |
+| MIP Max Relative Gap | - | 0 | >= 0 | When set to a value greater than zero, the MIP Max Time is treated as a soft constraint with optimization continuing until the MIP Max Relative Gap is reached. |
+| MIP Max Relaxation Repair Time | s | -1 | >= -1 | Maximum time allowed in repairing an infeasible mixed integer programming problem |
+| MIP Max Time | s | -1 | >= -1 | Maximum time in mixed integer programming algorithm |
+| MIP Max Time with Carry over | s | -1 | >= -1 | Maximum time in mixed integer programming algorithm including any unused time carried over |
+| MIP Maximum Threads | - | -1 | >= -1 | Maximum number of threads used by the mixed integer optimizer, where -1 means all available threads. |
+| MIP Node Optimizer | - | 0 | In (0,1,4,5,6,9,10) | Optimizer used at the nodes of the branch and bound algorithm. |
+| MIP Relative Gap | - | 0.0001 | >= 0 | Declare the integer solution optimal when this gap is reached between the current integer solution and best-bound linear relaxation (this is not a measure of optimality). |
+| MIP Root Optimizer | - | 0 | In (0,1,4,5,6,9,10) | Optimizer used to solve the linear relaxation of a mixed-integer program. |
+| MIP Start Solution | - | 1 | Between 0 And 2 | MIP solver will be warm started with previous solutions according to this setting. |
+| Monitoring Maximum Threads | - | -1 | >= -1 | Maximum number of threads for monitored constraint iterations, where -1 means all available threads. |
+| Monitoring Periodic Clearing | - | 0 | >= 0 | Clear monitored constraints and variables from the formulation periodically (number of steps) |
+| Objective Scalar | - | 1 | > 0 | Scale the objective function internally by this factor |
+| Objective Tolerance | - | 0 | >= 0 | Smallest allowable objective function coefficient |
+| Optimality Tolerance | - | 0 | >= 0 | Optimality tolerance (0 = solver default value) |
+| Presolve | Yes/No | -1 | In (0,-1) | Toggles on/off solver presolve |
+| Random Number Seed | - | 0 | Between 0 And 2000000000 | Random number seed for the solver |
+| Scaling | Yes/No | -1 | In (0,-1) | Toggles on/off solver problem scaling |
+| Small LP Nonzero Count | - | 250000 | > 0 | Maximum number of non-zeros in a 'small' linear programming problem. |
+| Small LP Optimizer | - | 0 | Between 0 And 9 | Optimizer used to solve 'small' liner programming problems. |
+| SOLVER | - | 4 | In (0,1,2,3,4,6,7,8) | SOLVER engine used by PLEXOS. |
+| Sparsify | - | -1 | In (-1,0,1,2) | Strategy for matrix sparsification during presolve |
