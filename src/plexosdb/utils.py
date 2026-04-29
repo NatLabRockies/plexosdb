@@ -602,10 +602,10 @@ def apply_scenario_tags(
     if scenario is None:
         return
 
-    if not db.check_scenario_exists(scenario):
-        scenario_id = db.add_scenario(scenario)
-    else:
+    try:
         scenario_id = db.get_scenario_id(scenario)
+    except NotFoundError:
+        scenario_id = db.add_scenario(scenario)
 
     if data_id_map is not None:
         tag_rows = [(data_id_map[key][0], scenario_id) for key in params if key in data_id_map]
@@ -814,6 +814,7 @@ def get_scenario_id(db: PlexosDB, scenario: str) -> int:
     int
         Scenario object ID
     """
-    if not db.check_scenario_exists(scenario):
+    try:
+        return db.get_scenario_id(scenario)
+    except NotFoundError:
         return db.add_scenario(scenario)
-    return db.get_scenario_id(scenario)
