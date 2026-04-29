@@ -45,7 +45,7 @@ from .xml_handler import XMLHandler
 SQLITE_BACKEND_KWARGS = {"in_memory"}
 CHECK_QUERY = "SELECT 1 FROM ${schema} ${where_clause}"
 PLEXOS_DEFAULT_SCHEMA = fpath = files("plexosdb").joinpath("schema.sql").read_text(encoding="utf-8-sig")
-PROPERTY_QUERY = files("plexosdb.queries").joinpath("object_properties.sql").read_text(encoding="utf-8-sig")
+PROPERTY_QUERY = files("plexosdb.sql").joinpath("object_properties.sql").read_text(encoding="utf-8-sig")
 
 
 class PropertyRecord(TypedDict, total=False):

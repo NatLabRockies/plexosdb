@@ -118,14 +118,14 @@ def get_sql_query(query_name: str) -> str:
     Parameters
     ----------
     query_name : str
-        Name of the query file to load from plexosdb.queries
+        Name of the query file to load from plexosdb.sql
 
     Returns
     -------
     str
         Content of the SQL query file as a string
     """
-    fpath = files("plexosdb.queries").joinpath(query_name)
+    fpath = files("plexosdb.sql").joinpath(query_name)
     return fpath.read_text(encoding="utf-8-sig")
 
 
