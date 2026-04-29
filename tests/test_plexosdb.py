@@ -80,6 +80,13 @@ def test_get_plexos_version(db_base, _master_xml_param):
     assert db.get_plexos_version() == expected_version
 
 
+def test_dynamic_config_enabled_after_xml_import(db_base):
+    """Verify Dynamic config is enabled after XML import workflow."""
+    result = db_base.query("SELECT value FROM t_config WHERE element = ?", ("Dynamic",))
+    assert result
+    assert result[0][0] == "1"
+
+
 @pytest.mark.export
 def test_export_to_xml(db_base, tmp_path):
     db = db_base

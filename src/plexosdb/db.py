@@ -247,6 +247,7 @@ class PlexosDB:
 
         # Re-enable foreign key constraints after import
         instance._db.execute("PRAGMA foreign_keys = ON")
+        instance._db.execute("UPDATE t_config SET value = ? WHERE element = ?", ("1", "Dynamic"))
 
         return instance
 
@@ -2104,8 +2105,14 @@ class PlexosDB:
         """
         if not schema:
             logger.debug("Using default schema")
-            return self._db.executescript(PLEXOS_DEFAULT_SCHEMA)
-        return self._db.executescript(schema)
+            status = self._db.executescript(PLEXOS_DEFAULT_SCHEMA)
+        else:
+            status = self._db.executescript(schema)
+
+        if status:
+            # Best-effort default; if Dynamic does not exist yet, this is a no-op.
+            self._db.execute("UPDATE t_config SET value = ? WHERE element = ?", ("1", "Dynamic"))
+        return status
 
     def delete_attribute(
         self,
