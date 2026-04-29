@@ -1365,14 +1365,25 @@ class PlexosDB:
         original_object_name: str,
         new_object_name: str,
         copy_properties: bool = True,
+        copy_attributes: bool = True,
     ) -> int:
-        """Copy an object and its properties, tags, and texts."""
+        """Copy an object and its memberships, attributes, properties, tags and texts."""
         object_id = self.get_object_id(object_class, name=original_object_name)
         category_id = self.query("SELECT category_id from t_object WHERE object_id = ?", (object_id,))
         category = self.query("SELECT name from t_category WHERE category_id = ?", (category_id[0][0],))
+
         new_object_id = self.add_object(object_class, new_object_name, category=category[0][0])
+
+        if copy_attributes:
+            self._copy_object_attributes(
+                old_object_id=object_id,
+                new_object_id=new_object_id,
+            )
+
         membership_mapping = self.copy_object_memberships(
-            object_class=object_class, original_name=original_object_name, new_name=new_object_name
+            object_class=object_class,
+            original_name=original_object_name,
+            new_name=new_object_name,
         )
 
         system_collection = get_default_collection(object_class)
@@ -1549,6 +1560,16 @@ class PlexosDB:
             self._db.execute("DROP TABLE IF EXISTS temp_mapping")
             self._db.execute("DROP TABLE IF EXISTS temp_data_mapping")
         return True
+    
+    def _copy_object_attributes(self, old_object_id: int, new_object_id: int) -> bool:
+        """Copy attribute values from one object to another."""
+        query = """
+            INSERT INTO t_attribute_data (object_id, attribute_id, value, state)
+            SELECT ?, attribute_id, value, state
+            FROM t_attribute_data
+            WHERE object_id = ?
+        """
+        return self._db.execute(query, (new_object_id, old_object_id))
 
     def create_object_scenario(
         self,
