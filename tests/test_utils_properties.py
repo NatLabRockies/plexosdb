@@ -527,7 +527,7 @@ def test_insert_property_values_builds_data_id_map(db_with_topology: PlexosDB) -
         # Verify data_id_map structure
         assert isinstance(data_id_map, dict)
         for key, value in data_id_map.items():
-            assert len(key) == 3  # (membership_id, property_id, value)
+            assert len(key) == 4  # (membership_id, property_id, value, row_index)
             assert len(value) == 2  # (data_id, obj_name)
 
 
@@ -1009,6 +1009,64 @@ def test_persist_metadata_skips_missing_data_id(db_with_topology: PlexosDB) -> N
     from plexosdb.utils import _persist_metadata_for_data
 
     db = db_with_topology
-    metadata_map = {(999, 1, 99.0): {"band": 2, "date_from": None, "date_to": None}}
+    metadata_map = {(999, 1, 99.0, 0): {"band": 2, "date_from": None, "date_to": None}}
 
     _persist_metadata_for_data(db, metadata_map=metadata_map, data_id_map={})
+
+
+def test_add_properties_from_records_duplicate_value_rows_preserve_metadata(
+    db_instance_with_schema: PlexosDB,
+) -> None:
+    """Duplicate rows with same value should keep independent band/date metadata."""
+    from plexosdb import ClassEnum, CollectionEnum
+
+    db = db_instance_with_schema
+    db.add_object(ClassEnum.Generator, "GEN1")
+
+    records = [
+        {
+            "name": "GEN1",
+            "property": "Max Capacity",
+            "value": 0.0,
+            "band": 1,
+            "date_from": datetime(2027, 7, 1),
+            "date_to": datetime(2028, 6, 30),
+        },
+        {
+            "name": "GEN1",
+            "property": "Max Capacity",
+            "value": 0.0,
+            "band": 2,
+            "date_from": datetime(2028, 7, 1),
+            "date_to": datetime(2029, 6, 30),
+        },
+    ]
+
+    db.add_properties_from_records(
+        records,
+        object_class=ClassEnum.Generator,
+        parent_class=ClassEnum.System,
+        collection=CollectionEnum.Generators,
+        scenario=None,
+    )
+
+    rows = db.query(
+        """
+        SELECT d.data_id, b.band_id, df.date, dt.date
+        FROM t_data d
+        LEFT JOIN t_band b ON b.data_id = d.data_id
+        LEFT JOIN t_date_from df ON df.data_id = d.data_id
+        LEFT JOIN t_date_to dt ON dt.data_id = d.data_id
+        JOIN t_membership m ON d.membership_id = m.membership_id
+        JOIN t_object o ON m.child_object_id = o.object_id
+        JOIN t_property p ON d.property_id = p.property_id
+        WHERE o.name = ? AND p.name = ?
+        ORDER BY d.data_id
+        """,
+        ("GEN1", "Max Capacity"),
+    )
+
+    assert len(rows) == 2
+    assert {row[1] for row in rows} == {1, 2}
+    assert {row[2] for row in rows} == {"2027-07-01T00:00:00", "2028-07-01T00:00:00"}
+    assert {row[3] for row in rows} == {"2028-06-30T00:00:00", "2029-06-30T00:00:00"}
