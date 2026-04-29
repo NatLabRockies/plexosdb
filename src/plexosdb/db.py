@@ -207,7 +207,7 @@ class PlexosDB:
             raise FileNotFoundError(msg)
 
         instance = cls(new_db=True, **kwargs)
-        instance.create_schema(schema=schema)
+        instance.create_schema(schema=schema, version=None)
 
         # Temporarily disable foreign key constraints for bulk XML import
         instance._db.execute("PRAGMA foreign_keys = OFF")
@@ -1603,7 +1603,13 @@ class PlexosDB:
                 (1, "System", system_class_id, 1, str(uuid.uuid4())),
             )
 
-    def create_schema(self, schema: str | None = None, *, seed_defaults: bool = False) -> bool:
+    def create_schema(
+        self,
+        schema: str | None = None,
+        *,
+        seed_defaults: bool = False,
+        version: str | None = "9.2",
+    ) -> bool:
         """Create database schema from SQL script.
 
         Initializes the database schema by executing SQL statements, either from
@@ -1617,6 +1623,10 @@ class PlexosDB:
         seed_defaults : bool, optional
             If True, seed minimal classes/collections/System object after schema creation
             so workflows like add_object work without loading XML, by default False
+        version : str | None, optional
+            Version value to persist in ``t_config`` under ``Version``. Defaults to
+            ``"9.2"`` for fresh databases created from schema only. Pass ``None``
+            to skip setting the ``Version`` config value.
 
         Returns
         -------
@@ -1631,7 +1641,12 @@ class PlexosDB:
         Notes
         -----
         This is typically the first method called after initializing a new PlexosDB
-        instance, as it sets up all the required tables for the database.
+        instance, as it sets up the required tables for the database.
+
+        Calling this method with defaults creates schema structure only; it does
+        not seed lookup/model rows needed by higher-level object workflows.
+        Use ``seed_defaults=True`` (or load XML / provide seeded custom schema)
+        when you want methods like ``add_object`` to work immediately.
 
         Examples
         --------
@@ -1641,6 +1656,10 @@ class PlexosDB:
 
         >>> db = PlexosDB()
         >>> db.create_schema(seed_defaults=True)
+        True
+
+        >>> db = PlexosDB()
+        >>> db.create_schema(version="11.0")
         True
 
         >>> custom_schema = '''
@@ -1660,8 +1679,21 @@ class PlexosDB:
             status = self._db.executescript(schema)
 
         if status:
-            # Best-effort default; if Dynamic does not exist yet, this is a no-op.
-            self._db.execute("UPDATE t_config SET value = ? WHERE element = ?", ("1", "Dynamic"))
+            # Best-effort config updates; if t_config does not exist in a custom schema, skip.
+            has_config = bool(
+                self._db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='t_config'")
+            )
+            if has_config:
+                self._db.execute("UPDATE t_config SET value = ? WHERE element = ?", ("1", "Dynamic"))
+                if version is not None:
+                    self._db.execute(
+                        """
+                        INSERT INTO t_config(element, value)
+                        VALUES (?, ?)
+                        ON CONFLICT(element) DO UPDATE SET value = excluded.value
+                        """,
+                        ("Version", version),
+                    )
             if seed_defaults:
                 self._seed_default_model_data()
         return status

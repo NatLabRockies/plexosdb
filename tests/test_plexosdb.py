@@ -37,6 +37,26 @@ def test_create_schema_with_seed_defaults_supports_add_object():
     assert object_id > 0
 
 
+def test_create_schema_sets_default_version_in_config():
+    """create_schema should persist default Version=9.2 for fresh databases."""
+    db = PlexosDB()
+    db.create_schema()
+
+    result = db.query("SELECT value FROM t_config WHERE element = ?", ("Version",))
+    assert result
+    assert result[0][0] == "9.2"
+
+
+def test_create_schema_accepts_custom_version_in_config():
+    """create_schema should allow overriding Version through version parameter."""
+    db = PlexosDB()
+    db.create_schema(version="11.0")
+
+    result = db.query("SELECT value FROM t_config WHERE element = ?", ("Version",))
+    assert result
+    assert result[0][0] == "11.0"
+
+
 @pytest.mark.empty_database
 @pytest.mark.parametrize(
     "table_name",

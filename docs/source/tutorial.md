@@ -32,11 +32,16 @@ from plexosdb import PlexosDB
 # Create a new in-memory database
 db = PlexosDB()
 
-# Initialize the database schema
-db.create_schema()
+# Initialize schema + minimal defaults for object workflows
+db.create_schema(seed_defaults=True)
 ```
 
-This creates an empty database with the PLEXOS schema structure ready for data.
+This creates an in-memory database with the PLEXOS schema and minimal lookup
+data so object APIs work immediately.
+
+If you call `db.create_schema()` without `seed_defaults=True`, only the table
+structure is created. For `add_object(...)` and related workflows, use
+`seed_defaults=True`, import from XML, or provide a custom seeded schema.
 
 ### create_schema options: seed_defaults and schema
 
@@ -45,6 +50,9 @@ This creates an empty database with the PLEXOS schema structure ready for data.
 - `seed_defaults=True`: seeds minimal classes/collections/System object so
   methods like `add_object` work immediately on a fresh database.
 - `schema="..."`: execute custom SQL schema content directly from a string.
+- `version="..."`: sets `t_config.Version` for the created database (default is
+  `"9.2"`). Use `version=None` when schema setup is followed by XML import that
+  provides its own version.
 
 ```python
 from plexosdb import PlexosDB
@@ -55,6 +63,9 @@ db.create_schema(seed_defaults=True)
 
 # Works immediately because defaults were seeded
 db.add_object(ClassEnum.Generator, "Generator1")
+
+# Set a specific DB version when creating from schema
+db.create_schema(seed_defaults=True, version="11.0")
 ```
 
 Custom schema string example (copy/paste):

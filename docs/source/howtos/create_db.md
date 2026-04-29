@@ -12,13 +12,37 @@ from plexosdb import PlexosDB
 db = PlexosDB.from_xml("/path/to/model.xml")
 ```
 
-## Create empty schema (default)
+## Create empty schema (tables only)
+
+`create_schema()` by itself creates the table structure and config rows, but it
+does not seed lookup/model rows such as `t_class`, collections, categories, and
+the `System` object. This means high-level API workflows like `add_object(...)`
+will not work until you either:
+
+- use `seed_defaults=True`, or
+- load/import data that provides those rows (for example `from_xml(...)`), or
+- provide a custom `schema` SQL string that inserts the required seed data.
 
 ```python
 from plexosdb import PlexosDB
 
 db = PlexosDB()
 db.create_schema()
+
+# Default version in t_config is 9.2
+assert db.query("SELECT value FROM t_config WHERE element='Version'")[0][0] == "9.2"
+```
+
+## Set schema version explicitly
+
+Use `version="..."` when creating a fresh schema-only database and you want a
+specific `t_config.Version` value.
+
+```python
+from plexosdb import PlexosDB
+
+db = PlexosDB()
+db.create_schema(version="11.0")
 ```
 
 ## Create empty schema and seed defaults
@@ -81,4 +105,7 @@ VALUES (1, 'System', 1, 1, '00000000-0000-0000-0000-000000000001', 'Default syst
 
 db = PlexosDB()
 db.create_schema(schema=schema)
+
+# If your custom schema does not provide Version, you can still set it here:
+# db.create_schema(schema=schema, version="10.0")
 ```
