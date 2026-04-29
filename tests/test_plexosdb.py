@@ -1,6 +1,8 @@
 import pytest
 
 from plexosdb.db import PlexosDB
+from plexosdb.enums import ClassEnum
+from plexosdb.exceptions import NotFoundError
 
 
 def test_smoke_test():
@@ -13,6 +15,26 @@ def test_initialize_instance():
     assert db is not None
     assert getattr(db, "_db") is not None
     assert isinstance(db, PlexosDB)
+
+
+def test_create_schema_without_seed_defaults_keeps_lookup_tables_empty():
+    """Default create_schema should not inject model metadata rows."""
+    db = PlexosDB()
+    db.create_schema()
+
+    assert db.query("SELECT COUNT(*) FROM t_class")[0][0] == 0
+    with pytest.raises(NotFoundError):
+        db.add_object(ClassEnum.Generator, name="GEN1")
+
+
+def test_create_schema_with_seed_defaults_supports_add_object():
+    """Opt-in seed should bootstrap enough metadata for add_object workflows."""
+    db = PlexosDB()
+    db.create_schema(seed_defaults=True)
+
+    assert db.query("SELECT COUNT(*) FROM t_class")[0][0] > 0
+    object_id = db.add_object(ClassEnum.Generator, name="GEN1")
+    assert object_id > 0
 
 
 @pytest.mark.empty_database

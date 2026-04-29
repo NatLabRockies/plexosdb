@@ -1550,7 +1550,60 @@ class PlexosDB:
         """Create a new scenario with specific property values for an object."""
         raise NotImplementedError  # pragma: no cover
 
-    def create_schema(self, schema: str | None = None) -> bool:
+    def _seed_default_model_data(self) -> None:
+        """Seed minimal lookup data so object workflows work on a fresh schema.
+
+        This bootstrap inserts class definitions, System->child collections, and a
+        canonical System object. It only runs when t_class is empty.
+        """
+        existing_classes = self.query("SELECT COUNT(*) FROM t_class")[0][0]
+        if existing_classes:
+            return
+
+        with self._db.transaction():
+            # Seed classes from the enum values used by API checks.
+            for class_id, class_enum in enumerate(ClassEnum, start=1):
+                self._db.execute(
+                    "INSERT INTO t_class(class_id, name, description, is_enabled) VALUES (?, ?, ?, 1)",
+                    (class_id, class_enum.value, f"{class_enum.value} class"),
+                )
+
+            system_class_id = self.get_class_id(ClassEnum.System)
+
+            # Seed default System->Class collections for add_object/get_default_collection.
+            collection_id = 1
+            for child_class in ClassEnum:
+                if child_class == ClassEnum.System:
+                    continue
+
+                try:
+                    collection = get_default_collection(child_class)
+                except KeyError:
+                    continue
+
+                child_class_id = self.get_class_id(child_class)
+                insert_collection_query = (
+                    "INSERT INTO t_collection("
+                    "collection_id, parent_class_id, child_class_id, name, is_enabled"
+                    ") VALUES (?, ?, ?, ?, 1)"
+                )
+                self._db.execute(
+                    insert_collection_query,
+                    (collection_id, system_class_id, child_class_id, collection.value),
+                )
+                collection_id += 1
+
+            # Seed default category and canonical System object used as membership parent.
+            self._db.execute(
+                "INSERT INTO t_category(category_id, class_id, name, rank) VALUES (?, ?, ?, ?)",
+                (1, system_class_id, "-", 1),
+            )
+            self._db.execute(
+                "INSERT INTO t_object(object_id, name, class_id, category_id, GUID) VALUES (?, ?, ?, ?, ?)",
+                (1, "System", system_class_id, 1, str(uuid.uuid4())),
+            )
+
+    def create_schema(self, schema: str | None = None, *, seed_defaults: bool = False) -> bool:
         """Create database schema from SQL script.
 
         Initializes the database schema by executing SQL statements, either from
@@ -1561,6 +1614,9 @@ class PlexosDB:
         schema : str | None, optional
             Direct SQL schema content to execute. If None, uses the default schema,
             by default None
+        seed_defaults : bool, optional
+            If True, seed minimal classes/collections/System object after schema creation
+            so workflows like add_object work without loading XML, by default False
 
         Returns
         -------
@@ -1592,6 +1648,8 @@ class PlexosDB:
         if status:
             # Best-effort default; if Dynamic does not exist yet, this is a no-op.
             self._db.execute("UPDATE t_config SET value = ? WHERE element = ?", ("1", "Dynamic"))
+            if seed_defaults:
+                self._seed_default_model_data()
         return status
 
     def delete_attribute(
