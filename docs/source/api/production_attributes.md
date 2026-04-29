@@ -3,6 +3,9 @@
 This page documents the PLEXOS Production class attributes and their default
 values, validation rules, and descriptions.
 
+To look at the open access PLEXOS documentation, go to
+[PLEXOS Production Index](https://portal.energyexemplar.com/unified-help/plexos-desktop/index.htm#t=Index.Production.html&rhsearch=production).
+
 Use this reference when setting configuration values through PlexosDB
 attributes, for example with `add_attribute`, `get_attribute`, and
 `list_attributes`.

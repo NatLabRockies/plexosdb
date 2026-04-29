@@ -3,6 +3,9 @@
 This page documents the PLEXOS Diagnostic class attributes and their default
 values, validation rules, and descriptions.
 
+To look at the open access PLEXOS documentation, go to
+[PLEXOS Diagnostic Index](https://portal.energyexemplar.com/unified-help/plexos-desktop/index.htm#t=Index.Diagnostic.html&rhsearch=diagnostic).
+
 Use this reference when setting configuration values through PlexosDB
 attributes, for example with `add_attribute`, `get_attribute`, and
 `list_attributes`.
