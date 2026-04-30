@@ -3016,7 +3016,9 @@ class PlexosDB:
         where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
         query = Template(PROPERTY_QUERY).safe_substitute(where_clause=where_clause)
         params = tuple(query_params) if query_params else None
-        yield from cast(Iterator[PropertyRecord], self._db.iter_dicts(query, params=params, batch_size=batch_size))
+        yield from cast(
+            Iterator[PropertyRecord], self._db.iter_dicts(query, params=params, batch_size=batch_size)
+        )
 
     def list_attributes(self, class_enum: ClassEnum) -> list[str]:
         """Get all attributes for a specific class.
