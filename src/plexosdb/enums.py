@@ -87,6 +87,7 @@ class ClassEnum(StrEnum):
     Performance = "Performance"
     Variable = "Variable"
     Constraint = "Constraint"
+    Purchaser = "Purchaser"
 
 
 plexos_class_mapping = {enum_member.name: enum_member.value for enum_member in ClassEnum}
@@ -133,6 +134,7 @@ class CollectionEnum(StrEnum):
     Constraint = "Constraint"
     Constraints = "Constraints"
     Variables = "Variables"
+    Purchasers = "Purchasers"
 
 
 def str2enum(string: str, schema_enum: type[Enum] = Schema) -> Schema | None:

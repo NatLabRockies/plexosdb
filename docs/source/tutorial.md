@@ -437,6 +437,26 @@ for member in memberships:
     print(f"Generator1 belongs to {member['parent_name']} ({member['parent_class_name']})")
 ```
 
+You can also work with purchaser objects and the corresponding purchasers
+collection:
+
+```python
+from plexosdb.enums import ClassEnum, CollectionEnum, get_default_collection
+
+# Add a purchaser object
+db.add_object(ClassEnum.Purchaser, "RetailerA")
+
+# Confirm default class-to-collection mapping
+assert get_default_collection(ClassEnum.Purchaser) == CollectionEnum.Purchasers
+
+# Confirm the System -> Purchaser collection exists in the schema
+db.check_collection_exists(
+    CollectionEnum.Purchasers,
+    parent_class=ClassEnum.System,
+    child_class=ClassEnum.Purchaser,
+)
+```
+
 ## Bulk Operations
 
 For large models, PlexosDB provides efficient bulk operations:
