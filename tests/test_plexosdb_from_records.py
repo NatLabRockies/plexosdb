@@ -531,3 +531,14 @@ def test_add_attributes_from_records_rejects_non_positive_chunksize(
             object_class=ClassEnum.Model,
             chunksize=0,
         )
+
+
+def test_add_attributes_from_records_no_records(db_instance_with_schema: PlexosDB, caplog):
+    from plexosdb import ClassEnum
+
+    db = db_instance_with_schema
+
+    db.add_attributes_from_records([], object_class=ClassEnum.Model)
+
+    assert "No records provided" in caplog.text
+    assert db._db.fetchone("SELECT COUNT(*) FROM t_attribute_data")[0] == 0

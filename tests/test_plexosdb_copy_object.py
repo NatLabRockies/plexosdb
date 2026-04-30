@@ -107,3 +107,50 @@ def test_copy_object_with_memberships(db_base: PlexosDB):
     new_child_membership = db.get_membership_id(new_object_name, child_object_name, collection)
     assert membership_id_child in membership_mapping
     assert membership_mapping[membership_id_child] == new_child_membership
+
+
+def test_copy_object_copies_attributes(db_base: PlexosDB):
+    from plexosdb import ClassEnum
+
+    db = db_base
+    object_class = ClassEnum.Generator
+
+    original_object_name = "TestGenWithAttribute"
+    new_object_name = "TestGenWithAttributeCopy"
+
+    original_object_id = db.add_object(object_class, original_object_name)
+
+    db.add_attributes_from_records(
+        [
+            {"name": original_object_name, "attribute": "Latitude", "value": 42.0},
+            {"name": original_object_name, "attribute": "Longitude", "value": -105.0},
+        ],
+        object_class=object_class,
+    )
+
+    new_object_id = db.copy_object(object_class, original_object_name, new_object_name)
+
+    old_rows = db._db.fetchall(
+        """
+        SELECT attribute_id, value, state
+        FROM t_attribute_data
+        WHERE object_id = ?
+        ORDER BY attribute_id
+        """,
+        (original_object_id,),
+    )
+    new_rows = db._db.fetchall(
+        """
+        SELECT attribute_id, value, state
+        FROM t_attribute_data
+        WHERE object_id = ?
+        ORDER BY attribute_id
+        """,
+        (new_object_id,),
+    )
+
+    assert old_rows == [
+        (1, 42.0, None),
+        (2, -105.0, None),
+    ]
+    assert new_rows == old_rows
