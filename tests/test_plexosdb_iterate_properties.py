@@ -180,6 +180,35 @@ def test_iterate_properties_filters_by_scenario(db_with_topology: PlexosDB) -> N
     assert results[0]["scenario_name"] == "ScenarioB"
 
 
+def test_iterate_properties_filters_by_scenario_with_quote(db_with_topology: PlexosDB) -> None:
+    from plexosdb import ClassEnum, CollectionEnum
+
+    db = db_with_topology
+    scenario_name = "Scenario O'Brien"
+    db.add_scenario(scenario_name, category="CatQ")
+    db.add_property(
+        ClassEnum.Generator,
+        "thermal-01",
+        "Heat Rate",
+        13.0,
+        band=4,
+        scenario=scenario_name,
+    )
+
+    results = list(
+        db.iterate_properties(
+            class_enum=ClassEnum.Generator,
+            object_names="thermal-01",
+            property_names="Heat Rate",
+            collection=CollectionEnum.Generators,
+            scenario=scenario_name,
+        )
+    )
+
+    assert len(results) == 1
+    assert results[0]["scenario_name"] == scenario_name
+
+
 def test_iterate_properties_filters_by_scenario_category(db_with_topology: PlexosDB) -> None:
     from plexosdb import ClassEnum, CollectionEnum
 

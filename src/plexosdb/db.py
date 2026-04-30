@@ -2954,6 +2954,7 @@ class PlexosDB:
             If specified category does not exist
         """
         conditions: list[str] = []
+        query_params: list[Any] = []
 
         if class_enum and checks_module.check_class_exists(self, class_enum):
             conditions.append(f"child_class.name = '{class_enum}'")
@@ -3002,17 +3003,20 @@ class PlexosDB:
 
         if scenario:
             scenarios = normalize_names(scenario)
-            joined = ", ".join(f"'{s}'" for s in scenarios)
-            conditions.append(f"scenario.name IN ({joined})")
+            placeholders = ", ".join("?" for _ in scenarios)
+            conditions.append(f"scenario.name IN ({placeholders})")
+            query_params.extend(scenarios)
 
         if scenario_category:
             scenario_categories = normalize_names(scenario_category)
-            joined = ", ".join(f"'{c}'" for c in scenario_categories)
-            conditions.append(f"scenario.category_name IN ({joined})")
+            placeholders = ", ".join("?" for _ in scenario_categories)
+            conditions.append(f"scenario.category_name IN ({placeholders})")
+            query_params.extend(scenario_categories)
 
         where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
         query = Template(PROPERTY_QUERY).safe_substitute(where_clause=where_clause)
-        yield from cast(Iterator[PropertyRecord], self._db.iter_dicts(query, batch_size=batch_size))
+        params = tuple(query_params) if query_params else None
+        yield from cast(Iterator[PropertyRecord], self._db.iter_dicts(query, params=params, batch_size=batch_size))
 
     def list_attributes(self, class_enum: ClassEnum) -> list[str]:
         """Get all attributes for a specific class.
