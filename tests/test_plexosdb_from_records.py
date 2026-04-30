@@ -375,3 +375,159 @@ def test_get_memberships_system_chunks_over_900_names(db_base: PlexosDB):
     result = db.get_memberships_system(names, object_class=ClassEnum.Generator)
     assert len(result) == 950
     assert {r["name"] for r in result} == set(names)
+
+
+def _seed_model_attributes(db: PlexosDB) -> None:
+    from plexosdb import ClassEnum
+
+    class_id = db.get_class_id(ClassEnum.Model)
+
+    db._db.executemany(
+        """
+        INSERT INTO t_attribute (attribute_id, class_id, name)
+        VALUES (?, ?, ?)
+        """,
+        [
+            (1001, class_id, "Enabled"),
+            (1002, class_id, "Random Number Seed"),
+        ],
+    )
+
+
+def test_add_attributes_from_records_explicit_format(db_instance_with_schema: PlexosDB):
+    from plexosdb import ClassEnum
+
+    db = db_instance_with_schema
+    _seed_model_attributes(db)
+    db.add_object(ClassEnum.Model, "AttrModel")
+
+    records = [
+        {"name": "AttrModel", "attribute": "Enabled", "value": -1},
+        {"name": "AttrModel", "attribute": "Random Number Seed", "value": 1000},
+    ]
+
+    db.add_attributes_from_records(records, object_class=ClassEnum.Model)
+
+    rows = db._db.fetchall(
+        """
+        SELECT attr.name, data.value, data.state
+        FROM t_attribute_data AS data
+        JOIN t_attribute AS attr ON attr.attribute_id = data.attribute_id
+        JOIN t_object AS obj ON obj.object_id = data.object_id
+        WHERE obj.name = ?
+        ORDER BY attr.name
+        """,
+        ("AttrModel",),
+    )
+
+    assert rows == [
+        ("Enabled", -1.0, None),
+        ("Random Number Seed", 1000.0, None),
+    ]
+
+
+def test_add_attributes_from_records_wide_format(db_instance_with_schema: PlexosDB):
+    from plexosdb import ClassEnum
+
+    db = db_instance_with_schema
+    _seed_model_attributes(db)
+    db.add_object(ClassEnum.Model, "WideAttrModel")
+
+    db.add_attributes_from_records(
+        [{"name": "WideAttrModel", "Enabled": -1, "Random Number Seed": 1000}],
+        object_class=ClassEnum.Model,
+    )
+
+    rows = db._db.fetchall(
+        """
+        SELECT attr.name, data.value
+        FROM t_attribute_data AS data
+        JOIN t_attribute AS attr ON attr.attribute_id = data.attribute_id
+        JOIN t_object AS obj ON obj.object_id = data.object_id
+        WHERE obj.name = ?
+        ORDER BY attr.name
+        """,
+        ("WideAttrModel",),
+    )
+
+    assert rows == [
+        ("Enabled", -1.0),
+        ("Random Number Seed", 1000.0),
+    ]
+
+
+def test_add_attributes_from_records_rejects_duplicates(db_instance_with_schema: PlexosDB):
+    from plexosdb import ClassEnum
+
+    db = db_instance_with_schema
+    _seed_model_attributes(db)
+    db.add_object(ClassEnum.Model, "DuplicateAttrModel")
+
+    records = [
+        {"name": "DuplicateAttrModel", "Enabled": -1},
+        {"name": "DuplicateAttrModel", "Enabled": 0},
+    ]
+
+    with pytest.raises(ValueError, match="Duplicate attribute record"):
+        db.add_attributes_from_records(records, object_class=ClassEnum.Model)
+
+    assert db._db.fetchone("SELECT COUNT(*) FROM t_attribute_data")[0] == 0
+
+
+def test_add_attributes_from_records_unknown_attribute(db_instance_with_schema: PlexosDB):
+    from plexosdb import ClassEnum
+
+    db = db_instance_with_schema
+    _seed_model_attributes(db)
+    db.add_object(ClassEnum.Model, "BadAttrModel")
+
+    with pytest.raises(KeyError, match="Invalid attribute record"):
+        db.add_attributes_from_records(
+            [{"name": "BadAttrModel", "Fake Attribute": 123}],
+            object_class=ClassEnum.Model,
+        )
+
+    assert db._db.fetchone("SELECT COUNT(*) FROM t_attribute_data")[0] == 0
+
+
+def test_add_attributes_from_records_respects_chunksize(
+    db_instance_with_schema: PlexosDB,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from plexosdb import ClassEnum
+
+    db = db_instance_with_schema
+    _seed_model_attributes(db)
+    names = [f"ChunkAttrModel_{idx}" for idx in range(5)]
+    db.add_objects(ClassEnum.Model, *names)
+
+    records = [{"name": name, "Enabled": -1} for name in names]
+
+    observed_batch_sizes: list[int] = []
+    original_executemany = db._db.executemany
+
+    def spy_executemany(query, params_seq):
+        observed_batch_sizes.append(len(params_seq))
+        return original_executemany(query, params_seq)
+
+    monkeypatch.setattr(db._db, "executemany", spy_executemany)
+    db.add_attributes_from_records(records, object_class=ClassEnum.Model, chunksize=2)
+
+    assert observed_batch_sizes == [2, 2, 1]
+
+
+def test_add_attributes_from_records_rejects_non_positive_chunksize(
+    db_instance_with_schema: PlexosDB,
+):
+    from plexosdb import ClassEnum
+
+    db = db_instance_with_schema
+    _seed_model_attributes(db)
+    db.add_object(ClassEnum.Model, "BadChunkAttrModel")
+
+    with pytest.raises(ValueError, match="chunksize must be >= 1"):
+        db.add_attributes_from_records(
+            [{"name": "BadChunkAttrModel", "Enabled": -1}],
+            object_class=ClassEnum.Model,
+            chunksize=0,
+        )
