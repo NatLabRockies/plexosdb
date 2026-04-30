@@ -1218,3 +1218,62 @@ def test_add_properties_from_records_duplicate_value_rows_preserve_scenario_tags
     assert {row[1] for row in rows} == {1, 2}
     assert {row[2] for row in rows} == {1}
     assert {row[3] for row in rows} == {"row1.csv", "row2.csv"}
+
+
+def test_add_properties_from_records_duplicate_rows_after_skipped_row_preserve_links(
+    db_instance_with_schema: PlexosDB,
+) -> None:
+    """Skipped rows before duplicate valid rows should not break metadata alignment."""
+    from plexosdb import ClassEnum, CollectionEnum
+
+    db = db_instance_with_schema
+    db.add_object(ClassEnum.Generator, "GEN_MIX")
+
+    records = [
+        {
+            "name": "MISSING_OBJECT",
+            "property": "Max Capacity",
+            "value": 0.0,
+            "band": 9,
+            "datafile_text": "skip.csv",
+        },
+        {
+            "name": "GEN_MIX",
+            "property": "Max Capacity",
+            "value": 0.0,
+            "band": 1,
+            "datafile_text": "row1.csv",
+        },
+        {
+            "name": "GEN_MIX",
+            "property": "Max Capacity",
+            "value": 0.0,
+            "band": 2,
+            "datafile_text": "row2.csv",
+        },
+    ]
+
+    db.add_properties_from_records(
+        records,
+        object_class=ClassEnum.Generator,
+        parent_class=ClassEnum.System,
+        collection=CollectionEnum.Generators,
+        scenario="ScenarioMix",
+    )
+
+    rows = db.query(
+        """
+        SELECT d.data_id, b.band_id
+        FROM t_data d
+        LEFT JOIN t_band b ON b.data_id = d.data_id
+        JOIN t_membership m ON d.membership_id = m.membership_id
+        JOIN t_object o ON m.child_object_id = o.object_id
+        JOIN t_property p ON d.property_id = p.property_id
+        WHERE o.name = ? AND p.name = ?
+        ORDER BY d.data_id
+        """,
+        ("GEN_MIX", "Max Capacity"),
+    )
+
+    assert len(rows) == 2
+    assert {row[1] for row in rows} == {1, 2}

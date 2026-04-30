@@ -488,7 +488,7 @@ def _build_property_rows(
     params: list[tuple[int, int, Any]] = []
     metadata_map: dict[tuple[int, int, Any, int], dict[str, Any]] = {}
 
-    for row_index, record in enumerate(normalized_records):
+    for record in normalized_records:
         membership_id = name_to_membership.get(record["name"])
         if not membership_id:
             continue
@@ -497,8 +497,9 @@ def _build_property_rows(
         if not property_id:
             continue
 
+        insert_index = len(params)
         param_tuple = (membership_id, property_id, record["value"])
-        row_key = (membership_id, property_id, record["value"], row_index)
+        row_key = (membership_id, property_id, record["value"], insert_index)
         params.append(param_tuple)
         metadata_map[row_key] = {
             "band": record.get("band"),
