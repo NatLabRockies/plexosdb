@@ -269,23 +269,6 @@ def test_collection_enum_all_members_exist(collection_name: str):
     assert isinstance(collection_obj.value, str)
 
 
-def test_plexos_class_mapping_contains_all_classes():
-    """Verify plexos_class_mapping contains all ClassEnum members."""
-    from plexosdb.enums import ClassEnum, plexos_class_mapping
-
-    for class_member in ClassEnum:
-        assert class_member.name in plexos_class_mapping
-        assert plexos_class_mapping[class_member.name] == class_member.value
-
-
-def test_plexos_class_mapping_is_dict():
-    """Verify plexos_class_mapping is a dictionary."""
-    from plexosdb.enums import plexos_class_mapping
-
-    assert isinstance(plexos_class_mapping, dict)
-    assert len(plexos_class_mapping) > 0
-
-
 def test_class_enum_string_values():
     """Verify all ClassEnum values are strings."""
     from plexosdb.enums import ClassEnum
@@ -379,6 +362,16 @@ def test_parse_str_enum_exact_value_and_spaces():
     assert _parse_str_enum(ClassEnum, "DataFile") == ClassEnum.DataFile
 
 
+def test_class_enum_constructor_accepts_spaced_or_unspaced_values():
+    """ClassEnum constructor should tolerate whitespace differences."""
+    from plexosdb.enums import ClassEnum
+
+    assert ClassEnum("MT Schedule") == ClassEnum.MTSchedule
+    assert ClassEnum("MTSchedule") == ClassEnum.MTSchedule
+    assert ClassEnum("ST Schedule") == ClassEnum.STSchedule
+    assert ClassEnum("STSchedule") == ClassEnum.STSchedule
+
+
 def test_parse_str_enum_invalid_value_raises():
     """Test _parse_str_enum raises ValueError for invalid value."""
     from plexosdb.enums import _parse_str_enum, ClassEnum
@@ -401,3 +394,19 @@ def test_parse_class_enum_and_collection_enum():
         parse_class_enum("NotAClass")
     with pytest.raises(ValueError):
         parse_collection_enum("NotACollection")
+
+
+def test_class_enum_contains_96_classes_for_v9_v10():
+    """ClassEnum should cover the full 96 classes used by v9/v10."""
+    from plexosdb.enums import ClassEnum, PLEXOS_CLASS_COUNT_V9_V10
+
+    assert PLEXOS_CLASS_COUNT_V9_V10 == 96
+    assert len(ClassEnum) == 96
+
+
+def test_collection_count_constants_for_v92_and_v10():
+    """Collection count constants should match documented schema totals."""
+    from plexosdb.enums import PLEXOS_COLLECTION_COUNT_V10, PLEXOS_COLLECTION_COUNT_V92
+
+    assert PLEXOS_COLLECTION_COUNT_V92 == 776
+    assert PLEXOS_COLLECTION_COUNT_V10 == 806

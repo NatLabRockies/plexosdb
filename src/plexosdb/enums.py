@@ -1,7 +1,7 @@
 """Plexos model enums that define the data schema."""
 
 from enum import Enum, StrEnum
-from typing import cast
+from typing import Optional, cast
 
 
 class Schema(Enum):
@@ -61,36 +61,113 @@ class ClassEnum(StrEnum):
 
     System = "System"
     Generator = "Generator"
+    PowerStation = "PowerStation"
     Fuel = "Fuel"
+    FuelContract = "FuelContract"
+    Power2X = "Power2X"
     Battery = "Battery"
     Storage = "Storage"
+    Waterway = "Waterway"
     Emission = "Emission"
+    Abatement = "Abatement"
+    PhysicalContract = "PhysicalContract"
     Reserve = "Reserve"
+    Reliability = "Reliability"
+    FinancialContract = "FinancialContract"
+    Cournot = "Cournot"
+    RSI = "RSI"
     Region = "Region"
+    Pool = "Pool"
     Zone = "Zone"
     Node = "Node"
+    Load = "Load"
     Line = "Line"
+    MLF = "MLF"
     Transformer = "Transformer"
+    FlowControl = "FlowControl"
     Interface = "Interface"
-    DataFile = "Data File"
+    Contingency = "Contingency"
+    Hub = "Hub"
+    TransmissionRight = "TransmissionRight"
+    HeatPlant = "HeatPlant"
+    HeatNode = "HeatNode"
+    HeatStorage = "HeatStorage"
+    GasField = "GasField"
+    GasPlant = "GasPlant"
+    GasPipeline = "GasPipeline"
+    GasNode = "GasNode"
+    GasStorage = "GasStorage"
+    GasDemand = "GasDemand"
+    GasDSMProgram = "GasDSMProgram"
+    GasBasin = "GasBasin"
+    GasZone = "GasZone"
+    GasContract = "GasContract"
+    GasTransport = "GasTransport"
+    GasPath = "GasPath"
+    GasCapacityReleaseOffer = "GasCapacityReleaseOffer"
+    WaterPlant = "WaterPlant"
+    WaterPipeline = "WaterPipeline"
+    WaterNode = "WaterNode"
+    WaterStorage = "WaterStorage"
+    WaterDemand = "WaterDemand"
+    WaterZone = "WaterZone"
+    WaterPumpStation = "WaterPumpStation"
+    WaterPump = "WaterPump"
+    Vehicle = "Vehicle"
+    ChargingStation = "ChargingStation"
+    Fleet = "Fleet"
+    Company = "Company"
+    Commodity = "Commodity"
+    Process = "Process"
+    Facility = "Facility"
+    Maintenance = "Maintenance"
+    FlowNetwork = "FlowNetwork"
+    FlowNode = "FlowNode"
+    FlowPath = "FlowPath"
+    FlowStorage = "FlowStorage"
+    Entity = "Entity"
+    Market = "Market"
+    DataFile = "DataFile"
+    Variable = "Variable"
     Timeslice = "Timeslice"
+    Global = "Global"
     Scenario = "Scenario"
+    WeatherStation = "WeatherStation"
     Model = "Model"
+    Project = "Project"
     Horizon = "Horizon"
     Report = "Report"
+    Stochastic = "Stochastic"
+    Preview = "Preview"
+    LTPlan = "LTPlan"
     PASA = "PASA"
     MTSchedule = "MTSchedule"
     STSchedule = "STSchedule"
     Transmission = "Transmission"
-    Diagnostic = "Diagnostic"
     Production = "Production"
+    Competition = "Competition"
     Performance = "Performance"
-    Variable = "Variable"
+    Diagnostic = "Diagnostic"
+    List = "List"
+    Layout = "Layout"
     Constraint = "Constraint"
+    Objective = "Objective"
+    DecisionVariable = "DecisionVariable"
+    NonlinearConstraint = "NonlinearConstraint"
     Purchaser = "Purchaser"
 
+    @classmethod
+    def _missing_(cls, value: object) -> Optional["ClassEnum"]:
+        """Resolve class values that differ only by whitespace."""
+        if not isinstance(value, str):
+            return None
 
-plexos_class_mapping = {enum_member.name: enum_member.value for enum_member in ClassEnum}
+        normalized = value.replace(" ", "")
+        for member in cls:
+            if member.value.replace(" ", "") == normalized:
+                return member
+
+        return None
 
 
 class CollectionEnum(StrEnum):
@@ -135,6 +212,79 @@ class CollectionEnum(StrEnum):
     Constraints = "Constraints"
     Variables = "Variables"
     Purchasers = "Purchasers"
+    PowerStations = "PowerStations"
+    FuelContracts = "FuelContracts"
+    Power2X = "Power2X"
+    Waterways = "Waterways"
+    Abatements = "Abatements"
+    PhysicalContracts = "PhysicalContracts"
+    Reliability = "Reliability"
+    FinancialContracts = "FinancialContracts"
+    Cournots = "Cournots"
+    RSIs = "RSIs"
+    Pools = "Pools"
+    Loads = "Loads"
+    MLFs = "MLFs"
+    FlowControls = "FlowControls"
+    Contingencies = "Contingencies"
+    Hubs = "Hubs"
+    TransmissionRights = "TransmissionRights"
+    HeatPlants = "HeatPlants"
+    HeatNodes = "HeatNodes"
+    HeatStorages = "HeatStorages"
+    GasFields = "GasFields"
+    GasPlants = "GasPlants"
+    GasPipelines = "GasPipelines"
+    GasNodes = "GasNodes"
+    GasStorages = "GasStorages"
+    GasDemands = "GasDemands"
+    GasDSMPrograms = "GasDSMPrograms"
+    GasBasins = "GasBasins"
+    GasZones = "GasZones"
+    GasContracts = "GasContracts"
+    GasTransports = "GasTransports"
+    GasPaths = "GasPaths"
+    GasCapacityReleaseOffers = "GasCapacityReleaseOffers"
+    WaterPlants = "WaterPlants"
+    WaterPipelines = "WaterPipelines"
+    WaterNodes = "WaterNodes"
+    WaterStorages = "WaterStorages"
+    WaterDemands = "WaterDemands"
+    WaterZones = "WaterZones"
+    WaterPumpStations = "WaterPumpStations"
+    WaterPumps = "WaterPumps"
+    Vehicles = "Vehicles"
+    ChargingStations = "ChargingStations"
+    Fleets = "Fleets"
+    Companies = "Companies"
+    Commodities = "Commodities"
+    Processes = "Processes"
+    Facilities = "Facilities"
+    Maintenances = "Maintenances"
+    FlowNetworks = "FlowNetworks"
+    FlowNodes = "FlowNodes"
+    FlowPaths = "FlowPaths"
+    FlowStorages = "FlowStorages"
+    Entities = "Entities"
+    Markets = "Markets"
+    Objectives = "Objectives"
+    DecisionVariables = "DecisionVariables"
+    NonlinearConstraints = "NonlinearConstraints"
+    Timeslices = "Timeslices"
+    Globals = "Globals"
+    WeatherStations = "WeatherStations"
+    Projects = "Projects"
+    Stochastic = "Stochastic"
+    Preview = "Preview"
+    LTPlan = "LTPlan"
+    Competition = "Competition"
+    Lists = "Lists"
+    Layouts = "Layouts"
+
+
+PLEXOS_CLASS_COUNT_V9_V10 = 96
+PLEXOS_COLLECTION_COUNT_V92 = 776
+PLEXOS_COLLECTION_COUNT_V10 = 806
 
 
 def str2enum(string: str, schema_enum: type[Enum] = Schema) -> Schema | None:
@@ -156,10 +306,20 @@ def get_default_collection(class_enum: ClassEnum) -> CollectionEnum:
     if class_enum in special_cases:
         return special_cases[class_enum]
 
-    collection_name = f"{class_enum}s"
-    if collection_name not in CollectionEnum.__members__:
-        collection_name = class_enum.name
-    return CollectionEnum[collection_name]
+    normalized_key = class_enum.value.replace(" ", "")
+
+    candidates = (
+        f"{normalized_key}s",
+        normalized_key,
+        f"{class_enum.name}s",
+        class_enum.name,
+    )
+
+    for candidate in candidates:
+        if candidate in CollectionEnum.__members__:
+            return CollectionEnum[candidate]
+
+    raise KeyError(f"Default collection is not defined for class {class_enum.value!r}")
 
 
 def _parse_str_enum(enum_cls: type[Enum], value: str | Enum) -> Enum:
