@@ -40,6 +40,7 @@ from .utils import (
     normalize_names,
     plan_property_inserts,
     resolve_membership_id,
+    _normalize_attribute_records,
 )
 from .xml_handler import XMLHandler
 
@@ -961,6 +962,133 @@ class PlexosDB:
         logger.debug(f"Successfully processed {len(records)} property and text records in batches")
         return
 
+    def add_attributes_from_records(
+        self,
+        records: list[dict[str, Any]],
+        /,
+        *,
+        object_class: ClassEnum,
+        chunksize: int = 10_000,
+    ) -> None:
+        """Bulk insert attribute values for objects.
+
+        Efficiently adds multiple object-level attribute values in batches.
+        This method is much more efficient than calling `add_attribute` repeatedly.
+
+        Each record should contain:
+            - 'name': object name
+            - 'attribute': attribute name
+            - 'value': attribute value
+
+        Alternatively, records may be provided in the following format:
+            - {'name': ..., 'Attr1': val1, 'Attr2': val2}
+
+        Optional:
+            - 'state'
+
+        Parameters
+        ----------
+        records : list[dict[str, Any]]
+            List of attribute records in explicit or wide format.
+        object_class : ClassEnum
+            Class of the objects.
+        chunksize : int, optional
+            Batch size for inserts, by default 10_000.
+
+        Returns
+        -------
+        None
+
+        See Also
+        --------
+        add_attribute
+        add_properties_from_records
+        add_memberships_from_records
+
+        Examples
+        --------
+        >>> records = [
+        ...     {"name": "2020", "Step Type": 4.0, "Chrono Step Count": 366.0},
+        ... ]
+
+        >>> db.add_attributes_from_records(records, object_class=ClassEnum.Horizon)
+        """
+        if not records:
+            logger.warning("No records provided for bulk attribute insertion")
+            return
+
+        records = _normalize_attribute_records(records)
+
+        if chunksize < 1:
+            msg = f"chunksize must be >= 1, received {chunksize}"
+            raise ValueError(msg)
+
+        class_id = self.get_class_id(object_class)
+
+        object_names = tuple({record["name"] for record in records})
+        object_placeholders = ", ".join("?" for _ in object_names)
+
+        object_rows = self._db.query(
+            f"""
+            SELECT object_id, name
+            FROM t_object
+            WHERE class_id = ?
+            AND name IN ({object_placeholders})
+            """,
+            (class_id, *object_names),
+        )
+        name_to_object_id = {name: object_id for object_id, name in object_rows}
+
+        attribute_rows = self._db.query(
+            """
+            SELECT attribute_id, name
+            FROM t_attribute
+            WHERE class_id = ?
+            """,
+            (class_id,),
+        )
+        name_to_attribute_id = {name: attribute_id for attribute_id, name in attribute_rows}
+
+        params: list[tuple[int, int, Any, Any]] = []
+        seen: set[tuple[int, int]] = set()
+
+        for record in records:
+            try:
+                object_id = name_to_object_id[record["name"]]
+                attribute_id = name_to_attribute_id[record["attribute"]]
+            except KeyError as exc:
+                raise KeyError(f"Invalid attribute record: {record}") from exc
+
+            key = (object_id, attribute_id)
+            if key in seen:
+                raise ValueError(
+                    f"Duplicate attribute record for object={record['name']!r}, "
+                    f"attribute={record['attribute']!r}"
+                )
+            seen.add(key)
+
+            params.append(
+                (
+                    object_id,
+                    attribute_id,
+                    record["value"],
+                    record.get("state"),
+                )
+            )
+
+        query = f"""
+            INSERT INTO {Schema.AttributeData.name}
+                (object_id, attribute_id, value, state)
+            VALUES (?, ?, ?, ?)
+        """
+
+        with self._db.transaction():
+            for batch in batched(params, chunksize):
+                result = self._db.executemany(query, list(batch))
+                assert result
+
+        logger.debug("Added {} attribute values.", len(params))
+
     def _handle_dates(
         self,
         data_id: int,
@@ -1562,7 +1690,7 @@ class PlexosDB:
         return True
 
     def _copy_object_attributes(self, old_object_id: int, new_object_id: int) -> bool:
-        """Copy attribute values from one object to another."""
+        """Copy attribute values from original object to new object."""
         query = """
             INSERT INTO t_attribute_data (object_id, attribute_id, value, state)
             SELECT ?, attribute_id, value, state

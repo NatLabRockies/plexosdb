@@ -273,6 +273,37 @@ def _flatten_property_records(records: list[dict[str, Any]]) -> tuple[list[dict[
     return normalized_records, deprecated_format_used
 
 
+def _normalize_attribute_records(
+    records: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Normalize wide or explicit attribute records into explicit records."""
+    reserved_fields = {"name", "attribute", "value", "state"}
+    normalized: list[dict[str, Any]] = []
+
+    for record in records:
+        if "attribute" in record and "value" in record:
+            normalized.append(record)
+            continue
+
+        if "name" not in record:
+            raise KeyError(f"Attribute record is missing required 'name': {record}")
+
+        for key, value in record.items():
+            if key in reserved_fields:
+                continue
+
+            normalized.append(
+                {
+                    "name": record["name"],
+                    "attribute": key,
+                    "value": value,
+                    "state": record.get("state"),
+                }
+            )
+
+    return normalized
+
+
 def plan_property_inserts(
     db: PlexosDB,
     records: list[dict[str, Any]],
