@@ -1,7 +1,7 @@
 # Adding Attributes to the objects
 
 Objects in PlexosDB can have attributes that are saved on the `t_attribute_data`
-table.
+table and represent static metadata (e.g. "Step Type", "Chrono Step Count").
 
 ## Listing available attributes per `ClassEnum`
 
