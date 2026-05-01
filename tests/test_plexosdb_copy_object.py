@@ -132,25 +132,56 @@ def test_copy_object_copies_attributes(db_base: PlexosDB):
 
     old_rows = db._db.fetchall(
         """
-        SELECT attribute_id, value, state
-        FROM t_attribute_data
-        WHERE object_id = ?
-        ORDER BY attribute_id
+        SELECT attr.name, data.value, data.state
+        FROM t_attribute_data AS data
+        JOIN t_attribute AS attr ON attr.attribute_id = data.attribute_id
+        WHERE data.object_id = ?
+        ORDER BY attr.name
         """,
         (original_object_id,),
     )
+
     new_rows = db._db.fetchall(
         """
-        SELECT attribute_id, value, state
-        FROM t_attribute_data
-        WHERE object_id = ?
-        ORDER BY attribute_id
+        SELECT attr.name, data.value, data.state
+        FROM t_attribute_data AS data
+        JOIN t_attribute AS attr ON attr.attribute_id = data.attribute_id
+        WHERE data.object_id = ?
+        ORDER BY attr.name
         """,
         (new_object_id,),
     )
 
     assert old_rows == [
-        (1, 42.0, None),
-        (2, -105.0, None),
+        ("Latitude", 42.0, None),
+        ("Longitude", -105.0, None),
     ]
     assert new_rows == old_rows
+
+
+def test_copy_object_without_attributes(db_base: PlexosDB):
+    from plexosdb import ClassEnum
+
+    db = db_base
+    object_class = ClassEnum.Generator
+
+    original_object_name = "TestGenNoAttr"
+    new_object_name = "TestGenNoAttrCopy"
+
+    original_object_id = db.add_object(object_class, original_object_name)
+    new_object_id = db.copy_object(object_class, original_object_name, new_object_name)
+
+    assert (
+        db._db.fetchall(
+            "SELECT * FROM t_attribute_data WHERE object_id = ?",
+            (original_object_id,),
+        )
+        == []
+    )
+    assert (
+        db._db.fetchall(
+            "SELECT * FROM t_attribute_data WHERE object_id = ?",
+            (new_object_id,),
+        )
+        == []
+    )
