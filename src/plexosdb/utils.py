@@ -282,6 +282,8 @@ def _normalize_attribute_records(
 
     for record in records:
         if "attribute" in record and "value" in record:
+            if "name" not in record:
+                raise KeyError(f"Attribute record is missing required 'name': {record}")
             normalized.append(record)
             continue
 

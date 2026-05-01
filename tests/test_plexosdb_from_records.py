@@ -542,3 +542,17 @@ def test_add_attributes_from_records_no_records(db_instance_with_schema: PlexosD
 
     assert "No records provided" in caplog.text
     assert db._db.fetchone("SELECT COUNT(*) FROM t_attribute_data")[0] == 0
+
+
+def test_add_attributes_from_records_missing_name_explicit_format(
+    db_instance_with_schema: PlexosDB,
+):
+    from plexosdb import ClassEnum
+
+    db = db_instance_with_schema
+
+    with pytest.raises(KeyError, match="missing required 'name'"):
+        db.add_attributes_from_records(
+            [{"attribute": "Enabled", "value": -1}],
+            object_class=ClassEnum.Model,
+        )
