@@ -378,6 +378,7 @@ def test_get_memberships_system_chunks_over_900_names(db_base: PlexosDB):
 
 
 def _seed_model_attributes(db: PlexosDB) -> None:
+    """Insert test attribute definitions for the Model class."""
     from plexosdb import ClassEnum
 
     class_id = db.get_class_id(ClassEnum.Model)
@@ -395,6 +396,7 @@ def _seed_model_attributes(db: PlexosDB) -> None:
 
 
 def test_add_attributes_from_records_explicit_format(db_instance_with_schema: PlexosDB):
+    """Insert attribute records using explicit attribute/value format."""
     from plexosdb import ClassEnum
 
     db = db_instance_with_schema
@@ -427,6 +429,7 @@ def test_add_attributes_from_records_explicit_format(db_instance_with_schema: Pl
 
 
 def test_add_attributes_from_records_wide_format(db_instance_with_schema: PlexosDB):
+    """Insert attribute records using wide-column attribute format."""
     from plexosdb import ClassEnum
 
     db = db_instance_with_schema
@@ -457,6 +460,7 @@ def test_add_attributes_from_records_wide_format(db_instance_with_schema: Plexos
 
 
 def test_add_attributes_from_records_rejects_duplicates(db_instance_with_schema: PlexosDB):
+    """Reject duplicate object/attribute pairs in the same batch."""
     from plexosdb import ClassEnum
 
     db = db_instance_with_schema
@@ -475,6 +479,7 @@ def test_add_attributes_from_records_rejects_duplicates(db_instance_with_schema:
 
 
 def test_add_attributes_from_records_unknown_attribute(db_instance_with_schema: PlexosDB):
+    """Raise an error when inserting attributes not defined for the class."""
     from plexosdb import ClassEnum
 
     db = db_instance_with_schema
@@ -494,6 +499,7 @@ def test_add_attributes_from_records_respects_chunksize(
     db_instance_with_schema: PlexosDB,
     monkeypatch: pytest.MonkeyPatch,
 ):
+    """Split attribute inserts into batches according to chunksize."""
     from plexosdb import ClassEnum
 
     db = db_instance_with_schema
@@ -519,6 +525,7 @@ def test_add_attributes_from_records_respects_chunksize(
 def test_add_attributes_from_records_rejects_non_positive_chunksize(
     db_instance_with_schema: PlexosDB,
 ):
+    """Reject non-positive chunksize values."""
     from plexosdb import ClassEnum
 
     db = db_instance_with_schema
@@ -534,6 +541,7 @@ def test_add_attributes_from_records_rejects_non_positive_chunksize(
 
 
 def test_add_attributes_from_records_no_records(db_instance_with_schema: PlexosDB, caplog):
+    """Gracefully handle empty attribute payloads."""
     from plexosdb import ClassEnum
 
     db = db_instance_with_schema
@@ -547,6 +555,7 @@ def test_add_attributes_from_records_no_records(db_instance_with_schema: PlexosD
 def test_add_attributes_from_records_missing_name_explicit_format(
     db_instance_with_schema: PlexosDB,
 ):
+    """Require explicit-format attribute records to include object names."""
     from plexosdb import ClassEnum
 
     db = db_instance_with_schema
@@ -556,3 +565,28 @@ def test_add_attributes_from_records_missing_name_explicit_format(
             [{"attribute": "Enabled", "value": -1}],
             object_class=ClassEnum.Model,
         )
+
+
+def test_add_attributes_from_records_raises_runtime_error_on_insert_failure(
+    db_instance_with_schema: PlexosDB,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Raise RuntimeError when bulk attribute insertion fails."""
+    from plexosdb import ClassEnum
+
+    db = db_instance_with_schema
+    _seed_model_attributes(db)
+    db.add_object(ClassEnum.Model, "InsertFailAttrModel")
+
+    def fail_executemany(query, params_seq):
+        return False
+
+    monkeypatch.setattr(db._db, "executemany", fail_executemany)
+
+    with pytest.raises(RuntimeError, match="Failed to add attribute values"):
+        db.add_attributes_from_records(
+            [{"name": "InsertFailAttrModel", "Enabled": -1}],
+            object_class=ClassEnum.Model,
+        )
+
+    assert db._db.fetchone("SELECT COUNT(*) FROM t_attribute_data")[0] == 0

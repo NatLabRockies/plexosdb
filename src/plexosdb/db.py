@@ -1085,7 +1085,9 @@ class PlexosDB:
         with self._db.transaction():
             for batch in batched(params, chunksize):
                 result = self._db.executemany(query, list(batch))
-                assert result
+                if not result:
+                    msg = f"Failed to add attribute values for {object_class}."
+                    raise RuntimeError(msg)
 
         logger.debug("Added {} attribute values.", len(params))
 
