@@ -498,6 +498,27 @@ class PlexosDB:
         child_object_id = self.get_object_id(child_class_enum, child_object_name)
         collection_id = self.get_collection_id(collection_enum, parent_class_enum, child_class_enum)
 
+        if self.check_membership_exists(
+            parent_object_name,
+            child_object_name,
+            parent_class=parent_class_enum,
+            child_class=child_class_enum,
+            collection=collection_enum,
+        ):
+            existing_membership_id = self.get_membership_id(
+                parent_object_name,
+                child_object_name,
+                collection_enum,
+            )
+            msg = (
+                "Membership already exists: "
+                f"{parent_class_enum}:{parent_object_name} -> "
+                f"{child_class_enum}:{child_object_name} "
+                f"in collection {collection_enum} "
+                f"(membership_id={existing_membership_id})."
+            )
+            raise ValueError(msg)
+
         # NOTE: Measure if this is faster than passing the ids
         query = f"""
         INSERT INTO {Schema.Memberships.name}
@@ -507,7 +528,14 @@ class PlexosDB:
         """
         params = (parent_class_id, parent_object_id, collection_id, child_class_id, child_object_id)
         query_status = self._db.execute(query, params)
-        assert query_status, "Membership already exists for the parent and object combination."
+        if not query_status:
+            msg = (
+                "Failed to add membership: "
+                f"{parent_class_enum}:{parent_object_name} -> "
+                f"{child_class_enum}:{child_object_name} "
+                f"in collection {collection_enum}."
+            )
+            raise RuntimeError(msg)
         self._db.execute("UPDATE t_collection set is_enabled=1 where collection_id = ?", (collection_id,))
         return self._db.last_insert_rowid()
 
