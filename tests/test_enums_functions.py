@@ -100,6 +100,34 @@ def test_get_default_collection_for_pasa():
     assert result == CollectionEnum.PASA
 
 
+@pytest.mark.parametrize(
+    "class_enum,expected_collection",
+    [
+        ("Contingency", "Contingencies"),
+        ("Company", "Companies"),
+        ("Commodity", "Commodities"),
+        ("Facility", "Facilities"),
+        ("Entity", "Entities"),
+    ],
+)
+def test_get_default_collection_for_consonant_y_pluralization(class_enum: str, expected_collection: str):
+    """Verify get_default_collection resolves consonant+y classes to ...ies collections."""
+    from plexosdb.enums import ClassEnum, CollectionEnum, get_default_collection
+
+    class_obj = getattr(ClassEnum, class_enum)
+    result = get_default_collection(class_obj)
+    expected_obj = getattr(CollectionEnum, expected_collection)
+    assert result == expected_obj
+
+
+def test_get_default_collection_for_es_pluralization():
+    """Verify get_default_collection resolves +es plurals (e.g., Process -> Processes)."""
+    from plexosdb.enums import ClassEnum, CollectionEnum, get_default_collection
+
+    result = get_default_collection(ClassEnum.Process)
+    assert result == CollectionEnum.Processes
+
+
 def test_schema_enum_attributes_member():
     """Verify Schema.Attributes enum member exists."""
     from plexosdb.enums import Schema
@@ -340,6 +368,17 @@ def test_get_default_collection_for_supported_classes():
         ClassEnum.Scenario,
     ]
     for class_member in supported_classes:
+        result = get_default_collection(class_member)
+        assert isinstance(result, CollectionEnum)
+
+
+def test_get_default_collection_for_all_non_system_classes():
+    """All classes except System should resolve to a default collection."""
+    from plexosdb.enums import ClassEnum, CollectionEnum, get_default_collection
+
+    for class_member in ClassEnum:
+        if class_member == ClassEnum.System:
+            continue
         result = get_default_collection(class_member)
         assert isinstance(result, CollectionEnum)
 

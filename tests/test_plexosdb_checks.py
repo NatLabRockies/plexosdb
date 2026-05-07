@@ -269,6 +269,24 @@ def test_check_membership_exists_returns_true_for_valid_membership(db_base):
 
 
 @pytest.mark.checks
+def test_add_membership_duplicate_raises_detailed_error(db_base):
+    """Verify duplicate membership errors include parent, child, and collection context."""
+    from plexosdb.enums import ClassEnum, CollectionEnum
+
+    db = db_base
+    db.add_object(ClassEnum.Generator, "Gen1")
+    db.add_object(ClassEnum.Node, "Node1")
+    db.add_membership(ClassEnum.Generator, ClassEnum.Node, "Gen1", "Node1", CollectionEnum.Nodes)
+
+    with pytest.raises(ValueError, match="Gen1") as exc_info:
+        db.add_membership(ClassEnum.Generator, ClassEnum.Node, "Gen1", "Node1", CollectionEnum.Nodes)
+
+    message = str(exc_info.value)
+    assert "Node1" in message
+    assert "Nodes" in message
+
+
+@pytest.mark.checks
 @pytest.mark.parametrize(
     "parent_name,child_name",
     [
