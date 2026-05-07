@@ -308,15 +308,29 @@ def get_default_collection(class_enum: ClassEnum) -> CollectionEnum:
 
     normalized_key = class_enum.value.replace(" ", "")
 
+    # Handle consonant+y plurals used by several classes (e.g., Facility -> Facilities).
+    plural_ies = (
+        f"{normalized_key[:-1]}ies"
+        if (
+            normalized_key.endswith("y")
+            and len(normalized_key) > 1
+            and normalized_key[-2].lower() not in "aeiou"
+        )
+        else None
+    )
+    plural_es = f"{normalized_key}es" if normalized_key.endswith(("s", "x", "z", "ch", "sh")) else None
+
     candidates = (
         f"{normalized_key}s",
+        plural_es,
+        plural_ies,
         normalized_key,
         f"{class_enum.name}s",
         class_enum.name,
     )
 
     for candidate in candidates:
-        if candidate in CollectionEnum.__members__:
+        if candidate and candidate in CollectionEnum.__members__:
             return CollectionEnum[candidate]
 
     raise KeyError(f"Default collection is not defined for class {class_enum.value!r}")
