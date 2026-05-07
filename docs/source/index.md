@@ -21,6 +21,12 @@ simulation models. The library converts PLEXOS XML files into SQLite databases
 and offers a comprehensive API for creating, querying, and manipulating energy
 system models.
 
+```{note}
+Most examples in the current documentation are based on Electric Library
+workflows. For Gas Library object and membership patterns, see
+[Gas Library: Systems and Memberships](howtos/gas_library_tutorial).
+```
+
 ### Key Features
 
 PlexosDB offers the following capabilities:

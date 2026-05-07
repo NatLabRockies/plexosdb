@@ -4,6 +4,12 @@ This tutorial provides a step-by-step introduction to PlexosDB, guiding you
 through the essential concepts and operations for working with PLEXOS energy
 market simulation models.
 
+```{note}
+Tutorial examples below are primarily Electric Library oriented. For Gas
+Library object and membership examples, see
+[Gas Library: Systems and Memberships](howtos/gas_library_tutorial).
+```
+
 ## Prerequisites
 
 Before starting this tutorial, ensure you have:
