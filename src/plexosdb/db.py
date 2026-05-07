@@ -1026,18 +1026,23 @@ class PlexosDB:
         class_id = self.get_class_id(object_class)
 
         object_names = tuple({record["name"] for record in records})
-        object_placeholders = ", ".join("?" for _ in object_names)
+        name_to_object_id: dict[str, int] = {}
 
-        object_rows = self._db.query(
-            f"""
-            SELECT object_id, name
-            FROM t_object
-            WHERE class_id = ?
-            AND name IN ({object_placeholders})
-            """,
-            (class_id, *object_names),
-        )
-        name_to_object_id = {name: object_id for object_id, name in object_rows}
+        CHUNK = 900  # noqa: N806
+        for i in range(0, len(object_names), CHUNK):
+            chunk = object_names[i : i + CHUNK]
+            object_placeholders = ", ".join("?" for _ in chunk)
+
+            object_rows = self._db.query(
+                f"""
+                SELECT object_id, name
+                FROM t_object
+                WHERE class_id = ?
+                AND name IN ({object_placeholders})
+                """,
+                (class_id, *chunk),
+            )
+            name_to_object_id.update({name: object_id for object_id, name in object_rows})
 
         attribute_rows = self._db.query(
             """
