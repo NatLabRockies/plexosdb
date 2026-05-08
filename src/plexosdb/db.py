@@ -1874,7 +1874,31 @@ class PlexosDB:
         object_class: ClassEnum,
     ) -> None:
         """Delete an attribute from an object."""
-        raise NotImplementedError  # pragma: no cover
+        if not self.check_object_exists(object_class, object_name):
+            msg = f"Object = `{object_name}` does not exist for class `{object_class}`."
+            raise NotFoundError(msg)
+
+        object_id = self.get_object_id(object_class, name=object_name)
+        attribute_id = self.get_attribute_id(object_class, name=attribute_name)
+
+        find_query = """
+        SELECT 1
+        FROM t_attribute_data
+        WHERE object_id = ? AND attribute_id = ?
+        """
+        result = self._db.fetchone(find_query, (object_id, attribute_id))
+
+        if not result:
+            msg = f"Attribute '{attribute_name}' not found for object '{object_name}'."
+            raise NotFoundError(msg)
+
+        delete_query = """
+        DELETE FROM t_attribute_data
+        WHERE object_id = ? AND attribute_id = ?
+        """
+
+        with self._db.transaction():
+            self._db.execute(delete_query, (object_id, attribute_id))
 
     def delete_category(self, category: str, /, *, class_name: ClassEnum) -> None:
         """Delete a category from the database."""

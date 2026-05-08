@@ -157,6 +157,23 @@ def db_instance_with_schema() -> PlexosDB:  # type: ignore
 
 
 @pytest.fixture(scope="function")
+def db_with_model_attributes(db_instance_with_schema) -> PlexosDB:  # type: ignore
+    """Create a schema-backed DB with Model attribute definitions."""
+    db_instance_with_schema._db.executemany(
+        """
+        INSERT INTO t_attribute (attribute_id, class_id, name)
+        VALUES (?, ?, ?)
+        """,
+        [
+            (1001, 8, "Enabled"),
+            (1002, 8, "Random Number Seed"),
+        ],
+    )
+
+    yield db_instance_with_schema
+
+
+@pytest.fixture(scope="function")
 def db_manager_instance_empty_with_schema() -> Generator[SQLiteManager, None, None]:
     db: PlexosDB = PlexosDB()
     db.create_schema()
