@@ -1,6 +1,8 @@
 import pytest
 
 from plexosdb.db import PlexosDB
+from plexosdb.enums import ClassEnum
+from plexosdb.exceptions import NotFoundError
 
 
 def test_smoke_test():
@@ -13,6 +15,60 @@ def test_initialize_instance():
     assert db is not None
     assert getattr(db, "_db") is not None
     assert isinstance(db, PlexosDB)
+
+
+def test_create_schema_without_seed_defaults_keeps_lookup_tables_empty():
+    """Default create_schema should not inject model metadata rows."""
+    db = PlexosDB()
+    db.create_schema()
+
+    assert db.query("SELECT COUNT(*) FROM t_class")[0][0] == 0
+    with pytest.raises(NotFoundError):
+        db.add_object(ClassEnum.Generator, name="GEN1")
+
+
+def test_create_schema_with_seed_defaults_supports_add_object():
+    """Opt-in seed should bootstrap enough metadata for add_object workflows."""
+    db = PlexosDB()
+    db.create_schema(seed_defaults=True)
+
+    assert db.query("SELECT COUNT(*) FROM t_class")[0][0] > 0
+    object_id = db.add_object(ClassEnum.Generator, name="GEN1")
+    assert object_id > 0
+
+
+def test_create_schema_sets_default_version_in_config_when_row_exists():
+    """create_schema should update existing Version row to default 9.2."""
+    schema = """
+    CREATE TABLE IF NOT EXISTS t_config (
+        element TEXT PRIMARY KEY,
+        value   TEXT
+    );
+    INSERT INTO t_config(element, value) VALUES ('Version', '0.0');
+    """
+    db = PlexosDB()
+    db.create_schema(schema=schema)
+
+    result = db.query("SELECT value FROM t_config WHERE element = ?", ("Version",))
+    assert result
+    assert result[0][0] == "9.2"
+
+
+def test_create_schema_accepts_custom_version_in_config():
+    """create_schema should apply custom version when Version row exists."""
+    schema = """
+    CREATE TABLE IF NOT EXISTS t_config (
+        element TEXT PRIMARY KEY,
+        value   TEXT
+    );
+    INSERT INTO t_config(element, value) VALUES ('Version', '0.0');
+    """
+    db = PlexosDB()
+    db.create_schema(schema=schema, version="11.0")
+
+    result = db.query("SELECT value FROM t_config WHERE element = ?", ("Version",))
+    assert result
+    assert result[0][0] == "11.0"
 
 
 @pytest.mark.empty_database
@@ -78,6 +134,13 @@ def test_get_plexos_version(db_base, _master_xml_param):
 
     assert db.version == expected_version
     assert db.get_plexos_version() == expected_version
+
+
+def test_dynamic_config_enabled_after_xml_import(db_base):
+    """Verify Dynamic config is enabled after XML import workflow."""
+    result = db_base.query("SELECT value FROM t_config WHERE element = ?", ("Dynamic",))
+    assert result
+    assert result[0][0] == "1"
 
 
 @pytest.mark.export

@@ -1,10 +1,11 @@
-"""Tests for PlexosDB.check_property_exists() method."""
+"""Tests for the standalone check_property_exists function."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
 import pytest
+import plexosdb.checks as checks_module
 
 if TYPE_CHECKING:
     from plexosdb import PlexosDB
@@ -13,8 +14,8 @@ if TYPE_CHECKING:
 def test_check_property_exists_valid_single(db_thermal_gen: PlexosDB) -> None:
     from plexosdb import ClassEnum, CollectionEnum
 
-    result = db_thermal_gen.check_property_exists(
-        CollectionEnum.Generators, ClassEnum.Generator, "Max Capacity"
+    result = checks_module.check_property_exists(
+        db_thermal_gen, CollectionEnum.Generators, ClassEnum.Generator, "Max Capacity"
     )
 
     assert result is True
@@ -23,7 +24,8 @@ def test_check_property_exists_valid_single(db_thermal_gen: PlexosDB) -> None:
 def test_check_property_exists_valid_multiple(db_thermal_gen: PlexosDB) -> None:
     from plexosdb import ClassEnum, CollectionEnum
 
-    result = db_thermal_gen.check_property_exists(
+    result = checks_module.check_property_exists(
+        db_thermal_gen,
         CollectionEnum.Generators,
         ClassEnum.Generator,
         ["Max Capacity", "Fuel Price", "Heat Rate"],
@@ -39,7 +41,8 @@ def test_check_property_exists_invalid_collection_raises_error(
     from plexosdb.exceptions import NotFoundError
 
     with pytest.raises(NotFoundError, match=r"Collection.*does not exist"):
-        db_with_topology.check_property_exists(
+        checks_module.check_property_exists(
+            db_with_topology,
             "InvalidCollection",
             ClassEnum.Generator,
             "Max Capacity",
@@ -53,7 +56,8 @@ def test_check_property_exists_invalid_child_class_raises_error(
     from plexosdb.exceptions import NotFoundError
 
     with pytest.raises(NotFoundError, match=r"Child class.*does not exist"):
-        db_with_topology.check_property_exists(
+        checks_module.check_property_exists(
+            db_with_topology,
             CollectionEnum.Generators,
             "InvalidClass",
             "Max Capacity",
@@ -65,8 +69,8 @@ def test_check_property_exists_invalid_property_returns_false(
 ) -> None:
     from plexosdb import ClassEnum, CollectionEnum
 
-    result = db_thermal_gen.check_property_exists(
-        CollectionEnum.Generators, ClassEnum.Generator, "Invalid Property"
+    result = checks_module.check_property_exists(
+        db_thermal_gen, CollectionEnum.Generators, ClassEnum.Generator, "Invalid Property"
     )
 
     assert result is False
@@ -77,7 +81,8 @@ def test_check_property_exists_mixed_valid_invalid_returns_false(
 ) -> None:
     from plexosdb import ClassEnum, CollectionEnum
 
-    result = db_thermal_gen.check_property_exists(
+    result = checks_module.check_property_exists(
+        db_thermal_gen,
         CollectionEnum.Generators,
         ClassEnum.Generator,
         ["Max Capacity", "Invalid Property"],
