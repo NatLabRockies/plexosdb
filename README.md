@@ -56,6 +56,27 @@ db.add_membership(
 db.to_xml("modified_model.xml")
 ```
 
+## Versioned Schema Initialization
+
+When creating a brand-new database (not importing XML), you can preload the
+matching PLEXOS master template by version:
+
+```python
+from plexosdb import PlexosDB
+
+db = PlexosDB()
+db.create_schema(version=10)
+```
+
+Supported versions: 9, 10, 11, 12.
+
+Accepted inputs include integers, strings, and tuples. For example:
+
+```python
+db.create_schema(version="v11.0R4")
+db.create_schema(version=(12, 0, 3))
+```
+
 ## Documentation
 
 Full documentation is available at

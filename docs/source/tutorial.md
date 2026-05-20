@@ -32,11 +32,38 @@ from plexosdb import PlexosDB
 # Create a new in-memory database
 db = PlexosDB()
 
-# Initialize the database schema
-db.create_schema()
+# Initialize with the built-in default schema
+ok = db.create_schema()
+assert ok
+
+# Option A: initialize using your own SQL schema text
+custom_schema = """
+CREATE TABLE IF NOT EXISTS my_table (
+    id INTEGER PRIMARY KEY,
+    name TEXT
+);
+"""
+db_custom = PlexosDB()
+db_custom.create_schema(schema=custom_schema)
+
+# Option B: initialize and seed from a versioned master template
+db_seeded = PlexosDB()
+db_seeded.create_schema(version=10)
 ```
 
 This creates an empty database with the PLEXOS schema structure ready for data.
+
+If you want to preload a PLEXOS master template while creating the schema, pass
+the major version (supported: 9, 10, 11, 12):
+
+```python
+db_base = PlexosDB()
+db = db_base.create_schema(version=10)
+```
+
+You can also pass string or tuple formats such as `"v10.0R2"` or `(11, 0, 4)`.
+`create_schema(...)` returns a boolean status; it does not return a new database
+instance.
 
 ## Working with Objects
 
