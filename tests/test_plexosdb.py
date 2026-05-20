@@ -111,6 +111,24 @@ def test_xml_not_exist():
         _ = PlexosDB.from_xml("not/existing/path")
 
 
+def test_from_xml_accepts_oversized_t_data_uid(tmp_path):
+    xml_content = """<?xml version=\"1.0\" encoding=\"utf-8\"?>
+<MasterDataSet>
+    <t_data>
+        <data_id>1</data_id>
+        <uid>11339885002100928821</uid>
+    </t_data>
+</MasterDataSet>
+"""
+    xml_path = tmp_path / "oversized_uid.xml"
+    xml_path.write_text(xml_content, encoding="utf-8")
+
+    db = PlexosDB.from_xml(xml_path)
+    rows = db.query("SELECT uid FROM t_data WHERE data_id = 1")
+    assert len(rows) == 1
+    assert rows[0][0] is not None
+
+
 def test_plexosdb_version_property_refresh(db_with_topology):
     """Test PlexosDB.version property with cache refresh."""
     # First access should fetch version
