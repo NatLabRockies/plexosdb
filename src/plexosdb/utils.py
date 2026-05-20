@@ -15,6 +15,9 @@ from loguru import logger
 from .enums import ClassEnum
 from .exceptions import NotFoundError
 
+SQLITE_INT64_MIN = -(2**63)
+SQLITE_INT64_MAX = 2**63 - 1
+
 if TYPE_CHECKING:
     from plexosdb import CollectionEnum, PlexosDB
     from plexosdb.db_manager import SQLiteManager
@@ -58,7 +61,12 @@ def validate_string(value: str) -> Any:
     if value is None:
         return None
     try:
-        return int(value)
+        parsed_int = int(value)
+        if SQLITE_INT64_MIN <= parsed_int <= SQLITE_INT64_MAX:
+            return parsed_int
+        # Keep oversized integers as strings to avoid sqlite3 OverflowError
+        # during executemany bindings.
+        return str(parsed_int)
     except ValueError:
         pass
     try:
@@ -71,10 +79,9 @@ def validate_string(value: str) -> Any:
         return False
     try:
         value = ast.literal_eval(value)
-    except:  # noqa: E722
+    except Exception:
         logger.trace("Could not parse {}", value)
-    finally:
-        return value
+    return value
 
 
 def no_space(a: str, b: str) -> int:
