@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from plexosdb import ClassEnum
+import plexosdb.checks as checks_module
 
 
 def test_list_categories_returns_list(db_base: object) -> None:
@@ -123,7 +124,7 @@ def test_update_object_name(db_base: object) -> None:
     result = db.update_object(ClassEnum.Generator, "OriginalName", new_name="UpdatedName")
 
     assert result is True
-    assert db.check_object_exists(ClassEnum.Generator, "UpdatedName")
+    assert checks_module.check_object_exists(db, ClassEnum.Generator, "UpdatedName")
 
 
 def test_update_object_description(db_base: object) -> None:
@@ -155,4 +156,4 @@ def test_update_object_name_and_description(db_base: object) -> None:
     )
 
     assert result is True
-    assert db.check_object_exists(ClassEnum.Generator, "FullUpdateNew")
+    assert checks_module.check_object_exists(db, ClassEnum.Generator, "FullUpdateNew")
