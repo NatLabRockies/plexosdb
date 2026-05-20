@@ -71,7 +71,7 @@ def test_get_plexos_version(db_base, _master_xml_param):
     xml_path = Path(_master_xml_param)
     stem = xml_path.stem
 
-    match = re.search(r"v([\d.]+)R", stem)
+    match = re.search(r"(?:v|master_)([\d.]+)R", stem)
     assert match is not None
     version_str = match.group(1)
     expected_version = tuple(map(int, version_str.split(".")))
@@ -121,3 +121,29 @@ def test_plexosdb_version_property_refresh(db_with_topology):
 
     # Should return same value
     assert version1 == version2
+
+
+@pytest.mark.parametrize("version", [9, 10, 11, 12, "v10.0R2", (11, 0, 4)])
+def test_create_schema_with_versioned_template(version):
+    db = PlexosDB()
+    db.create_schema(version=version)
+
+    # Template import should populate metadata tables and set model version.
+    class_count = db.query("SELECT COUNT(*) FROM t_class")[0][0]
+    assert class_count > 0
+    assert db.version is not None
+    assert db.version[0] in {9, 10, 11, 12}
+
+
+def test_create_schema_with_invalid_template_version_raises():
+    db = PlexosDB()
+    with pytest.raises(ValueError, match="Unsupported schema version"):
+        db.create_schema(version=8)
+
+
+def test_create_schema_twice_with_version_does_not_recreate_tables():
+    db = PlexosDB()
+    assert db.create_schema()
+    assert db.create_schema(version=10)
+    assert db.version is not None
+    assert db.version[0] == 10
