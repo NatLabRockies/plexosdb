@@ -113,7 +113,93 @@ def _period_type_name(period_type_id: int | None) -> str:
         6: "Hour",
         7: "Quarter",
     }
-    return mapping.get(period_type_id, f"Period{period_type_id}" if period_type_id is not None else "Period")
+    if period_type_id is None:
+        return "Period"
+    return mapping.get(period_type_id, f"Period{period_type_id}")
+
+
+# Maps period name (embedded in derived table name) → (period_table, id_col, datetime_col)
+_PERIOD_TABLE_META: dict[str, tuple[str, str, str]] = {
+    "Interval": ("t_period_0", "interval_id", "datetime"),
+    "Day": ("t_period_1", "day_id", "date"),
+    "Week": ("t_period_2", "week_id", "date"),
+    "Month": ("t_period_3", "month_id", "date"),
+    "Year": ("t_period_4", "fiscal_year_id", "year_ending"),
+    "Hour": ("t_period_6", "hour_id", "datetime"),
+    "Quarter": ("t_period_7", "quarter_id", "date"),
+}
+
+
+def _ensure_join_indexes(con: sqlite3.Connection, table_names: set[str]) -> None:
+    """Create indexes required for fast JOIN-based rich materialization."""
+    con.execute("CREATE INDEX IF NOT EXISTS idx_t_data_values_key_id ON t_data_values(key_id)")
+    for tbl, col in [
+        ("t_key", "key_id"),
+        ("t_membership", "membership_id"),
+        ("t_object", "object_id"),
+        ("t_sample", "sample_id"),
+    ]:
+        if tbl in table_names:
+            con.execute(f"CREATE INDEX IF NOT EXISTS idx_{tbl}_{col} ON {tbl}({col})")
+    for period_table, id_col, _ in _PERIOD_TABLE_META.values():
+        if period_table in table_names:
+            con.execute(f"CREATE INDEX IF NOT EXISTS idx_{period_table}_{id_col} ON {period_table}({id_col})")
+
+
+def _build_period_join(table_name: str, table_names: set[str]) -> tuple[str, str]:
+    """Return (LEFT JOIN clause, datetime expression) for the period table matching this derived table
+    name.
+    """
+    parts = table_name.split("__")
+    if len(parts) >= 2:
+        meta = _PERIOD_TABLE_META.get(parts[1])
+        if meta:
+            period_table, id_col, dt_col = meta
+            if period_table in table_names:
+                join = f"LEFT JOIN main.{period_table} p ON p.{id_col} = CAST(dv.block_id AS TEXT)"
+                return join, f"p.{dt_col} AS datetime"
+    return "", "NULL AS datetime"
+
+
+def _build_rich_create_sql(
+    schema_name: str,
+    table_name: str,
+    key_ids_sql: str,
+    period_join: str,
+    datetime_expr: str,
+) -> str:
+    """Return a CREATE TABLE AS SQL that embeds name/sample/band/datetime into the result."""
+    sq = _quote_ident(schema_name)
+    tq = _quote_ident(table_name)
+    return f"""
+        CREATE TABLE {sq}.{tq} AS
+        SELECT
+            o.name AS name,
+            COALESCE(s.sample_name, 'Mean') AS sample_name,
+            CAST(k.band_id AS INTEGER) AS band_id,
+            dv.block_id,
+            {datetime_expr},
+            dv.value
+        FROM main.t_data_values dv
+        JOIN main.t_key k ON k.key_id = CAST(dv.key_id AS TEXT)
+        LEFT JOIN main.t_sample s ON s.sample_id = k.sample_id
+        LEFT JOIN main.t_membership m ON m.membership_id = k.membership_id
+        LEFT JOIN main.t_object o ON o.object_id = m.child_object_id
+        {period_join}
+        WHERE dv.key_id IN ({key_ids_sql})
+    """
+
+
+def _build_fallback_create_sql(schema_name: str, table_name: str, key_ids_sql: str) -> str:
+    """Minimal table without metadata joins, used when t_key/t_object/t_sample are absent."""
+    sq = _quote_ident(schema_name)
+    tq = _quote_ident(table_name)
+    return f"""
+        CREATE TABLE {sq}.{tq} AS
+        SELECT dv.key_id, dv.period_type_id, dv.block_id, dv.value
+        FROM main.t_data_values dv
+        WHERE dv.key_id IN ({key_ids_sql})
+    """
 
 
 def _phase_name(phase_id: int, phase_ids: dict[str, set[int]]) -> str:
@@ -135,6 +221,14 @@ def _table_columns(con: sqlite3.Connection, table: str) -> list[str]:
 
 def _attached_db_names(con: sqlite3.Connection) -> set[str]:
     return {str(r[1]) for r in con.execute("PRAGMA database_list").fetchall()}
+
+
+def _attach_solution_schemas(con: sqlite3.Connection) -> None:
+    attached = _attached_db_names(con)
+    if "data" not in attached:
+        con.execute("ATTACH DATABASE ':memory:' AS data")
+    if "report" not in attached:
+        con.execute("ATTACH DATABASE ':memory:' AS report")
 
 
 def _build_key_period_map(
@@ -265,60 +359,53 @@ def _build_derived_table_map(con: sqlite3.Connection) -> dict[tuple[str, str], s
 
 
 def _materialize_solution_tables(con: sqlite3.Connection) -> None:
-    attached = _attached_db_names(con)
-    if "data" not in attached:
-        con.execute("ATTACH DATABASE ':memory:' AS data")
-    if "report" not in attached:
-        con.execute("ATTACH DATABASE ':memory:' AS report")
+    _attach_solution_schemas(con)
 
     groups = _build_derived_table_map(con)
     if not groups:
         return
 
-    con.execute("CREATE INDEX IF NOT EXISTS idx_t_data_values_key_id ON t_data_values(key_id)")
-    con.execute(
-        """
-        CREATE TEMP TABLE IF NOT EXISTS _derived_key_map (
-            schema_name TEXT NOT NULL,
-            table_name TEXT NOT NULL,
-            key_id INTEGER NOT NULL
-        )
-        """
-    )
-    con.execute("DELETE FROM _derived_key_map")
+    table_names = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    has_meta = {"t_key", "t_sample", "t_membership", "t_object"}.issubset(table_names)
+    _ensure_join_indexes(con, table_names)
 
-    key_map_rows: list[tuple[str, str, int]] = []
     for (schema_name, table_name), key_ids in groups.items():
-        key_map_rows.extend((schema_name, table_name, int(key_id)) for key_id in key_ids)
-    con.executemany(
-        "INSERT INTO _derived_key_map(schema_name, table_name, key_id) VALUES (?, ?, ?)",
-        key_map_rows,
-    )
-    con.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_derived_key_map_lookup
-        ON _derived_key_map(schema_name, table_name, key_id)
-        """
-    )
-
-    for schema_name, table_name in groups:
+        if not key_ids:
+            continue
+        key_ids_sql = ",".join(str(int(k)) for k in sorted(key_ids))
         con.execute(f"DROP TABLE IF EXISTS {_quote_ident(schema_name)}.{_quote_ident(table_name)}")
-        con.execute(
-            f"""
-            CREATE TABLE {_quote_ident(schema_name)}.{_quote_ident(table_name)} AS
-            SELECT
-                dv.key_id,
-                dv.period_type_id,
-                dv.block_id,
-                dv.value
-            FROM main.t_data_values dv
-            JOIN _derived_key_map dkm
-              ON dkm.key_id = dv.key_id
-            WHERE dkm.schema_name = ?
-              AND dkm.table_name = ?
-            """,
-            (schema_name, table_name),
-        )
+        if has_meta:
+            period_join, datetime_expr = _build_period_join(table_name, table_names)
+            sql = _build_rich_create_sql(schema_name, table_name, key_ids_sql, period_join, datetime_expr)
+        else:
+            sql = _build_fallback_create_sql(schema_name, table_name, key_ids_sql)
+        con.execute(sql)
+
+
+def _materialize_single_solution_table(
+    con: sqlite3.Connection,
+    schema_name: str,
+    table_name: str,
+) -> bool:
+    _attach_solution_schemas(con)
+    groups = _build_derived_table_map(con)
+    key_ids = groups.get((schema_name, table_name))
+    if not key_ids:
+        return False
+
+    table_names = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    has_meta = {"t_key", "t_sample", "t_membership", "t_object"}.issubset(table_names)
+    _ensure_join_indexes(con, table_names)
+
+    key_ids_sql = ",".join(str(int(k)) for k in sorted(key_ids))
+    con.execute(f"DROP TABLE IF EXISTS {_quote_ident(schema_name)}.{_quote_ident(table_name)}")
+    if has_meta:
+        period_join, datetime_expr = _build_period_join(table_name, table_names)
+        sql = _build_rich_create_sql(schema_name, table_name, key_ids_sql, period_join, datetime_expr)
+    else:
+        sql = _build_fallback_create_sql(schema_name, table_name, key_ids_sql)
+    con.execute(sql)
+    return True
 
 
 def _create_and_insert_rows(con: sqlite3.Connection, table: str, rows: list[dict[str, Any]]) -> None:
@@ -408,7 +495,6 @@ def _decode_bin_values(con: sqlite3.Connection, zf: ZipFile) -> None:
             "INSERT INTO t_data_values(key_id, period_type_id, block_id, value) VALUES (?, ?, ?, ?)",
             insert_rows,
         )
-        con.execute("CREATE INDEX IF NOT EXISTS idx_t_data_values_key_id ON t_data_values(key_id)")
 
 
 def plexos_to_sqlite(
@@ -476,15 +562,15 @@ class PLEXOS2SQLite:
         *,
         force: bool = False,
         model_name: str | None = None,
+        materialize_on_enter: bool = True,
     ) -> None:
         self.input_path = _resolve_input_zip_path(input_path)
         self.output_path = (
-            Path(output_path)
-            if output_path is not None
-            else self.input_path.with_suffix(".sqlite")
+            Path(output_path) if output_path is not None else self.input_path.with_suffix(".sqlite")
         )
         self.force = force
         self.model_name = model_name
+        self.materialize_on_enter = materialize_on_enter
         self.connection: sqlite3.Connection | None = None
 
     def convert(self) -> str:
@@ -509,12 +595,42 @@ class PLEXOS2SQLite:
         if not self.output_path.exists():
             self.convert()
         self.connection = sqlite3.connect(str(self.output_path))
-        _materialize_solution_tables(self.connection)
+        if self.materialize_on_enter:
+            _materialize_solution_tables(self.connection)
+        else:
+            _attach_solution_schemas(self.connection)
         return self
+
+    def materialize_table(self, table: str, schema: str = "data") -> bool:
+        """Materialize one derived table into the attached data/report schema.
+
+        Returns True when the table was materialized, otherwise False.
+        """
+        if self.connection is None:
+            raise RuntimeError("No active connection. Use this method inside a 'with client as db' block.")
+
+        if schema not in {"data", "report"}:
+            raise ValueError("schema must be 'data' or 'report'")
+
+        return _materialize_single_solution_table(self.connection, schema, table)
+
+    def list_tables(self, schema: str = "data") -> list[str]:
+        """Return names of all available derived tables for a given schema.
+
+        Tables are derived from the solution metadata; they do not need to be
+        materialized first.  Use schema='data' for interval/period results and
+        schema='report' for summary results.
+        """
+        if self.connection is None:
+            raise RuntimeError("No active connection. Use this method inside a 'with client as db' block.")
+
+        if schema not in {"data", "report"}:
+            raise ValueError("schema must be 'data' or 'report'")
+
+        groups = _build_derived_table_map(self.connection)
+        return sorted(name for (s, name) in groups if s == schema)
 
     def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
         if self.connection is not None:
             self.connection.close()
             self.connection = None
-
-
