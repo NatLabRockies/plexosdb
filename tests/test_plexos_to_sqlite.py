@@ -1,21 +1,29 @@
 import struct
 import sqlite3
+from io import BytesIO
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 
 import pytest
 
 from plexosdb import PLEXOS2SQLite, plexos_to_sqlite
+import plexosdb.solution_reader as sr
 from plexosdb.solution_reader import (
+    _build_phase_sets,
+    _build_property_map,
     _build_derived_table_map,
     _build_key_period_map,
+    _decode_period_rows,
     _coerce_value,
     _decode_bin_values,
+    _group_key_rows_by_period,
+    _period_type_name,
     _phase_name,
     _read_all_bin_entries,
     _resolve_input_zip_path,
     _sanitize_name,
     _select_xml_entry,
+    _skip_bytes,
 )
 
 
@@ -141,8 +149,6 @@ def _build_derived_solution_zip(path: Path) -> None:
         zf.writestr("t_data_4.BIN", struct.pack("<2d", 30.0, 40.0))
 
 
-
-
 def test_plexos_to_sqlite_imports_xml_and_bin(tmp_path):
     zip_path = tmp_path / "sample_solution.zip"
     _build_test_solution_zip(zip_path)
@@ -228,18 +234,14 @@ def test_plexos2sqlite_materializes_data_and_report_objects(tmp_path):
         con = db.connection
         assert con is not None
 
-        data_rows = con.execute(
-            'SELECT COUNT(*) FROM data."ST__Interval__Batteries__Generation"'
-        ).fetchone()
+        data_rows = con.execute('SELECT COUNT(*) FROM data."ST__Interval__Batteries__Generation"').fetchone()
         assert data_rows is not None
         assert data_rows[0] == 2
 
         # Rich schema: name/sample_name/band_id/datetime/value should be present
         col_names = [
             r[1]
-            for r in con.execute(
-                'PRAGMA data.table_info("ST__Interval__Batteries__Generation")'
-            ).fetchall()
+            for r in con.execute('PRAGMA data.table_info("ST__Interval__Batteries__Generation")').fetchall()
         ]
         assert "name" in col_names
         assert "sample_name" in col_names
@@ -249,9 +251,9 @@ def test_plexos2sqlite_materializes_data_and_report_objects(tmp_path):
 
         # Data values should be correct
         sample = con.execute(
-            'SELECT name, sample_name, band_id, value'
+            "SELECT name, sample_name, band_id, value"
             ' FROM data."ST__Interval__Batteries__Generation"'
-            ' ORDER BY block_id'
+            " ORDER BY block_id"
         ).fetchall()
         assert sample[0][0] == "Battery1"
         assert sample[0][1] == "Mean"
@@ -342,9 +344,7 @@ def test_create_and_insert_rows_empty_noop():
         from plexosdb.solution_reader import _create_and_insert_rows
 
         _create_and_insert_rows(con, "t_empty", [])
-        table = con.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='t_empty'"
-        ).fetchone()
+        table = con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='t_empty'").fetchone()
         assert table is None
     finally:
         con.close()
@@ -431,11 +431,56 @@ def test_build_key_period_map_uses_key_index_and_keeps_first_value():
         con.close()
 
 
+def test_build_key_period_map_prefers_key_index_over_t_key_when_both_exist():
+    con = sqlite3.connect(":memory:")
+    try:
+        con.execute("CREATE TABLE t_key (key_id TEXT, period_type_id TEXT)")
+        con.execute("CREATE TABLE t_key_index (key_id TEXT, period_type_id TEXT)")
+        con.execute("INSERT INTO t_key(key_id, period_type_id) VALUES (?, ?)", ("10", "1"))
+        con.execute("INSERT INTO t_key_index(key_id, period_type_id) VALUES (?, ?)", ("10", "4"))
+
+        mapping = _build_key_period_map(
+            con,
+            has_key_period=True,
+            key_index_cols=["key_id", "period_type_id"],
+        )
+
+        assert mapping == {10: 4}
+    finally:
+        con.close()
+
+
 def test_build_derived_table_map_returns_empty_when_required_tables_missing():
     con = sqlite3.connect(":memory:")
     try:
         con.execute("CREATE TABLE t_key (key_id TEXT)")
         assert _build_derived_table_map(con) == {}
+    finally:
+        con.close()
+
+
+def test_build_derived_table_map_does_not_require_t_data_values():
+    con = sqlite3.connect(":memory:")
+    try:
+        con.execute(
+            "CREATE TABLE t_key "
+            "(key_id TEXT, phase_id TEXT, is_summary TEXT, membership_id TEXT, property_id TEXT)"
+        )
+        con.execute("CREATE TABLE t_key_index (key_id TEXT, period_type_id TEXT, length TEXT, position TEXT)")
+        con.execute("CREATE TABLE t_property (property_id TEXT, name TEXT, summary_name TEXT)")
+        con.execute("CREATE TABLE t_membership (membership_id TEXT, collection_id TEXT)")
+        con.execute("CREATE TABLE t_collection (collection_id TEXT, name TEXT)")
+        con.execute("CREATE TABLE t_phase_4 (phase_id TEXT)")
+
+        con.execute("INSERT INTO t_key VALUES ('1','4','0','10','100')")
+        con.execute("INSERT INTO t_key_index VALUES ('1','4','1','0')")
+        con.execute("INSERT INTO t_property VALUES ('100','Generation','Generation Summary')")
+        con.execute("INSERT INTO t_membership VALUES ('10','20')")
+        con.execute("INSERT INTO t_collection VALUES ('20','Batteries')")
+        con.execute("INSERT INTO t_phase_4 VALUES ('4')")
+
+        groups = _build_derived_table_map(con)
+        assert ("data", "ST__Year__Batteries__Generation") in groups
     finally:
         con.close()
 
@@ -504,9 +549,7 @@ def test_plexos2sqlite_lazy_materialization_for_single_table(tmp_path):
         created = db.materialize_table("ST__Interval__Batteries__Generation", schema="data")
         assert created is True
 
-        count = con.execute(
-            'SELECT COUNT(*) FROM data."ST__Interval__Batteries__Generation"'
-        ).fetchone()
+        count = con.execute('SELECT COUNT(*) FROM data."ST__Interval__Batteries__Generation"').fetchone()
         assert count is not None
         assert count[0] == 2
 
@@ -524,3 +567,174 @@ def test_plexos2sqlite_materialize_table_invalid_schema_and_missing_table(tmp_pa
 
         created = db.materialize_table("DOES_NOT_EXIST", schema="data")
         assert created is False
+
+
+def test_select_xml_entry_falls_back_to_first_xml_when_no_match(tmp_path):
+    zip_path = tmp_path / "model.zip"
+    entries = ["zzz.xml", "aaa.xml", "readme.txt"]
+    assert _select_xml_entry(zip_path, entries, model_name="nomatch") == "zzz.xml"
+
+
+def test_resolve_input_zip_path_directory_with_single_zip(tmp_path):
+    single = tmp_path / "single"
+    single.mkdir()
+    solution_zip = single / "only.zip"
+    _build_test_solution_zip(solution_zip)
+    assert _resolve_input_zip_path(single) == solution_zip
+
+
+def test_period_type_name_none_and_unknown():
+    assert _period_type_name(None) == "Period"
+    assert _period_type_name(99) == "Period99"
+
+
+def test_build_key_period_map_falls_back_to_t_key_when_key_index_missing_column():
+    con = sqlite3.connect(":memory:")
+    try:
+        con.execute("CREATE TABLE t_key (key_id TEXT, period_type_id TEXT)")
+        con.execute("INSERT INTO t_key(key_id, period_type_id) VALUES ('5', '7')")
+        mapping = _build_key_period_map(
+            con,
+            has_key_period=True,
+            key_index_cols=["key_id"],
+        )
+        assert mapping == {5: 7}
+    finally:
+        con.close()
+
+
+def test_build_property_map_without_summary_name_column():
+    con = sqlite3.connect(":memory:")
+    try:
+        con.execute("CREATE TABLE t_property (property_id TEXT, name TEXT)")
+        con.execute("INSERT INTO t_property(property_id, name) VALUES ('100', 'Generation')")
+        mapping = _build_property_map(con, has_summary_name=False)
+        assert mapping == {100: ("Generation", "")}
+    finally:
+        con.close()
+
+
+def test_build_phase_sets_skips_missing_id_col_and_invalid_values():
+    con = sqlite3.connect(":memory:")
+    try:
+        con.execute("CREATE TABLE t_phase_1 (foo TEXT)")
+        con.execute("CREATE TABLE t_phase_2 (phase_id TEXT)")
+        con.execute("CREATE TABLE t_phase_3 (phase_id TEXT)")
+        con.execute("INSERT INTO t_phase_2(phase_id) VALUES (NULL)")
+        con.execute("INSERT INTO t_phase_3(phase_id) VALUES ('bad')")
+
+        table_names = {"t_phase_1", "t_phase_2", "t_phase_3"}
+        phase_ids = _build_phase_sets(con, table_names)
+
+        assert phase_ids["LT"] == set()
+        assert phase_ids["PASA"] == set()
+        assert phase_ids["MT"] == set()
+        assert phase_ids["ST"] == set()
+    finally:
+        con.close()
+
+
+def test_materialize_solution_tables_uses_fallback_when_meta_tables_missing(tmp_path):
+    zip_path = tmp_path / "sample_solution.zip"
+    _build_derived_solution_zip(zip_path)
+
+    con = plexos_to_sqlite(zip_path)
+    try:
+        con.execute("DROP TABLE IF EXISTS t_sample")
+
+        sr._materialize_solution_tables(con)
+        rows = con.execute(
+            'SELECT key_id, period_type_id, block_id, value FROM data."ST__Interval__Batteries__Generation"'
+        ).fetchall()
+        assert len(rows) == 2
+    finally:
+        con.close()
+
+
+def test_materialize_solution_tables_skips_empty_group(monkeypatch):
+    con = sqlite3.connect(":memory:")
+    try:
+        con.execute("CREATE TABLE t_data_values (key_id INTEGER)")
+        monkeypatch.setattr(sr, "_build_derived_table_map", lambda _con: {("data", "x"): set()})
+        sr._materialize_solution_tables(con)
+    finally:
+        con.close()
+
+
+def test_bin_entry_name_map_skips_invalid_suffix(tmp_path):
+    zip_path = tmp_path / "mixed.zip"
+    with ZipFile(zip_path, "w", compression=ZIP_DEFLATED) as zf:
+        zf.writestr("t_data_x.BIN", b"bad")
+        zf.writestr("t_data_6.BIN", b"ok")
+
+    with ZipFile(zip_path, "r") as zf:
+        mapping = sr._bin_entry_name_map(zf)
+    assert mapping == {6: "t_data_6.BIN"}
+
+
+def test_skip_bytes_success_and_decode_period_rows_short_chunk(tmp_path):
+    assert _skip_bytes(BytesIO(struct.pack("<2d", 1.0, 2.0)), 8) is True
+
+    zip_path = tmp_path / "short.bin.zip"
+    with ZipFile(zip_path, "w", compression=ZIP_DEFLATED) as zf:
+        zf.writestr("t_data_0.BIN", b"1234")
+
+    with ZipFile(zip_path, "r") as zf:
+        rows = _decode_period_rows(zf, "t_data_0.BIN", 0, [(1, 1, 0, 0)])
+    assert rows == []
+
+
+def test_group_key_rows_by_period_filters_invalid_and_non_positive_lengths():
+    grouped = _group_key_rows_by_period(
+        [
+            ("1", "0", "0", "0", "0"),
+            ("2", "x", "1", "0", "0"),
+            ("3", "0", "2", "8", "1"),
+        ],
+        {0: "t_data_0.BIN"},
+    )
+    assert grouped == {0: [(3, 2, 8, 1)]}
+
+
+def test_decode_bin_values_returns_early_when_key_index_empty_and_when_no_bin(tmp_path):
+    zip_path = tmp_path / "empty.zip"
+    with ZipFile(zip_path, "w", compression=ZIP_DEFLATED) as zf:
+        zf.writestr("sample.xml", "<MasterDataSet></MasterDataSet>")
+
+    con = sqlite3.connect(":memory:")
+    try:
+        con.execute(
+            "CREATE TABLE t_key_index "
+            "(key_id TEXT, period_type_id TEXT, length TEXT, position TEXT, period_offset TEXT)"
+        )
+        with ZipFile(zip_path, "r") as zf:
+            _decode_bin_values(con, zf)
+
+        table = con.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='t_data_values'"
+        ).fetchone()
+        assert table is None
+    finally:
+        con.close()
+
+
+def test_client_runtime_guards_and_list_tables_validation(tmp_path):
+    zip_path = tmp_path / "sample_solution.zip"
+    _build_derived_solution_zip(zip_path)
+    client = PLEXOS2SQLite(zip_path, force=True, materialize_on_enter=False)
+
+    with pytest.raises(RuntimeError):
+        client._ensure_data_values_decoded()
+
+    with pytest.raises(RuntimeError):
+        client.materialize_table("ST__Interval__Batteries__Generation")
+
+    with pytest.raises(RuntimeError):
+        client.list_tables()
+
+    _ = client.convert()
+    with client as db:
+        with pytest.raises(ValueError):
+            db.list_tables(schema="invalid")
+
+        assert "ST__Interval__Batteries__Generation" in db.list_tables(schema="data")
