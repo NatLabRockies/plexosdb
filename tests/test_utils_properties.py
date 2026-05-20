@@ -528,7 +528,7 @@ def test_insert_property_values_builds_data_id_map(db_with_topology: PlexosDB) -
         # Verify data_id_map structure
         assert isinstance(data_id_map, dict)
         for key, value in data_id_map.items():
-            assert len(key) == 3  # (membership_id, property_id, value)
+            assert len(key) == 4  # (membership_id, property_id, value, row_index)
             assert len(value) == 2  # (data_id, obj_name)
 
 
@@ -1010,6 +1010,271 @@ def test_persist_metadata_skips_missing_data_id(db_with_topology: PlexosDB) -> N
     from plexosdb.utils import _persist_metadata_for_data
 
     db = db_with_topology
-    metadata_map = {(999, 1, 99.0): {"band": 2, "date_from": None, "date_to": None}}
+    metadata_map = {(999, 1, 99.0, 0): {"band": 2, "date_from": None, "date_to": None}}
 
     _persist_metadata_for_data(db, metadata_map=metadata_map, data_id_map={})
+
+
+def test_add_properties_from_records_duplicate_value_rows_preserve_metadata(
+    db_instance_with_schema: PlexosDB,
+) -> None:
+    """Duplicate rows with same value should keep independent band/date metadata."""
+    from plexosdb import ClassEnum, CollectionEnum
+
+    db = db_instance_with_schema
+    db.add_object(ClassEnum.Generator, "GEN1")
+
+    records = [
+        {
+            "name": "GEN1",
+            "property": "Max Capacity",
+            "value": 0.0,
+            "band": 1,
+            "date_from": datetime(2027, 7, 1),
+            "date_to": datetime(2028, 6, 30),
+        },
+        {
+            "name": "GEN1",
+            "property": "Max Capacity",
+            "value": 0.0,
+            "band": 2,
+            "date_from": datetime(2028, 7, 1),
+            "date_to": datetime(2029, 6, 30),
+        },
+    ]
+
+    db.add_properties_from_records(
+        records,
+        object_class=ClassEnum.Generator,
+        parent_class=ClassEnum.System,
+        collection=CollectionEnum.Generators,
+        scenario=None,
+    )
+
+    rows = db.query(
+        """
+        SELECT d.data_id, b.band_id, df.date, dt.date
+        FROM t_data d
+        LEFT JOIN t_band b ON b.data_id = d.data_id
+        LEFT JOIN t_date_from df ON df.data_id = d.data_id
+        LEFT JOIN t_date_to dt ON dt.data_id = d.data_id
+        JOIN t_membership m ON d.membership_id = m.membership_id
+        JOIN t_object o ON m.child_object_id = o.object_id
+        JOIN t_property p ON d.property_id = p.property_id
+        WHERE o.name = ? AND p.name = ?
+        ORDER BY d.data_id
+        """,
+        ("GEN1", "Max Capacity"),
+    )
+
+    assert len(rows) == 2
+    assert {row[1] for row in rows} == {1, 2}
+    assert {row[2] for row in rows} == {"2027-07-01T00:00:00", "2028-07-01T00:00:00"}
+    assert {row[3] for row in rows} == {"2028-06-30T00:00:00", "2029-06-30T00:00:00"}
+
+
+def test_add_properties_from_records_three_duplicate_value_rows_mixed_metadata(
+    db_instance_with_schema: PlexosDB,
+) -> None:
+    """Three duplicate-value rows should preserve distinct metadata for each row."""
+    from plexosdb import ClassEnum, CollectionEnum
+
+    db = db_instance_with_schema
+    db.add_object(ClassEnum.Generator, "GEN_DUP")
+
+    records = [
+        {
+            "name": "GEN_DUP",
+            "property": "Max Capacity",
+            "value": 0.0,
+            "band": 1,
+            "date_from": datetime(2027, 1, 1),
+            "date_to": datetime(2027, 12, 31),
+        },
+        {
+            "name": "GEN_DUP",
+            "property": "Max Capacity",
+            "value": 0.0,
+            "band": 2,
+            "date_from": datetime(2028, 1, 1),
+            "date_to": datetime(2028, 12, 31),
+        },
+        {
+            "name": "GEN_DUP",
+            "property": "Max Capacity",
+            "value": 0.0,
+            "band": 3,
+            "date_from": datetime(2029, 1, 1),
+            "date_to": datetime(2029, 12, 31),
+        },
+    ]
+
+    db.add_properties_from_records(
+        records,
+        object_class=ClassEnum.Generator,
+        parent_class=ClassEnum.System,
+        collection=CollectionEnum.Generators,
+        scenario=None,
+    )
+
+    rows = db.query(
+        """
+        SELECT d.data_id, b.band_id, df.date, dt.date
+        FROM t_data d
+        LEFT JOIN t_band b ON b.data_id = d.data_id
+        LEFT JOIN t_date_from df ON df.data_id = d.data_id
+        LEFT JOIN t_date_to dt ON dt.data_id = d.data_id
+        JOIN t_membership m ON d.membership_id = m.membership_id
+        JOIN t_object o ON m.child_object_id = o.object_id
+        JOIN t_property p ON d.property_id = p.property_id
+        WHERE o.name = ? AND p.name = ?
+        ORDER BY d.data_id
+        """,
+        ("GEN_DUP", "Max Capacity"),
+    )
+
+    assert len(rows) == 3
+    assert {row[1] for row in rows} == {1, 2, 3}
+    assert {row[2] for row in rows} == {
+        "2027-01-01T00:00:00",
+        "2028-01-01T00:00:00",
+        "2029-01-01T00:00:00",
+    }
+    assert {row[3] for row in rows} == {
+        "2027-12-31T00:00:00",
+        "2028-12-31T00:00:00",
+        "2029-12-31T00:00:00",
+    }
+
+
+def test_add_properties_from_records_duplicate_value_rows_preserve_scenario_tags_and_text(
+    db_instance_with_schema: PlexosDB,
+) -> None:
+    """Duplicate-value rows should each receive scenario tags and property-level text."""
+    from plexosdb import ClassEnum, CollectionEnum
+
+    db = db_instance_with_schema
+    db.add_object(ClassEnum.Generator, "GEN_TXT")
+
+    records = [
+        {
+            "name": "GEN_TXT",
+            "properties": {
+                "Max Capacity": {
+                    "value": 0.0,
+                    "band": 1,
+                    "date_from": datetime(2027, 7, 1),
+                    "date_to": datetime(2028, 6, 30),
+                    "datafile_text": "row1.csv",
+                }
+            },
+        },
+        {
+            "name": "GEN_TXT",
+            "properties": {
+                "Max Capacity": {
+                    "value": 0.0,
+                    "band": 2,
+                    "date_from": datetime(2028, 7, 1),
+                    "date_to": datetime(2029, 6, 30),
+                    "datafile_text": "row2.csv",
+                }
+            },
+        },
+    ]
+
+    db.add_properties_from_records(
+        records,
+        object_class=ClassEnum.Generator,
+        parent_class=ClassEnum.System,
+        collection=CollectionEnum.Generators,
+        scenario="ScenarioDup",
+    )
+
+    scenario_id = db.get_scenario_id("ScenarioDup")
+    datafile_class_id = db.get_class_id(ClassEnum.DataFile)
+
+    rows = db.query(
+        """
+        SELECT
+            d.data_id,
+            b.band_id,
+            MAX(CASE WHEN tg.object_id = ? THEN 1 ELSE 0 END) AS has_scenario_tag,
+            MAX(CASE WHEN txt.class_id = ? THEN txt.value END) AS datafile_text
+        FROM t_data d
+        JOIN t_membership m ON d.membership_id = m.membership_id
+        JOIN t_object o ON m.child_object_id = o.object_id
+        JOIN t_property p ON d.property_id = p.property_id
+        LEFT JOIN t_band b ON b.data_id = d.data_id
+        LEFT JOIN t_tag tg ON tg.data_id = d.data_id
+        LEFT JOIN t_text txt ON txt.data_id = d.data_id
+        WHERE o.name = ? AND p.name = ?
+        GROUP BY d.data_id, b.band_id
+        ORDER BY d.data_id
+        """,
+        (scenario_id, datafile_class_id, "GEN_TXT", "Max Capacity"),
+    )
+
+    assert len(rows) == 2
+    assert {row[1] for row in rows} == {1, 2}
+    assert {row[2] for row in rows} == {1}
+    assert {row[3] for row in rows} == {"row1.csv", "row2.csv"}
+
+
+def test_add_properties_from_records_duplicate_rows_after_skipped_row_preserve_links(
+    db_instance_with_schema: PlexosDB,
+) -> None:
+    """Skipped rows before duplicate valid rows should not break metadata alignment."""
+    from plexosdb import ClassEnum, CollectionEnum
+
+    db = db_instance_with_schema
+    db.add_object(ClassEnum.Generator, "GEN_MIX")
+
+    records = [
+        {
+            "name": "MISSING_OBJECT",
+            "property": "Max Capacity",
+            "value": 0.0,
+            "band": 9,
+            "datafile_text": "skip.csv",
+        },
+        {
+            "name": "GEN_MIX",
+            "property": "Max Capacity",
+            "value": 0.0,
+            "band": 1,
+            "datafile_text": "row1.csv",
+        },
+        {
+            "name": "GEN_MIX",
+            "property": "Max Capacity",
+            "value": 0.0,
+            "band": 2,
+            "datafile_text": "row2.csv",
+        },
+    ]
+
+    db.add_properties_from_records(
+        records,
+        object_class=ClassEnum.Generator,
+        parent_class=ClassEnum.System,
+        collection=CollectionEnum.Generators,
+        scenario="ScenarioMix",
+    )
+
+    rows = db.query(
+        """
+        SELECT d.data_id, b.band_id
+        FROM t_data d
+        LEFT JOIN t_band b ON b.data_id = d.data_id
+        JOIN t_membership m ON d.membership_id = m.membership_id
+        JOIN t_object o ON m.child_object_id = o.object_id
+        JOIN t_property p ON d.property_id = p.property_id
+        WHERE o.name = ? AND p.name = ?
+        ORDER BY d.data_id
+        """,
+        ("GEN_MIX", "Max Capacity"),
+    )
+
+    assert len(rows) == 2
+    assert {row[1] for row in rows} == {1, 2}
