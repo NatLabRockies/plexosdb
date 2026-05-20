@@ -1531,16 +1531,16 @@ class PlexosDB:
             """)
             # Copy date_from
             self._db.execute(query="""
-                INSERT INTO t_date_from (data_id, date_from, state)
-                SELECT tdm.new_id, df.date_from, df.state
+                INSERT INTO t_date_from (data_id, date, state)
+                SELECT tdm.new_id, df.date, df.state
                 FROM t_date_from df
                 JOIN temp_data_mapping tdm ON df.data_id = tdm.old_id
             """)
 
             # Copy date_to
             self._db.execute(query="""
-                INSERT INTO t_date_to (data_id, date_to, state)
-                SELECT tdm.new_id, dt.date_to, dt.state
+                INSERT INTO t_date_to (data_id, date, state)
+                SELECT tdm.new_id, dt.date, dt.state
                 FROM t_date_to dt
                 JOIN temp_data_mapping tdm ON dt.data_id = tdm.old_id
             """)
