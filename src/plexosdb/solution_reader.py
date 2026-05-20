@@ -238,10 +238,13 @@ def _build_key_period_map(
     key_index_cols: list[str],
 ) -> dict[int, int | None]:
     key_period: dict[int, int | None] = {}
-    if has_key_period:
-        sql = "SELECT key_id, period_type_id FROM t_key"
-    elif "period_type_id" in key_index_cols:
+    # Prefer t_key_index period_type_id. In many solution schemas this is the
+    # authoritative period series used for value decoding, while t_key
+    # period_type_id may be a coarse flag (e.g., 0/1).
+    if "period_type_id" in key_index_cols:
         sql = "SELECT key_id, period_type_id FROM t_key_index"
+    elif has_key_period:
+        sql = "SELECT key_id, period_type_id FROM t_key"
     else:
         return key_period
 
@@ -291,7 +294,7 @@ def _build_phase_sets(con: sqlite3.Connection, table_names: set[str]) -> dict[st
 
 def _build_derived_table_map(con: sqlite3.Connection) -> dict[tuple[str, str], set[int]]:
     table_names = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
-    required = {"t_key", "t_key_index", "t_property", "t_membership", "t_collection", "t_data_values"}
+    required = {"t_key", "t_key_index", "t_property", "t_membership", "t_collection"}
     if not required.issubset(table_names):
         return {}
 
@@ -440,6 +443,98 @@ def _read_all_bin_entries(zf: ZipFile) -> dict[int, bytes]:
     return period_bytes
 
 
+def _bin_entry_name_map(zf: ZipFile) -> dict[int, str]:
+    """Map period_type_id -> ZIP entry name for t_data_<id>.BIN files."""
+    names: dict[int, str] = {}
+    for name in zf.namelist():
+        lower_name = name.lower()
+        if not lower_name.startswith("t_data_") or not lower_name.endswith(".bin"):
+            continue
+        suffix = lower_name[len("t_data_") : -len(".bin")]
+        try:
+            period_type_id = int(suffix)
+        except ValueError:
+            continue
+        names[period_type_id] = name
+    return names
+
+
+def _skip_bytes(stream: Any, nbytes: int) -> bool:
+    """Advance a stream by nbytes, returning False if EOF is reached early."""
+    remaining = nbytes
+    chunk_size = 1024 * 1024
+    while remaining > 0:
+        chunk = stream.read(min(chunk_size, remaining))
+        if not chunk:
+            return False
+        remaining -= len(chunk)
+    return True
+
+
+def _group_key_rows_by_period(
+    key_rows: list[tuple[Any, Any, Any, Any, Any]],
+    period_entries: dict[int, str],
+) -> dict[int, list[tuple[int, int, int, int]]]:
+    rows_by_period: dict[int, list[tuple[int, int, int, int]]] = defaultdict(list)
+    for key_id, period_type_id, length, position, period_offset in key_rows:
+        try:
+            period_type = int(period_type_id)
+            num_values = int(length)
+            byte_pos = int(position)
+            offset = int(period_offset)
+            key_id_int = int(key_id)
+        except (TypeError, ValueError):
+            continue
+
+        if period_type not in period_entries or num_values <= 0:
+            continue
+
+        rows_by_period[period_type].append((key_id_int, num_values, byte_pos, offset))
+
+    return rows_by_period
+
+
+def _decode_period_rows(
+    zf: ZipFile,
+    entry_name: str,
+    period_type: int,
+    rows: list[tuple[int, int, int, int]],
+) -> list[tuple[int, int, int, float]]:
+    out_rows: list[tuple[int, int, int, float]] = []
+
+    # Read keys in byte-order to minimize stream movement and memory overhead.
+    sorted_rows = sorted(rows, key=lambda x: x[2])
+    with zf.open(entry_name, "r") as stream:
+        current_pos = 0
+        for key_id, num_values, byte_pos, offset in sorted_rows:
+            if byte_pos < current_pos:
+                # Defensive fallback for unexpected non-monotonic positions.
+                try:
+                    stream.seek(byte_pos)
+                    current_pos = byte_pos
+                except Exception:
+                    continue
+
+            if byte_pos > current_pos:
+                ok = _skip_bytes(stream, byte_pos - current_pos)
+                if not ok:
+                    continue
+                current_pos = byte_pos
+
+            byte_len = num_values * 8
+            chunk = stream.read(byte_len)
+            if len(chunk) != byte_len:
+                continue
+            current_pos += byte_len
+
+            values = struct.unpack(f"<{num_values}d", chunk)
+            for idx, value in enumerate(values):
+                block_id = offset + idx + 1
+                out_rows.append((key_id, period_type, block_id, float(value)))
+
+    return out_rows
+
+
 def _decode_bin_values(con: sqlite3.Connection, zf: ZipFile) -> None:
     table_names = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     if "t_key_index" not in table_names:
@@ -451,8 +546,8 @@ def _decode_bin_values(con: sqlite3.Connection, zf: ZipFile) -> None:
     if not key_rows:
         return
 
-    period_data = _read_all_bin_entries(zf)
-    if not period_data:
+    period_entries = _bin_entry_name_map(zf)
+    if not period_entries:
         return
 
     con.execute(
@@ -466,35 +561,29 @@ def _decode_bin_values(con: sqlite3.Connection, zf: ZipFile) -> None:
         """
     )
 
-    insert_rows: list[tuple[int, int, int, float]] = []
-    for key_id, period_type_id, length, position, period_offset in key_rows:
-        try:
-            period_type = int(period_type_id)
-            num_values = int(length)
-            byte_pos = int(position)
-            offset = int(period_offset)
-        except (TypeError, ValueError):
+    rows_by_period = _group_key_rows_by_period(key_rows, period_entries)
+
+    if not rows_by_period:
+        return
+
+    insert_sql = "INSERT INTO t_data_values(key_id, period_type_id, block_id, value) VALUES (?, ?, ?, ?)"
+    batch: list[tuple[int, int, int, float]] = []
+    batch_size = 100_000
+
+    for period_type, rows in rows_by_period.items():
+        entry_name = period_entries.get(period_type)
+        if entry_name is None:
             continue
 
-        data = period_data.get(period_type)
-        if data is None or num_values <= 0:
-            continue
+        period_batch = _decode_period_rows(zf, entry_name, period_type, rows)
+        for row in period_batch:
+            batch.append(row)
+            if len(batch) >= batch_size:
+                con.executemany(insert_sql, batch)
+                batch.clear()
 
-        byte_len = num_values * 8
-        chunk = data[byte_pos : byte_pos + byte_len]
-        if len(chunk) != byte_len:
-            continue
-
-        values = struct.unpack(f"<{num_values}d", chunk)
-        for idx, value in enumerate(values):
-            block_id = offset + idx + 1
-            insert_rows.append((int(key_id), period_type, block_id, float(value)))
-
-    if insert_rows:
-        con.executemany(
-            "INSERT INTO t_data_values(key_id, period_type_id, block_id, value) VALUES (?, ?, ?, ?)",
-            insert_rows,
-        )
+    if batch:
+        con.executemany(insert_sql, batch)
 
 
 def plexos_to_sqlite(
@@ -502,6 +591,7 @@ def plexos_to_sqlite(
     sqlite_path: str | Path | None = None,
     *,
     model_name: str | None = None,
+    decode_bin_values: bool = True,
 ) -> sqlite3.Connection:
     """Import a PLEXOS solution ZIP into SQLite using pure Python.
 
@@ -513,6 +603,9 @@ def plexos_to_sqlite(
         Optional SQLite output file path. If None, an in-memory database is used.
     model_name
         Optional model-name hint used to pick the XML when multiple XML files exist.
+    decode_bin_values
+        If True, decode BIN value payloads into ``t_data_values`` during import.
+        Set False to only import XML tables and defer BIN decoding.
 
     Returns
     -------
@@ -531,7 +624,8 @@ def plexos_to_sqlite(
         for table, rows in rows_by_table.items():
             _create_and_insert_rows(con, table, rows)
 
-        _decode_bin_values(con, zf)
+        if decode_bin_values:
+            _decode_bin_values(con, zf)
 
     con.execute(
         """
@@ -563,6 +657,7 @@ class PLEXOS2SQLite:
         force: bool = False,
         model_name: str | None = None,
         materialize_on_enter: bool = True,
+        decode_on_convert: bool | None = None,
     ) -> None:
         self.input_path = _resolve_input_zip_path(input_path)
         self.output_path = (
@@ -571,6 +666,7 @@ class PLEXOS2SQLite:
         self.force = force
         self.model_name = model_name
         self.materialize_on_enter = materialize_on_enter
+        self.decode_on_convert = materialize_on_enter if decode_on_convert is None else decode_on_convert
         self.connection: sqlite3.Connection | None = None
 
     def convert(self) -> str:
@@ -587,15 +683,32 @@ class PLEXOS2SQLite:
             self.input_path,
             sqlite_path=self.output_path,
             model_name=self.model_name,
+            decode_bin_values=self.decode_on_convert,
         )
         con.close()
         return str(self.output_path)
+
+    def _ensure_data_values_decoded(self) -> None:
+        """Decode BIN payloads into t_data_values if they are not already present."""
+        if self.connection is None:
+            raise RuntimeError("No active connection. Use this method inside a 'with client as db' block.")
+
+        table = self.connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='t_data_values' LIMIT 1"
+        ).fetchone()
+        if table is not None:
+            return
+
+        with ZipFile(self.input_path, "r") as zf:
+            _decode_bin_values(self.connection, zf)
+        self.connection.commit()
 
     def __enter__(self) -> PLEXOS2SQLite:
         if not self.output_path.exists():
             self.convert()
         self.connection = sqlite3.connect(str(self.output_path))
         if self.materialize_on_enter:
+            self._ensure_data_values_decoded()
             _materialize_solution_tables(self.connection)
         else:
             _attach_solution_schemas(self.connection)
@@ -612,6 +725,7 @@ class PLEXOS2SQLite:
         if schema not in {"data", "report"}:
             raise ValueError("schema must be 'data' or 'report'")
 
+        self._ensure_data_values_decoded()
         return _materialize_single_solution_table(self.connection, schema, table)
 
     def list_tables(self, schema: str = "data") -> list[str]:
