@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+import plexosdb.checks as checks_module
 
 if TYPE_CHECKING:
     from plexosdb import PlexosDB
@@ -17,7 +18,7 @@ def test_get_scenario_id_creates_new_scenario(db_with_topology: PlexosDB) -> Non
     assert isinstance(scenario_id, int)
     assert scenario_id > 0
 
-    scenario_exists = db_with_topology.check_scenario_exists("NewScenario")
+    scenario_exists = checks_module.check_scenario_exists(db_with_topology, "NewScenario")
     assert scenario_exists is True
 
 
@@ -54,4 +55,4 @@ def test_get_scenario_id_different_names(db_with_topology: PlexosDB) -> None:
     assert len(set(ids)) == len(ids)
 
     for name in names:
-        assert db_with_topology.check_scenario_exists(name) is True
+        assert checks_module.check_scenario_exists(db_with_topology, name) is True

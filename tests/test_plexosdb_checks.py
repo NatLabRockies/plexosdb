@@ -7,6 +7,7 @@ database entities like classes, collections, objects, categories, etc.
 from __future__ import annotations
 
 import pytest
+import plexosdb.checks as checks_module
 
 
 @pytest.mark.checks
@@ -24,7 +25,7 @@ def test_check_class_exists_returns_true_for_valid_class(db_base, class_enum: st
     from plexosdb.enums import ClassEnum
 
     class_obj = getattr(ClassEnum, class_enum)
-    assert db_base.check_class_exists(class_obj)
+    assert checks_module.check_class_exists(db_base, class_obj)
 
 
 @pytest.mark.checks
@@ -40,7 +41,7 @@ def test_check_collection_exists_returns_true_without_filters(db_base, collectio
     from plexosdb.enums import CollectionEnum
 
     collection_obj = getattr(CollectionEnum, collection_enum)
-    assert db_base.check_collection_exists(collection_obj)
+    assert checks_module.check_collection_exists(db_base, collection_obj)
 
 
 @pytest.mark.checks
@@ -65,7 +66,9 @@ def test_check_collection_exists_with_parent_child_filters(
     parent_obj = getattr(ClassEnum, parent)
     child_obj = getattr(ClassEnum, child)
 
-    result = db_base.check_collection_exists(collection_obj, parent_class=parent_obj, child_class=child_obj)
+    result = checks_module.check_collection_exists(
+        db_base, collection_obj, parent_class=parent_obj, child_class=child_obj
+    )
     assert result == expected
 
 
@@ -88,7 +91,7 @@ def test_check_collection_exists_raises_not_found_for_invalid_class(
 
     kwargs = {param_name: invalid_value}
     with pytest.raises(NotFoundError):
-        db_base.check_collection_exists(CollectionEnum.Generators, **kwargs)  # type: ignore
+        checks_module.check_collection_exists(db_base, CollectionEnum.Generators, **kwargs)  # type: ignore
 
 
 @pytest.mark.checks
@@ -110,7 +113,7 @@ def test_check_collection_exists_error_contains_helpful_message(
 
     kwargs = {param_name: invalid_value}
     with pytest.raises(NotFoundError) as exc_info:
-        db_base.check_collection_exists(CollectionEnum.Generators, **kwargs)  # type: ignore
+        checks_module.check_collection_exists(db_base, CollectionEnum.Generators, **kwargs)  # type: ignore
 
     error_msg = str(exc_info.value)
     assert "does not exist" in error_msg
@@ -136,7 +139,7 @@ def test_check_object_exists_returns_expected_result(
     from plexosdb.enums import ClassEnum
 
     class_obj = getattr(ClassEnum, class_enum)
-    result = db_base.check_object_exists(class_obj, object_name)
+    result = checks_module.check_object_exists(db_base, class_obj, object_name)
     assert result == should_exist
 
 
@@ -146,7 +149,7 @@ def test_check_object_exists_returns_true_after_adding_object(db_base):
     from plexosdb.enums import ClassEnum
 
     db_base.add_object(ClassEnum.Generator, "TestGenerator")
-    assert db_base.check_object_exists(ClassEnum.Generator, "TestGenerator")
+    assert checks_module.check_object_exists(db_base, ClassEnum.Generator, "TestGenerator")
 
 
 @pytest.mark.checks
@@ -155,7 +158,7 @@ def test_check_object_exists_raises_not_found_for_invalid_class(db_base):
     from plexosdb.exceptions import NotFoundError
 
     with pytest.raises(NotFoundError):
-        db_base.check_object_exists("NonExistentClass", "SomeObject")  # type: ignore
+        checks_module.check_object_exists(db_base, "NonExistentClass", "SomeObject")  # type: ignore
 
 
 @pytest.mark.checks
@@ -184,7 +187,7 @@ def test_check_object_exists_with_category_parameter(
     db.add_object(ClassEnum.Generator, "Gen2", category="Thermal")
     db.add_object(ClassEnum.Generator, "Gen3", category="Hydro")
 
-    result = db.check_object_exists(ClassEnum.Generator, object_name, category=category)
+    result = checks_module.check_object_exists(db, ClassEnum.Generator, object_name, category=category)
     assert result == should_exist
 
 
@@ -212,7 +215,7 @@ def test_check_category_exists_returns_expected_result(
     if setup_required:
         db.add_category(ClassEnum.Generator, category)
 
-    result = db.check_category_exists(ClassEnum.Generator, category)
+    result = checks_module.check_category_exists(db, ClassEnum.Generator, category)
     assert result == expected
 
 
@@ -222,7 +225,7 @@ def test_check_category_exists_raises_not_found_for_invalid_class(db_base):
     from plexosdb.exceptions import NotFoundError
 
     with pytest.raises(NotFoundError):
-        db_base.check_category_exists("NonExistentClass", "-")  # type: ignore
+        checks_module.check_category_exists(db_base, "NonExistentClass", "-")  # type: ignore
 
 
 @pytest.mark.checks
@@ -244,7 +247,7 @@ def test_check_scenario_exists_returns_expected_result(
     if should_exist:
         db_base.add_object(ClassEnum.Scenario, scenario_name)
 
-    result = db_base.check_scenario_exists(scenario_name)
+    result = checks_module.check_scenario_exists(db_base, scenario_name)
     assert result == should_exist
 
 
@@ -258,7 +261,8 @@ def test_check_membership_exists_returns_true_for_valid_membership(db_base):
     db.add_object(ClassEnum.Node, "Node1")
     db.add_membership(ClassEnum.Generator, ClassEnum.Node, "Gen1", "Node1", CollectionEnum.Nodes)
 
-    result = db.check_membership_exists(
+    result = checks_module.check_membership_exists(
+        db,
         "Gen1",
         "Node1",
         parent_class=ClassEnum.Generator,
@@ -290,7 +294,8 @@ def test_check_membership_exists_raises_not_found_for_nonexistent_objects(
     db.add_object(ClassEnum.Node, "Node1")
 
     with pytest.raises(NotFoundError):
-        db.check_membership_exists(
+        checks_module.check_membership_exists(
+            db,
             parent_name,
             child_name,
             parent_class=ClassEnum.Generator,
@@ -329,7 +334,7 @@ def test_check_membership_exists_raises_not_found_for_invalid_parameters(
     base_kwargs[invalid_param] = invalid_value  # type: ignore
 
     with pytest.raises(NotFoundError):
-        db.check_membership_exists("Gen1", "Node1", **base_kwargs)  # type: ignore
+        checks_module.check_membership_exists(db, "Gen1", "Node1", **base_kwargs)  # type: ignore
 
 
 @pytest.mark.checks
@@ -349,7 +354,9 @@ def test_check_property_exists_returns_expected_result(
     """Verify check_property_exists returns True for valid properties and False otherwise."""
     from plexosdb.enums import ClassEnum, CollectionEnum
 
-    result = db_base.check_property_exists(CollectionEnum.Generators, ClassEnum.Generator, property_names)
+    result = checks_module.check_property_exists(
+        db_base, CollectionEnum.Generators, ClassEnum.Generator, property_names
+    )
     assert result == should_exist
 
 
@@ -359,7 +366,8 @@ def test_check_property_exists_raises_not_found_for_invalid_collection(db_base):
     from plexosdb.exceptions import NotFoundError
 
     with pytest.raises(NotFoundError):
-        db_base.check_property_exists(
+        checks_module.check_property_exists(
+            db_base,
             "FakeCollection",  # type: ignore
             "FakeClass",  # type: ignore
             "Max Capacity",
@@ -373,7 +381,8 @@ def test_check_property_exists_raises_not_found_for_invalid_parent_class(db_base
     from plexosdb.exceptions import NotFoundError
 
     with pytest.raises(NotFoundError):
-        db_base.check_property_exists(
+        checks_module.check_property_exists(
+            db_base,
             CollectionEnum.Generators,
             ClassEnum.Generator,
             "Max Capacity",
@@ -388,7 +397,8 @@ def test_check_property_exists_returns_false_for_invalid_properties(
     """Verify check_property_exists returns False for multiple invalid properties."""
     from plexosdb.enums import ClassEnum, CollectionEnum
 
-    result = db_base.check_property_exists(
+    result = checks_module.check_property_exists(
+        db_base,
         CollectionEnum.Generators,
         ClassEnum.Generator,
         ["Invalid Property 1", "Invalid Property 2"],
@@ -401,7 +411,7 @@ def test_check_class_exists_succeeds_in_workflow(db_base):
     """Verify check_class_exists returns True in realistic workflow."""
     from plexosdb.enums import ClassEnum
 
-    assert db_base.check_class_exists(ClassEnum.Generator)
+    assert checks_module.check_class_exists(db_base, ClassEnum.Generator)
 
 
 @pytest.mark.checks
@@ -410,7 +420,7 @@ def test_check_object_exists_succeeds_after_add_in_workflow(db_base):
     from plexosdb.enums import ClassEnum
 
     db_base.add_object(ClassEnum.Generator, "Gen1")
-    assert db_base.check_object_exists(ClassEnum.Generator, "Gen1")
+    assert checks_module.check_object_exists(db_base, ClassEnum.Generator, "Gen1")
 
 
 @pytest.mark.checks
@@ -418,7 +428,8 @@ def test_check_collection_exists_returns_boolean_in_workflow(db_base):
     """Verify check_collection_exists returns boolean value without errors in workflow."""
     from plexosdb.enums import ClassEnum, CollectionEnum
 
-    result = db_base.check_collection_exists(
+    result = checks_module.check_collection_exists(
+        db_base,
         CollectionEnum.Generators,
         parent_class=ClassEnum.System,
         child_class=ClassEnum.Generator,
@@ -433,4 +444,4 @@ def test_check_category_exists_returns_true_for_default_category_in_workflow(
     """Verify check_category_exists returns True for default category in workflow."""
     from plexosdb.enums import ClassEnum
 
-    assert db_base.check_category_exists(ClassEnum.Generator, "-")
+    assert checks_module.check_category_exists(db_base, ClassEnum.Generator, "-")

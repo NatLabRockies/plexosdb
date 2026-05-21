@@ -11,11 +11,15 @@ WITH scenario_cte AS (
         tag.object_id = mem.child_object_id
     INNER JOIN t_object AS obj ON
         mem.child_object_id = obj.object_id
+    INNER JOIN t_class AS child_class ON
+        mem.child_class_id = child_class.class_id
+    INNER JOIN t_collection AS col ON
+        mem.collection_id = col.collection_id
     LEFT JOIN t_category AS cat ON
     	obj.category_id = cat.category_id
     WHERE
-        mem.child_class_id = 78
-        AND mem.collection_id IN (1, 698, 706, 701) -- Collections belong to scenarios
+        child_class.name = 'Scenario'
+        AND col.name IN ('Scenario', 'Scenarios', 'Models', 'Horizon')
 ),
 text_cte AS (
     SELECT
