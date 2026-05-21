@@ -15,6 +15,9 @@ from loguru import logger
 from .enums import ClassEnum
 from .exceptions import NotFoundError
 
+SQLITE_INT64_MIN = -(2**63)
+SQLITE_INT64_MAX = 2**63 - 1
+
 if TYPE_CHECKING:
     from plexosdb import CollectionEnum, PlexosDB
     from plexosdb.db_manager import SQLiteManager
@@ -26,7 +29,7 @@ class PreparedPropertiesResult:
 
     params: list[tuple[int, int, Any]]
     collection_properties: list[tuple[str, int]]
-    metadata_map: dict[tuple[int, int, Any], dict[str, Any]]
+    metadata_map: dict[tuple[int, int, Any, int], dict[str, Any]]
     normalized_records: list[dict[str, Any]]
     deprecated_format_used: bool
 
@@ -58,7 +61,12 @@ def validate_string(value: str) -> Any:
     if value is None:
         return None
     try:
-        return int(value)
+        parsed_int = int(value)
+        if SQLITE_INT64_MIN <= parsed_int <= SQLITE_INT64_MAX:
+            return parsed_int
+        # Keep oversized integers as strings to avoid sqlite3 OverflowError
+        # during executemany bindings.
+        return str(parsed_int)
     except ValueError:
         pass
     try:
@@ -71,10 +79,9 @@ def validate_string(value: str) -> Any:
         return False
     try:
         value = ast.literal_eval(value)
-    except:  # noqa: E722
+    except Exception:
         logger.trace("Could not parse {}", value)
-    finally:
-        return value
+    return value
 
 
 def no_space(a: str, b: str) -> int:
@@ -118,14 +125,14 @@ def get_sql_query(query_name: str) -> str:
     Parameters
     ----------
     query_name : str
-        Name of the query file to load from plexosdb.queries
+        Name of the query file to load from plexosdb.sql
 
     Returns
     -------
     str
         Content of the SQL query file as a string
     """
-    fpath = files("plexosdb.queries").joinpath(query_name)
+    fpath = files("plexosdb.sql").joinpath(query_name)
     return fpath.read_text(encoding="utf-8-sig")
 
 
@@ -483,10 +490,10 @@ def _build_property_rows(
     *,
     name_to_membership: dict[str, int],
     property_id_map: dict[str, int],
-) -> tuple[list[tuple[int, int, Any]], dict[tuple[int, int, Any], dict[str, Any]]]:
+) -> tuple[list[tuple[int, int, Any]], dict[tuple[int, int, Any, int], dict[str, Any]]]:
     """Build parameter tuples and metadata for normalized records."""
     params: list[tuple[int, int, Any]] = []
-    metadata_map: dict[tuple[int, int, Any], dict[str, Any]] = {}
+    metadata_map: dict[tuple[int, int, Any, int], dict[str, Any]] = {}
 
     for record in normalized_records:
         membership_id = name_to_membership.get(record["name"])
@@ -497,9 +504,11 @@ def _build_property_rows(
         if not property_id:
             continue
 
-        param_key = (membership_id, property_id, record["value"])
-        params.append(param_key)
-        metadata_map[param_key] = {
+        insert_index = len(params)
+        param_tuple = (membership_id, property_id, record["value"])
+        row_key = (membership_id, property_id, record["value"], insert_index)
+        params.append(param_tuple)
+        metadata_map[row_key] = {
             "band": record.get("band"),
             "date_from": record.get("date_from"),
             "date_to": record.get("date_to"),
@@ -516,8 +525,8 @@ def insert_property_values(
     db: PlexosDB,
     params: list[tuple[int, int, Any]],
     *,
-    metadata_map: dict[tuple[int, int, Any], dict[str, Any]] | None = None,
-) -> dict[tuple[int, int, Any], tuple[int, str]]:
+    metadata_map: dict[tuple[int, int, Any, int], dict[str, Any]] | None = None,
+) -> dict[tuple[int, int, Any, int], tuple[int, str]]:
     """Insert property data and return mapping of data IDs to object names.
 
     Parameters
@@ -564,9 +573,9 @@ def insert_property_values(
         for mid, name in rows:
             membership_to_name[mid] = name
 
-    data_id_map: dict[tuple[int, int, Any], tuple[int, str]] = {}
+    data_id_map: dict[tuple[int, int, Any, int], tuple[int, str]] = {}
     for i, (membership_id, property_id, value) in enumerate(params):
-        data_id_map[(membership_id, property_id, value)] = (
+        data_id_map[(membership_id, property_id, value, i)] = (
             first_id + i,
             membership_to_name.get(membership_id, ""),
         )
@@ -584,7 +593,7 @@ def apply_scenario_tags(
     *,
     scenario: str,
     chunksize: int,
-    data_id_map: dict[tuple[int, int, Any], tuple[int, str]] | None = None,
+    data_id_map: dict[tuple[int, int, Any, int], tuple[int, str]] | None = None,
 ) -> None:
     """Insert scenario tags for property data.
 
@@ -602,13 +611,20 @@ def apply_scenario_tags(
     if scenario is None:
         return
 
-    if not db.check_scenario_exists(scenario):
-        scenario_id = db.add_scenario(scenario)
-    else:
+    try:
         scenario_id = db.get_scenario_id(scenario)
+    except NotFoundError:
+        scenario_id = db.add_scenario(scenario)
 
     if data_id_map is not None:
-        tag_rows = [(data_id_map[key][0], scenario_id) for key in params if key in data_id_map]
+        tag_rows = [
+            (data_id_map[key][0], scenario_id)
+            for key in (
+                (membership_id, property_id, value, i)
+                for i, (membership_id, property_id, value) in enumerate(params)
+            )
+            if key in data_id_map
+        ]
         for batch in batched(tag_rows, chunksize):
             db._db.executemany(
                 "INSERT INTO t_tag(data_id, object_id) VALUES (?, ?)",
@@ -630,11 +646,11 @@ def insert_property_texts(
     params: list[tuple[int, int, Any]],
     /,
     *,
-    data_id_map: dict[tuple[int, int, Any], tuple[int, str]],
+    data_id_map: dict[tuple[int, int, Any, int], tuple[int, str]],
     records: list[dict[str, Any]],
     field_name: str,
     text_class: ClassEnum,
-    metadata_map: dict[tuple[int, int, Any], dict[str, Any]] | None = None,
+    metadata_map: dict[tuple[int, int, Any, int], dict[str, Any]] | None = None,
 ) -> None:
     """Add text data for properties from specified field.
 
@@ -658,7 +674,12 @@ def insert_property_texts(
     text_map = _build_text_lookup(records, field_name=field_name)
     class_id = db.get_class_id(text_class)
     texts_to_insert = _collect_text_rows(
-        params, data_id_map, metadata_map=metadata_map, text_map=text_map, class_id=class_id
+        params,
+        data_id_map,
+        metadata_map=metadata_map,
+        text_map=text_map,
+        class_id=class_id,
+        field_name=field_name,
     )
 
     if texts_to_insert:
@@ -671,8 +692,8 @@ def insert_property_texts(
 def _persist_metadata_for_data(
     db: PlexosDB,
     *,
-    metadata_map: dict[tuple[int, int, Any], dict[str, Any]],
-    data_id_map: dict[tuple[int, int, Any], tuple[int, str]],
+    metadata_map: dict[tuple[int, int, Any, int], dict[str, Any]],
+    data_id_map: dict[tuple[int, int, Any, int], tuple[int, str]],
 ) -> None:
     """Attach band and date metadata for inserted data rows."""
     bands_to_insert: list[tuple[int, int]] = []
@@ -739,25 +760,30 @@ def _build_text_lookup(
 
 def _collect_text_rows(
     params: list[tuple[int, int, Any]],
-    data_id_map: dict[tuple[int, int, Any], tuple[int, str]],
+    data_id_map: dict[tuple[int, int, Any, int], tuple[int, str]],
     *,
-    metadata_map: dict[tuple[int, int, Any], dict[str, Any]] | None,
+    metadata_map: dict[tuple[int, int, Any, int], dict[str, Any]] | None,
     text_map: dict[tuple[str, str | None], Any],
     class_id: int,
+    field_name: str,
 ) -> list[tuple[int, int, Any]]:
     """Convert params and metadata into t_text insert rows."""
     texts_to_insert: list[tuple[int, int, Any]] = []
 
-    for membership_id, property_id, value in params:
-        data_id, obj_name = data_id_map.get((membership_id, property_id, value), (None, None))
+    for i, (membership_id, property_id, value) in enumerate(params):
+        row_key = (membership_id, property_id, value, i)
+        data_id, obj_name = data_id_map.get(row_key, (None, None))
         if not data_id or not obj_name:
             continue
 
-        property_name = (
-            metadata_map.get((membership_id, property_id, value), {}).get("property_name")
-            if metadata_map
-            else None
-        )
+        # Prefer row-keyed metadata so duplicate-value rows keep distinct text payloads.
+        if metadata_map:
+            row_text = metadata_map.get(row_key, {}).get(field_name)
+            if row_text is not None:
+                texts_to_insert.append((data_id, class_id, row_text))
+                continue
+
+        property_name = metadata_map.get(row_key, {}).get("property_name") if metadata_map else None
         lookup_keys = [(obj_name, property_name), (obj_name, None)]
         for lookup in lookup_keys:
             if lookup in text_map:
@@ -814,6 +840,7 @@ def get_scenario_id(db: PlexosDB, scenario: str) -> int:
     int
         Scenario object ID
     """
-    if not db.check_scenario_exists(scenario):
+    try:
+        return db.get_scenario_id(scenario)
+    except NotFoundError:
         return db.add_scenario(scenario)
-    return db.get_scenario_id(scenario)
