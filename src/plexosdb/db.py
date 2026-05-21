@@ -1645,6 +1645,73 @@ class PlexosDB:
                 (1, "System", system_class_id, 1, str(uuid.uuid4())),
             )
 
+    def _ensure_schema_created(self, schema: str | None) -> tuple[bool, bool]:
+        """Ensure base schema tables exist and return (has_schema, ok)."""
+        existing_tables = set(self._db.tables)
+        has_schema = "t_class" in existing_tables
+
+        if has_schema:
+            logger.debug("Schema already exists. Skipping schema creation script.")
+            return True, True
+
+        schema_sql = schema or PLEXOS_DEFAULT_SCHEMA
+        if not schema:
+            logger.debug("Using default schema")
+
+        creation_status = self._db.executescript(schema_sql)
+        return False, bool(creation_status)
+
+    def _set_config_version(self, version: str) -> None:
+        """Update t_config.Version when the config table is available."""
+        has_config = bool(
+            self._db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='t_config'")
+        )
+        if not has_config:
+            return
+
+        self._db.execute(
+            "UPDATE t_config SET value = ? WHERE element = ?",
+            (version, "Version"),
+        )
+
+    def _import_master_template(self, major_version: int, *, has_schema: bool) -> None:
+        """Import versioned master template after compatibility and safety checks."""
+        existing_version = self._get_plexos_version()
+        if existing_version:
+            if existing_version[0] != major_version:
+                msg = (
+                    f"Database is already initialized with version {existing_version[0]}. "
+                    f"Requested version {major_version}. Create a new PlexosDB instance "
+                    "to initialize a different master template version."
+                )
+                raise ValueError(msg)
+            logger.debug("Master template version {} already loaded. Skipping import.", existing_version[0])
+            return
+
+        if has_schema:
+            class_count = self._db.fetchone("SELECT COUNT(*) FROM t_class")
+            if class_count and class_count[0] > 0:
+                msg = (
+                    "Schema already contains class metadata but no version entry was found in t_config. "
+                    "Cannot safely import a master template into a partially initialized schema. "
+                    "Create a new PlexosDB instance and call create_schema(version=...)."
+                )
+                raise ValueError(msg)
+
+        template_fname = MASTER_TEMPLATE_FILES[major_version]
+        template_resource = files("plexosdb").joinpath("config", template_fname)
+        logger.debug("Loading master template for schema version {}: {}", major_version, template_fname)
+
+        self._db.execute("PRAGMA foreign_keys = OFF")
+        try:
+            with as_file(template_resource) as template_path:
+                self._import_xml_records(template_path)
+        finally:
+            self._db.execute("PRAGMA foreign_keys = ON")
+
+        # Invalidate version cache after template import.
+        self._version = None
+
     def create_schema(
         self,
         schema: str | None = None,
@@ -1715,19 +1782,9 @@ class PlexosDB:
         >>> db.create_schema(schema=custom_schema)
         True
         """
-        existing_tables = set(self._db.tables)
-        has_schema = "t_class" in existing_tables
-
-        if has_schema:
-            logger.debug("Schema already exists. Skipping schema creation script.")
-        else:
-            schema_sql = schema or PLEXOS_DEFAULT_SCHEMA
-            if not schema:
-                logger.debug("Using default schema")
-
-            creation_status = self._db.executescript(schema_sql)
-            if not creation_status:
-                return False
+        has_schema, creation_ok = self._ensure_schema_created(schema)
+        if not creation_ok:
+            return False
 
         if seed_defaults:
             self._seed_default_model_data()
@@ -1738,53 +1795,11 @@ class PlexosDB:
         # If version is a plain string (e.g. "9.2", "11.0"), update t_config.Version only.
         # Integer, tuple, or "v..."-prefixed strings trigger full master template loading.
         if isinstance(version, str) and not version.strip().lower().startswith("v"):
-            has_config = bool(
-                self._db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='t_config'")
-            )
-            if has_config:
-                self._db.execute(
-                    "UPDATE t_config SET value = ? WHERE element = ?",
-                    (version, "Version"),
-                )
+            self._set_config_version(version)
             return True
 
         major_version = self._parse_schema_version(version)
-        existing_version = self._get_plexos_version()
-
-        if existing_version:
-            if existing_version[0] != major_version:
-                msg = (
-                    f"Database is already initialized with version {existing_version[0]}. "
-                    f"Requested version {major_version}. Create a new PlexosDB instance "
-                    "to initialize a different master template version."
-                )
-                raise ValueError(msg)
-            logger.debug("Master template version {} already loaded. Skipping import.", existing_version[0])
-            return True
-
-        if has_schema:
-            class_count = self._db.fetchone("SELECT COUNT(*) FROM t_class")
-            if class_count and class_count[0] > 0:
-                msg = (
-                    "Schema already contains class metadata but no version entry was found in t_config. "
-                    "Cannot safely import a master template into a partially initialized schema. "
-                    "Create a new PlexosDB instance and call create_schema(version=...)."
-                )
-                raise ValueError(msg)
-
-        template_fname = MASTER_TEMPLATE_FILES[major_version]
-        template_resource = files("plexosdb").joinpath("config", template_fname)
-        logger.debug("Loading master template for schema version {}: {}", major_version, template_fname)
-
-        self._db.execute("PRAGMA foreign_keys = OFF")
-        try:
-            with as_file(template_resource) as template_path:
-                self._import_xml_records(template_path)
-        finally:
-            self._db.execute("PRAGMA foreign_keys = ON")
-
-        # Invalidate version cache after template import.
-        self._version = None
+        self._import_master_template(major_version, has_schema=has_schema)
         return True
 
     def delete_attribute(

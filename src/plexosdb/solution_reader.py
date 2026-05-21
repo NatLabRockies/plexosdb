@@ -12,17 +12,20 @@ from zipfile import ZipFile
 
 
 def _quote_ident(identifier: str) -> str:
+    """Return a safely quoted SQLite identifier."""
     escaped = identifier.replace('"', '""')
     return f'"{escaped}"'
 
 
 def _local_name(tag: str) -> str:
+    """Return the local XML tag name without namespace prefix."""
     if "}" in tag:
         return tag.rsplit("}", 1)[1]
     return tag
 
 
 def _coerce_value(value: str | None) -> int | float | str | None:
+    """Coerce XML text values to int, float, or normalized string/None."""
     if value is None:
         return None
     text = value.strip()
@@ -39,6 +42,7 @@ def _coerce_value(value: str | None) -> int | float | str | None:
 
 
 def _select_xml_entry(zip_path: Path, entries: list[str], model_name: str | None = None) -> str:
+    """Select the best XML entry from a solution ZIP file listing."""
     xml_entries = [name for name in entries if name.lower().endswith(".xml")]
     if not xml_entries:
         raise FileNotFoundError("No XML file found in the solution ZIP.")
@@ -58,6 +62,7 @@ def _select_xml_entry(zip_path: Path, entries: list[str], model_name: str | None
 
 
 def _collect_xml_rows(xml_content: str) -> dict[str, list[dict[str, Any]]]:
+    """Parse solution XML content into a table-name to row-dictionaries map."""
     root = ET.fromstring(xml_content)
     rows_by_table: dict[str, list[dict[str, Any]]] = defaultdict(list)
 
@@ -72,6 +77,7 @@ def _collect_xml_rows(xml_content: str) -> dict[str, list[dict[str, Any]]]:
 
 
 def _resolve_input_zip_path(input_path: str | Path) -> Path:
+    """Resolve an input path to a single existing solution ZIP file."""
     path = Path(input_path)
     if path.is_file():
         if path.suffix.lower() != ".zip":
@@ -88,6 +94,7 @@ def _resolve_input_zip_path(input_path: str | Path) -> Path:
 
 
 def _sanitize_name(value: str | None) -> str:
+    """Normalize free-form names to underscore-separated alphanumeric tokens."""
     if not value:
         return "Unknown"
     out = []
@@ -115,6 +122,7 @@ def _table_label_part(value: str | None) -> str:
 
 
 def _period_type_name(period_type_id: int | None) -> str:
+    """Map a period type id to a canonical period label."""
     mapping = {
         0: "Interval",
         1: "Day",
@@ -221,6 +229,7 @@ def _build_fallback_create_sql(
 
 
 def _phase_name(phase_id: int, phase_ids: dict[str, set[int]]) -> str:
+    """Resolve a numeric phase id to LT/PASA/MT/ST with ST fallback."""
     if phase_id in phase_ids["ST"]:
         return "ST"
     if phase_id in phase_ids["MT"]:
@@ -234,14 +243,17 @@ def _phase_name(phase_id: int, phase_ids: dict[str, set[int]]) -> str:
 
 
 def _table_columns(con: sqlite3.Connection, table: str) -> list[str]:
+    """Return column names for a SQLite table."""
     return [r[1] for r in con.execute(f"PRAGMA table_info({table})").fetchall()]
 
 
 def _attached_db_names(con: sqlite3.Connection) -> set[str]:
+    """Return names of databases currently attached to the connection."""
     return {str(r[1]) for r in con.execute("PRAGMA database_list").fetchall()}
 
 
 def _attach_solution_schemas(con: sqlite3.Connection) -> None:
+    """Attach in-memory data and report schemas if they are not present."""
     attached = _attached_db_names(con)
     if "data" not in attached:
         con.execute("ATTACH DATABASE ':memory:' AS data")
@@ -255,6 +267,7 @@ def _build_key_period_map(
     has_key_period: bool,
     key_index_cols: list[str],
 ) -> dict[int, int | None]:
+    """Build key_id to period_type_id mapping from available key tables."""
     key_period: dict[int, int | None] = {}
     # Prefer t_key_index period_type_id. In many solution schemas this is the
     # authoritative period series used for value decoding, while t_key
@@ -275,6 +288,7 @@ def _build_key_period_map(
 
 
 def _build_property_map(con: sqlite3.Connection, *, has_summary_name: bool) -> dict[int, tuple[str, str]]:
+    """Build property_id to (name, summary_name) mapping."""
     if has_summary_name:
         prop_rows = con.execute(
             "SELECT property_id, name, COALESCE(summary_name, '') FROM t_property"
@@ -286,6 +300,7 @@ def _build_property_map(con: sqlite3.Connection, *, has_summary_name: bool) -> d
 
 
 def _build_phase_sets(con: sqlite3.Connection, table_names: set[str]) -> dict[str, set[int]]:
+    """Collect phase ids grouped by phase label from available phase tables."""
     phase_ids = {"LT": set(), "PASA": set(), "MT": set(), "ST": set()}
     phase_table_to_name = {
         "t_phase_1": "LT",
@@ -311,6 +326,7 @@ def _build_phase_sets(con: sqlite3.Connection, table_names: set[str]) -> dict[st
 
 
 def _build_derived_table_map(con: sqlite3.Connection) -> dict[tuple[str, str], set[int]]:
+    """Map derived data-table names to the key ids that populate each table."""
     table_names = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
     required = {"t_key", "t_key_index", "t_property", "t_membership", "t_collection"}
     if not required.issubset(table_names):
@@ -385,6 +401,7 @@ def _build_derived_table_map(con: sqlite3.Connection) -> dict[tuple[str, str], s
 
 
 def _report_interval_length(table_name: str) -> int | None:
+    """Return interval length in hours inferred from a derived table name."""
     parts = table_name.split("__")
     if len(parts) < 2:
         return None
@@ -404,6 +421,7 @@ def _resolve_report_unit(
     *,
     key_ids: set[int],
 ) -> str | None:
+    """Resolve display unit text for a report table from key/property metadata."""
     if not key_ids:
         return None
     table_names = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
@@ -494,6 +512,7 @@ def _copy_data_table_to_report(con: sqlite3.Connection, table_name: str, *, key_
 
 
 def _materialize_solution_tables(con: sqlite3.Connection) -> None:
+    """Materialize all derived data and report tables in attached schemas."""
     _attach_solution_schemas(con)
 
     groups = _build_derived_table_map(con)
@@ -523,6 +542,7 @@ def _materialize_single_solution_table(
     schema_name: str,
     table_name: str,
 ) -> bool:
+    """Materialize one derived table into data and synchronized report schema."""
     _attach_solution_schemas(con)
     groups = _build_derived_table_map(con)
     key_ids = groups.get(("data", table_name))
@@ -625,6 +645,7 @@ def _materialize_single_solution_table_from_subset(
 
 
 def _create_and_insert_rows(con: sqlite3.Connection, table: str, rows: list[dict[str, Any]]) -> None:
+    """Create a table if needed and insert row dictionaries as TEXT columns."""
     if not rows:
         return
 
@@ -642,6 +663,7 @@ def _create_and_insert_rows(con: sqlite3.Connection, table: str, rows: list[dict
 
 
 def _read_all_bin_entries(zf: ZipFile) -> dict[int, bytes]:
+    """Read all binary data entries keyed by period type id."""
     period_bytes: dict[int, bytes] = {}
     for name in zf.namelist():
         lower_name = name.lower()
@@ -688,6 +710,7 @@ def _group_key_rows_by_period(
     key_rows: list[tuple[Any, Any, Any, Any, Any]],
     period_entries: dict[int, str],
 ) -> dict[int, list[tuple[int, int, int, int]]]:
+    """Group decoded key-index rows by period type for BIN decoding."""
     rows_by_period: dict[int, list[tuple[int, int, int, int]]] = defaultdict(list)
     for key_id, period_type_id, length, position, period_offset in key_rows:
         try:
@@ -713,6 +736,7 @@ def _decode_period_rows(
     period_type: int,
     rows: list[tuple[int, int, int, int]],
 ) -> Any:
+    """Yield decoded t_data_values rows for one period BIN entry."""
     # Read keys in byte-order to minimize stream movement and memory overhead.
     sorted_rows = sorted(rows, key=lambda x: x[2])
     with zf.open(entry_name, "r") as stream:
@@ -745,6 +769,7 @@ def _decode_period_rows(
 
 
 def _decode_bin_values(con: sqlite3.Connection, zf: ZipFile) -> None:
+    """Decode BIN payloads into t_data_values when key index metadata exists."""
     table_names = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     if "t_key_index" not in table_names:
         return
@@ -867,6 +892,7 @@ class PLEXOS2SQLite:
         materialize_on_enter: bool = True,
         decode_on_convert: bool | None = None,
     ) -> None:
+        """Initialize converter configuration and output path behavior."""
         self.input_path = _resolve_input_zip_path(input_path)
         self.output_path = (
             Path(output_path) if output_path is not None else self.input_path.with_suffix(".sqlite")
@@ -916,6 +942,7 @@ class PLEXOS2SQLite:
         self.connection.commit()
 
     def __enter__(self) -> PLEXOS2SQLite:
+        """Open connection and optionally decode and materialize derived tables."""
         if not self.output_path.exists():
             self.convert()
         self.connection = sqlite3.connect(str(self.output_path))
@@ -997,6 +1024,7 @@ class PLEXOS2SQLite:
         return sorted(name for (s, name) in groups if s == schema)
 
     def _timestamp_block_names(self) -> list[str]:
+        """List logical timestamp block names based on available phase/period tables."""
         if self.connection is None:
             return []
         table_names = {
@@ -1022,6 +1050,7 @@ class PLEXOS2SQLite:
         return sorted(names)
 
     def _raw_table_names(self) -> list[str]:
+        """Return logical raw table names exposed by the compatibility catalog."""
         # Raw object names.
         names = [
             "attribute_data",
@@ -1048,6 +1077,7 @@ class PLEXOS2SQLite:
         return sorted(set(names))
 
     def _processed_table_names(self) -> list[str]:
+        """Return logical processed object names exposed as compatibility views."""
         names = [
             n for n in self._raw_table_names() if n in {"classes", "memberships", "objects", "properties"}
         ]
@@ -1120,6 +1150,7 @@ class PLEXOS2SQLite:
         return rows
 
     def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+        """Close the active SQLite connection on context manager exit."""
         if self.connection is not None:
             self.connection.close()
             self.connection = None
