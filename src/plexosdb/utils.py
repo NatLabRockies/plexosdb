@@ -79,7 +79,7 @@ def validate_string(value: str) -> Any:
         return False
     try:
         value = ast.literal_eval(value)
-    except Exception:
+    except (ValueError, SyntaxError):
         logger.trace("Could not parse {}", value)
     return value
 

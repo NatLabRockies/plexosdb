@@ -290,6 +290,8 @@ class PlexosDB:
             # Re-enable foreign key constraints after import
             instance._db.execute("PRAGMA foreign_keys = ON")
 
+        instance._db.execute("UPDATE t_config SET value = ? WHERE element = ?", ("1", "Dynamic"))
+
         return instance
 
     def add_attribute(
@@ -1648,7 +1650,7 @@ class PlexosDB:
         schema: str | None = None,
         *,
         seed_defaults: bool = False,
-        version: int | str | tuple[int, ...] | None = None,
+        version: int | str | tuple[int, ...] | None = "9.2",
     ) -> bool:
         """Create database schema from SQL script.
 
@@ -1731,6 +1733,19 @@ class PlexosDB:
             self._seed_default_model_data()
 
         if version is None:
+            return True
+
+        # If version is a plain string (e.g. "9.2", "11.0"), update t_config.Version only.
+        # Integer, tuple, or "v..."-prefixed strings trigger full master template loading.
+        if isinstance(version, str) and not version.strip().lower().startswith("v"):
+            has_config = bool(
+                self._db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='t_config'")
+            )
+            if has_config:
+                self._db.execute(
+                    "UPDATE t_config SET value = ? WHERE element = ?",
+                    (version, "Version"),
+                )
             return True
 
         major_version = self._parse_schema_version(version)
