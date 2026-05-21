@@ -119,11 +119,22 @@ def _build_derived_solution_zip(path: Path) -> None:
         <property_id>100</property_id>
         <name>Generation</name>
         <summary_name>Generation Summary</summary_name>
+        <unit_id>1</unit_id>
+        <summary_unit_id>1</summary_unit_id>
     </t_property>
     <t_object>
         <object_id>1</object_id>
         <name>Battery1</name>
+        <category_id>10</category_id>
     </t_object>
+    <t_category>
+        <category_id>10</category_id>
+        <name>battery-category</name>
+    </t_category>
+    <t_unit>
+        <unit_id>1</unit_id>
+        <value>MW</value>
+    </t_unit>
     <t_sample>
         <sample_id>0</sample_id>
         <sample_name>Mean</sample_name>
@@ -265,6 +276,35 @@ def test_plexos2sqlite_materializes_data_and_report_objects(tmp_path):
         ).fetchone()
         assert report_rows is not None
         assert report_rows[0] == 2
+
+        report_cols = [
+            r[1]
+            for r in con.execute('PRAGMA report.table_info("ST__Interval__Batteries__Generation")').fetchall()
+        ]
+        assert report_cols == [
+            "band",
+            "sample_name",
+            "name",
+            "category",
+            "timestamp",
+            "interval_length",
+            "Generation",
+            "unit",
+        ]
+        report_sample = con.execute(
+            'SELECT band, sample_name, name, category, timestamp, interval_length, "Generation", unit'
+            ' FROM report."ST__Interval__Batteries__Generation" ORDER BY timestamp LIMIT 1'
+        ).fetchone()
+        assert report_sample == (
+            1,
+            "Mean",
+            "Battery1",
+            "battery-category",
+            "2012-01-01 00:00:00",
+            1,
+            10.0,
+            "MW",
+        )
 
 
 def test_plexos_to_sqlite_missing_zip_raises(tmp_path):
@@ -485,6 +525,34 @@ def test_build_derived_table_map_does_not_require_t_data_values():
         con.close()
 
 
+def test_build_derived_table_map_infers_summary_from_key_period_and_keeps_ampersand():
+    con = sqlite3.connect(":memory:")
+    try:
+        con.execute(
+            "CREATE TABLE t_key "
+            "(key_id TEXT, phase_id TEXT, membership_id TEXT, property_id TEXT, period_type_id TEXT)"
+        )
+        con.execute("CREATE TABLE t_key_index (key_id TEXT, period_type_id TEXT, length TEXT, position TEXT)")
+        con.execute("CREATE TABLE t_property (property_id TEXT, name TEXT, summary_name TEXT)")
+        con.execute("CREATE TABLE t_membership (membership_id TEXT, collection_id TEXT)")
+        con.execute("CREATE TABLE t_collection (collection_id TEXT, name TEXT)")
+        con.execute("CREATE TABLE t_phase_4 (phase_id TEXT)")
+
+        # Infer summary from key.period_type_id == 1 when explicit is_summary is missing.
+        # Keep period label from key_index (4 -> Year) and keep '&' in table label.
+        con.execute("INSERT INTO t_key VALUES ('1','4','10','100','1')")
+        con.execute("INSERT INTO t_key_index VALUES ('1','4','1','0')")
+        con.execute("INSERT INTO t_property VALUES ('100','Start & Shutdown Cost','Start & Shutdown Cost')")
+        con.execute("INSERT INTO t_membership VALUES ('10','20')")
+        con.execute("INSERT INTO t_collection VALUES ('20','Generators')")
+        con.execute("INSERT INTO t_phase_4 VALUES ('4')")
+
+        groups = _build_derived_table_map(con)
+        assert ("data", "ST__Year__Generators__Start_&_Shutdown_Cost") in groups
+    finally:
+        con.close()
+
+
 def test_decode_bin_values_returns_early_without_key_index(tmp_path):
     zip_path = tmp_path / "nobin.zip"
     with ZipFile(zip_path, "w", compression=ZIP_DEFLATED) as zf:
@@ -680,7 +748,7 @@ def test_skip_bytes_success_and_decode_period_rows_short_chunk(tmp_path):
         zf.writestr("t_data_0.BIN", b"1234")
 
     with ZipFile(zip_path, "r") as zf:
-        rows = _decode_period_rows(zf, "t_data_0.BIN", 0, [(1, 1, 0, 0)])
+        rows = list(_decode_period_rows(zf, "t_data_0.BIN", 0, [(1, 1, 0, 0)]))
     assert rows == []
 
 
@@ -738,3 +806,346 @@ def test_client_runtime_guards_and_list_tables_validation(tmp_path):
             db.list_tables(schema="invalid")
 
         assert "ST__Interval__Batteries__Generation" in db.list_tables(schema="data")
+        assert "ST__Interval__Batteries__Generation" in db.list_tables(schema="report")
+
+
+def test_ensure_data_values_decoded_recovers_from_empty_table(tmp_path):
+    zip_path = tmp_path / "sample_solution.zip"
+    _build_test_solution_zip(zip_path)
+
+    client = PLEXOS2SQLite(
+        zip_path,
+        force=True,
+        materialize_on_enter=False,
+        decode_on_convert=False,
+    )
+    _ = client.convert()
+
+    with client as db:
+        con = db.connection
+        assert con is not None
+
+        # Simulate stale/partial output where t_data_values exists but is empty.
+        con.execute(
+            """
+            CREATE TABLE IF NOT EXISTS t_data_values (
+                key_id INTEGER NOT NULL,
+                period_type_id INTEGER NOT NULL,
+                block_id INTEGER NOT NULL,
+                value REAL NOT NULL
+            )
+            """
+        )
+        con.commit()
+        assert con.execute("SELECT COUNT(*) FROM t_data_values").fetchone()[0] == 0
+
+        db._ensure_data_values_decoded()
+        assert con.execute("SELECT COUNT(*) FROM t_data_values").fetchone()[0] > 0
+
+
+def test_list_catalog_tables_compat_shape(tmp_path):
+    zip_path = tmp_path / "sample_solution.zip"
+    _build_derived_solution_zip(zip_path)
+    client = PLEXOS2SQLite(zip_path, force=True, materialize_on_enter=False)
+    _ = client.convert()
+
+    with client as db:
+        rows = db.list_catalog_tables()
+        assert rows
+
+        schemas = {r["table_schema"] for r in rows}
+        assert {"main", "raw", "processed", "data", "report"}.issubset(schemas)
+
+        by_schema = {}
+        for row in rows:
+            by_schema.setdefault(row["table_schema"], set()).add(row["table_name"])
+
+        assert "plexos2sqlite" in by_schema["main"]
+        assert "classes" in by_schema["raw"]
+        assert "classes" in by_schema["processed"]
+        assert "ST__Interval__Batteries__Generation" in by_schema["data"]
+        assert "ST__Interval__Batteries__Generation" in by_schema["report"]
+
+
+def test_table_label_part_and_report_interval_length_edges():
+    assert sr._table_label_part(None) == "Unknown"
+    assert sr._report_interval_length("SinglePart") is None
+
+
+def test_resolve_report_unit_guard_paths_and_no_row():
+    con = sqlite3.connect(":memory:")
+    try:
+        assert sr._resolve_report_unit(con, key_ids=set()) is None
+        assert sr._resolve_report_unit(con, key_ids={1}) is None
+
+        con.execute("CREATE TABLE t_key (key_id TEXT, property_id TEXT)")
+        con.execute("CREATE TABLE t_property (property_id TEXT, unit_id TEXT, summary_unit_id TEXT)")
+        con.execute("CREATE TABLE t_unit (unit_id TEXT, value TEXT)")
+
+        # Exercises the no-is_summary SQL expression path and the no-row return.
+        assert sr._resolve_report_unit(con, key_ids={999}) is None
+    finally:
+        con.close()
+
+
+def test_copy_data_table_to_report_fallback_with_null_unit():
+    con = sqlite3.connect(":memory:")
+    try:
+        con.execute("ATTACH DATABASE ':memory:' AS data")
+        con.execute("ATTACH DATABASE ':memory:' AS report")
+        con.execute('CREATE TABLE data."NoRichCols" (key_id INTEGER, value REAL)')
+        con.execute('INSERT INTO data."NoRichCols" (key_id, value) VALUES (1, 42.0)')
+
+        sr._copy_data_table_to_report(con, "NoRichCols", key_ids={1})
+
+        rows = con.execute('SELECT key_id, value FROM report."NoRichCols"').fetchall()
+        assert rows == [(1, 42.0)]
+    finally:
+        con.close()
+
+
+def test_materialize_single_solution_table_paths(monkeypatch):
+    con = sqlite3.connect(":memory:")
+    copied: list[tuple[str, set[int]]] = []
+    try:
+        monkeypatch.setattr(sr, "_build_derived_table_map", lambda _con: {})
+        assert sr._materialize_single_solution_table(con, "data", "T") is False
+
+        monkeypatch.setattr(sr, "_build_derived_table_map", lambda _con: {("data", "T"): {1}})
+        monkeypatch.setattr(sr, "_ensure_join_indexes", lambda _con, _tables: None)
+        monkeypatch.setattr(
+            sr,
+            "_build_fallback_create_sql",
+            lambda _schema, _table, _ids: (
+                'CREATE TABLE data."T" AS '
+                "SELECT 1 AS key_id, 1 AS period_type_id, 1 AS block_id, 2.0 AS value"
+            ),
+        )
+        monkeypatch.setattr(
+            sr,
+            "_copy_data_table_to_report",
+            lambda _con, table_name, *, key_ids: copied.append((table_name, set(key_ids))),
+        )
+
+        assert sr._materialize_single_solution_table(con, "report", "T") is True
+        assert sr._materialize_single_solution_table(con, "data", "T") is True
+        assert copied == [("T", {1}), ("T", {1})]
+    finally:
+        con.close()
+
+
+def test_materialize_single_solution_table_from_subset_early_returns(tmp_path, monkeypatch):
+    con = sqlite3.connect(":memory:")
+    zip_path = tmp_path / "empty.zip"
+    with ZipFile(zip_path, "w", compression=ZIP_DEFLATED) as zf:
+        zf.writestr("x.txt", "x")
+
+    try:
+        with ZipFile(zip_path, "r") as zf:
+            monkeypatch.setattr(sr, "_build_derived_table_map", lambda _con: {})
+            assert (
+                sr._materialize_single_solution_table_from_subset(
+                    con,
+                    table_name="T",
+                    schema_name="data",
+                    key_rows=[(1, 0, 1, 0, 0)],
+                    zf=zf,
+                )
+                is False
+            )
+
+            monkeypatch.setattr(sr, "_build_derived_table_map", lambda _con: {("data", "T"): {1}})
+            monkeypatch.setattr(sr, "_bin_entry_name_map", lambda _zf: {})
+            assert (
+                sr._materialize_single_solution_table_from_subset(
+                    con,
+                    table_name="T",
+                    schema_name="data",
+                    key_rows=[(1, 0, 1, 0, 0)],
+                    zf=zf,
+                )
+                is False
+            )
+
+            monkeypatch.setattr(sr, "_bin_entry_name_map", lambda _zf: {0: "t_data_0.BIN"})
+            monkeypatch.setattr(sr, "_group_key_rows_by_period", lambda _rows, _entries: {})
+            assert (
+                sr._materialize_single_solution_table_from_subset(
+                    con,
+                    table_name="T",
+                    schema_name="data",
+                    key_rows=[(1, 0, 1, 0, 0)],
+                    zf=zf,
+                )
+                is False
+            )
+    finally:
+        con.close()
+
+
+def test_materialize_single_solution_table_from_subset_skips_missing_period_entry(tmp_path, monkeypatch):
+    con = sqlite3.connect(":memory:")
+    zip_path = tmp_path / "empty.zip"
+    with ZipFile(zip_path, "w", compression=ZIP_DEFLATED) as zf:
+        zf.writestr("x.txt", "x")
+
+    try:
+        monkeypatch.setattr(sr, "_build_derived_table_map", lambda _con: {("data", "T"): {1}})
+        monkeypatch.setattr(sr, "_bin_entry_name_map", lambda _zf: {0: "t_data_0.BIN"})
+        monkeypatch.setattr(sr, "_group_key_rows_by_period", lambda _rows, _entries: {1: [(1, 1, 0, 0)]})
+        monkeypatch.setattr(sr, "_decode_period_rows", lambda *_args, **_kwargs: iter(()))
+        monkeypatch.setattr(sr, "_ensure_join_indexes", lambda _con, _tables: None)
+        monkeypatch.setattr(
+            sr,
+            "_build_fallback_create_sql",
+            lambda _schema,
+            _table,
+            _ids,
+            dv_source="main.t_data_values": f'CREATE TABLE data."T" AS SELECT * FROM {dv_source}',
+        )
+        monkeypatch.setattr(sr, "_copy_data_table_to_report", lambda *_args, **_kwargs: None)
+
+        with ZipFile(zip_path, "r") as zf:
+            assert (
+                sr._materialize_single_solution_table_from_subset(
+                    con,
+                    table_name="T",
+                    schema_name="data",
+                    key_rows=[(1, 0, 1, 0, 0)],
+                    zf=zf,
+                )
+                is True
+            )
+            rows = con.execute('SELECT COUNT(*) FROM data."T"').fetchone()[0]
+            assert rows == 0
+    finally:
+        con.close()
+
+
+def test_decode_period_rows_seek_exception_and_skip_progress():
+    class FakeStream:
+        def __init__(self, payload: bytes) -> None:
+            self._stream = BytesIO(payload)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self, n: int) -> bytes:
+            return self._stream.read(n)
+
+        def seek(self, _pos: int) -> int:
+            raise OSError("seek unsupported")
+
+    class FakeZip:
+        def __init__(self, payload: bytes) -> None:
+            self.payload = payload
+
+        def open(self, _entry_name: str, _mode: str):
+            return FakeStream(self.payload)
+
+    rows = list(
+        _decode_period_rows(
+            FakeZip(struct.pack("<3d", 1.0, 2.0, 3.0)),
+            "ignored.BIN",
+            0,
+            [(10, 1, 8, 0)],
+        )
+    )
+    assert rows == [(10, 0, 1, 2.0)]
+
+    # Second row overlaps previous bytes; seek() raises and row is skipped.
+    skipped_rows = list(
+        _decode_period_rows(
+            FakeZip(struct.pack("<3d", 1.0, 2.0, 3.0)),
+            "ignored.BIN",
+            0,
+            [(1, 2, 0, 0), (2, 1, 8, 0)],
+        )
+    )
+    assert skipped_rows == [(1, 0, 1, 1.0), (1, 0, 2, 2.0)]
+
+
+def test_decode_bin_values_no_period_entries_and_no_grouped_rows(tmp_path):
+    con = sqlite3.connect(":memory:")
+    try:
+        con.execute(
+            "CREATE TABLE t_key_index ("
+            "key_id TEXT, period_type_id TEXT, length TEXT, position TEXT, period_offset TEXT"
+            ")"
+        )
+        con.execute("INSERT INTO t_key_index VALUES ('1', '0', '2', '0', '0')")
+
+        zip_no_bin = tmp_path / "nobin.zip"
+        with ZipFile(zip_no_bin, "w", compression=ZIP_DEFLATED) as zf:
+            zf.writestr("sample.xml", "<MasterDataSet></MasterDataSet>")
+
+        with ZipFile(zip_no_bin, "r") as zf:
+            _decode_bin_values(con, zf)
+
+        table = con.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='t_data_values'"
+        ).fetchone()
+        assert table is None
+
+        zip_with_bin = tmp_path / "withbin.zip"
+        with ZipFile(zip_with_bin, "w", compression=ZIP_DEFLATED) as zf:
+            zf.writestr("t_data_0.BIN", struct.pack("<1d", 5.0))
+
+        con.execute("DELETE FROM t_key_index")
+        con.execute("INSERT INTO t_key_index VALUES ('1', '0', '0', '0', '0')")
+
+        with ZipFile(zip_with_bin, "r") as zf:
+            _decode_bin_values(con, zf)
+
+        row_count = con.execute("SELECT COUNT(*) FROM t_data_values").fetchone()[0]
+        assert row_count == 0
+    finally:
+        con.close()
+
+
+def test_materialize_table_full_data_and_empty_key_rows_paths(tmp_path, monkeypatch):
+    zip_path = tmp_path / "sample_solution.zip"
+    _build_derived_solution_zip(zip_path)
+    client = PLEXOS2SQLite(zip_path, force=True, materialize_on_enter=False)
+    _ = client.convert()
+
+    with client as db:
+        con = db.connection
+        assert con is not None
+
+        # No full data table and no key_index rows for selected keys.
+        con.execute("DELETE FROM t_key_index")
+        monkeypatch.setattr(sr, "_build_derived_table_map", lambda _con: {("data", "AnyTable"): {1}})
+        assert db.materialize_table("AnyTable", schema="data") is False
+
+        # Full data path delegates to _materialize_single_solution_table.
+        con.execute(
+            "CREATE TABLE IF NOT EXISTS t_data_values ("
+            "key_id INTEGER, period_type_id INTEGER, block_id INTEGER, value REAL"
+            ")"
+        )
+        con.execute("DELETE FROM t_data_values")
+        con.execute("INSERT INTO t_data_values VALUES (1, 0, 1, 1.0)")
+
+        calls: list[tuple[str, str]] = []
+
+        def _fake_materialize(_con: sqlite3.Connection, schema_name: str, table_name: str) -> bool:
+            calls.append((schema_name, table_name))
+            return True
+
+        monkeypatch.setattr(sr, "_materialize_single_solution_table", _fake_materialize)
+        assert db.materialize_table("AnotherTable", schema="report") is True
+        assert calls == [("report", "AnotherTable")]
+
+
+def test_timestamp_block_names_and_list_catalog_runtime_guards(tmp_path):
+    zip_path = tmp_path / "sample_solution.zip"
+    _build_test_solution_zip(zip_path)
+    client = PLEXOS2SQLite(zip_path, force=True, materialize_on_enter=False)
+
+    assert client._timestamp_block_names() == []
+    with pytest.raises(RuntimeError):
+        client.list_catalog_tables()

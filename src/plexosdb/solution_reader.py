@@ -103,6 +103,17 @@ def _sanitize_name(value: str | None) -> str:
     return "".join(out).strip("_") or "Unknown"
 
 
+def _table_label_part(value: str | None) -> str:
+    """Match label formatting for table name parts.
+
+    Keep symbols like '&' and only normalize spaces/hyphens to underscores.
+    """
+    if not value:
+        return "Unknown"
+    part = value.strip().replace(" ", "_").replace("-", "_")
+    return part or "Unknown"
+
+
 def _period_type_name(period_type_id: int | None) -> str:
     mapping = {
         0: "Interval",
@@ -132,7 +143,8 @@ _PERIOD_TABLE_META: dict[str, tuple[str, str, str]] = {
 
 def _ensure_join_indexes(con: sqlite3.Connection, table_names: set[str]) -> None:
     """Create indexes required for fast JOIN-based rich materialization."""
-    con.execute("CREATE INDEX IF NOT EXISTS idx_t_data_values_key_id ON t_data_values(key_id)")
+    if "t_data_values" in table_names:
+        con.execute("CREATE INDEX IF NOT EXISTS idx_t_data_values_key_id ON t_data_values(key_id)")
     for tbl, col in [
         ("t_key", "key_id"),
         ("t_membership", "membership_id"),
@@ -167,6 +179,7 @@ def _build_rich_create_sql(
     key_ids_sql: str,
     period_join: str,
     datetime_expr: str,
+    dv_source: str = "main.t_data_values",
 ) -> str:
     """Return a CREATE TABLE AS SQL that embeds name/sample/band/datetime into the result."""
     sq = _quote_ident(schema_name)
@@ -180,7 +193,7 @@ def _build_rich_create_sql(
             dv.block_id,
             {datetime_expr},
             dv.value
-        FROM main.t_data_values dv
+        FROM {dv_source} dv
         JOIN main.t_key k ON k.key_id = CAST(dv.key_id AS TEXT)
         LEFT JOIN main.t_sample s ON s.sample_id = k.sample_id
         LEFT JOIN main.t_membership m ON m.membership_id = k.membership_id
@@ -190,14 +203,19 @@ def _build_rich_create_sql(
     """
 
 
-def _build_fallback_create_sql(schema_name: str, table_name: str, key_ids_sql: str) -> str:
+def _build_fallback_create_sql(
+    schema_name: str,
+    table_name: str,
+    key_ids_sql: str,
+    dv_source: str = "main.t_data_values",
+) -> str:
     """Minimal table without metadata joins, used when t_key/t_object/t_sample are absent."""
     sq = _quote_ident(schema_name)
     tq = _quote_ident(table_name)
     return f"""
         CREATE TABLE {sq}.{tq} AS
         SELECT dv.key_id, dv.period_type_id, dv.block_id, dv.value
-        FROM main.t_data_values dv
+        FROM {dv_source} dv
         WHERE dv.key_id IN ({key_ids_sql})
     """
 
@@ -308,10 +326,9 @@ def _build_derived_table_map(con: sqlite3.Connection) -> dict[tuple[str, str], s
     has_summary_name = "summary_name" in property_cols
 
     key_select = ["key_id", "property_id", "membership_id"]
-    if has_summary:
-        key_select.append("is_summary")
-    if has_phase:
-        key_select.append("phase_id")
+    key_select.append("phase_id" if has_phase else "NULL AS phase_id")
+    key_select.append("is_summary" if has_summary else "NULL AS is_summary")
+    key_select.append("period_type_id" if has_key_period else "NULL AS key_period_type_id")
     key_rows = con.execute(f"SELECT {', '.join(key_select)} FROM t_key").fetchall()
 
     key_period = _build_key_period_map(
@@ -338,27 +355,142 @@ def _build_derived_table_map(con: sqlite3.Connection) -> dict[tuple[str, str], s
         key_id = int(row[0])
         property_id = int(row[1])
         membership_id = int(row[2])
-        is_summary = bool(int(row[3])) if has_summary and row[3] is not None else False
-        phase_id = int(row[4]) if has_phase and len(row) > 4 and row[4] is not None else -1
+        phase_id = int(row[3]) if row[3] is not None else -1
+
+        # Prefer explicit key.is_summary when present; otherwise infer from key.period_type_id.
+        if row[4] is not None:
+            is_summary = bool(int(row[4]))
+        elif row[5] is not None:
+            is_summary = int(row[5]) == 1
+        else:
+            is_summary = False
 
         period_name = _period_type_name(key_period.get(key_id))
         phase_name = _phase_name(phase_id, phase_ids) if phase_id != -1 else "ST"
         collection_name = collection_map.get(membership_collection.get(membership_id, -1), "Collection")
         prop_name, summary_name = property_map.get(property_id, ("Property", ""))
 
-        schema_name = "report" if is_summary else "data"
         selected_prop = summary_name if is_summary and summary_name else prop_name
         table_name = "__".join(
             [
-                _sanitize_name(phase_name),
-                _sanitize_name(period_name),
-                _sanitize_name(collection_name),
-                _sanitize_name(selected_prop),
+                _table_label_part(phase_name),
+                _table_label_part(period_name),
+                _table_label_part(collection_name),
+                _table_label_part(selected_prop),
             ]
         )
-        groups[(schema_name, table_name)].add(key_id)
+        groups[("data", table_name)].add(key_id)
 
     return groups
+
+
+def _report_interval_length(table_name: str) -> int | None:
+    parts = table_name.split("__")
+    if len(parts) < 2:
+        return None
+    return {
+        "Interval": 1,
+        "Hour": 1,
+        "Day": 24,
+        "Week": 168,
+        "Month": 730,
+        "Quarter": 2190,
+        "Year": 8760,
+    }.get(parts[1])
+
+
+def _resolve_report_unit(
+    con: sqlite3.Connection,
+    *,
+    key_ids: set[int],
+) -> str | None:
+    if not key_ids:
+        return None
+    table_names = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    required = {"t_key", "t_property", "t_unit"}
+    if not required.issubset(table_names):
+        return None
+
+    key_cols = set(_table_columns(con, "t_key"))
+    has_is_summary = "is_summary" in key_cols
+    key_ids_sql = ",".join(str(int(k)) for k in sorted(key_ids))
+    if has_is_summary:
+        unit_expr = """
+            COALESCE(
+                CASE
+                    WHEN COALESCE(CAST(k.is_summary AS INTEGER), 0) = 1
+                    THEN pu_summary.value
+                    ELSE pu.value
+                END,
+                pu.value
+            )
+        """
+    else:
+        unit_expr = "COALESCE(pu.value, pu_summary.value)"
+
+    row = con.execute(
+        f"""
+        SELECT
+            {unit_expr} AS unit_text
+        FROM t_key k
+        JOIN t_property p ON p.property_id = k.property_id
+        LEFT JOIN t_unit pu ON pu.unit_id = p.unit_id
+        LEFT JOIN t_unit pu_summary ON pu_summary.unit_id = p.summary_unit_id
+        WHERE k.key_id IN ({key_ids_sql})
+        LIMIT 1
+        """
+    ).fetchone()
+    if row is None:
+        return None
+    unit = row[0]
+    return str(unit) if unit is not None else None
+
+
+def _copy_data_table_to_report(con: sqlite3.Connection, table_name: str, *, key_ids: set[int]) -> None:
+    """Create report-style table from data table, with fallback to plain mirror."""
+    tq = _quote_ident(table_name)
+    value_col = _quote_ident(table_name.split("__")[-1] if "__" in table_name else "value")
+    interval_length = _report_interval_length(table_name)
+    interval_sql = "NULL" if interval_length is None else str(interval_length)
+    unit_text = _resolve_report_unit(con, key_ids=key_ids)
+    if unit_text is None:
+        unit_sql = "NULL"
+    else:
+        unit_sql = "'" + unit_text.replace("'", "''") + "'"
+    table_names = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    table_name_escaped = table_name.replace('"', '""')
+    data_cols = {r[1] for r in con.execute(f'PRAGMA data.table_info("{table_name_escaped}")').fetchall()}
+
+    con.execute(f"DROP TABLE IF EXISTS report.{tq}")
+    required_data_cols = {"band_id", "sample_name", "name", "datetime", "value"}
+    if {"t_object", "t_category"}.issubset(table_names) and required_data_cols.issubset(data_cols):
+        con.execute(
+            f"""
+            CREATE TABLE report.{tq} AS
+            SELECT
+                d.band_id AS band,
+                d.sample_name AS sample_name,
+                d.name AS name,
+                c.name AS category,
+                CASE
+                    WHEN d.datetime IS NULL THEN NULL
+                    WHEN INSTR(d.datetime, '/') > 0
+                        THEN SUBSTR(d.datetime, 7, 4) || '-' || SUBSTR(d.datetime, 4, 2) || '-' ||
+                             SUBSTR(d.datetime, 1, 2) || ' ' || SUBSTR(d.datetime, 12, 8)
+                    WHEN INSTR(d.datetime, 'T') > 0 THEN REPLACE(SUBSTR(d.datetime, 1, 19), 'T', ' ')
+                    ELSE d.datetime
+                END AS timestamp,
+                {interval_sql} AS interval_length,
+                d.value AS {value_col},
+                {unit_sql} AS unit
+            FROM data.{tq} d
+            LEFT JOIN t_object o ON o.name = d.name
+            LEFT JOIN t_category c ON c.category_id = o.category_id
+            """
+        )
+        return
+
+    con.execute(f"CREATE TABLE report.{tq} AS SELECT * FROM data.{tq}")
 
 
 def _materialize_solution_tables(con: sqlite3.Connection) -> None:
@@ -383,6 +515,7 @@ def _materialize_solution_tables(con: sqlite3.Connection) -> None:
         else:
             sql = _build_fallback_create_sql(schema_name, table_name, key_ids_sql)
         con.execute(sql)
+        _copy_data_table_to_report(con, table_name, key_ids=key_ids)
 
 
 def _materialize_single_solution_table(
@@ -392,7 +525,7 @@ def _materialize_single_solution_table(
 ) -> bool:
     _attach_solution_schemas(con)
     groups = _build_derived_table_map(con)
-    key_ids = groups.get((schema_name, table_name))
+    key_ids = groups.get(("data", table_name))
     if not key_ids:
         return False
 
@@ -401,13 +534,93 @@ def _materialize_single_solution_table(
     _ensure_join_indexes(con, table_names)
 
     key_ids_sql = ",".join(str(int(k)) for k in sorted(key_ids))
-    con.execute(f"DROP TABLE IF EXISTS {_quote_ident(schema_name)}.{_quote_ident(table_name)}")
+    con.execute(f"DROP TABLE IF EXISTS data.{_quote_ident(table_name)}")
     if has_meta:
         period_join, datetime_expr = _build_period_join(table_name, table_names)
-        sql = _build_rich_create_sql(schema_name, table_name, key_ids_sql, period_join, datetime_expr)
+        sql = _build_rich_create_sql("data", table_name, key_ids_sql, period_join, datetime_expr)
     else:
-        sql = _build_fallback_create_sql(schema_name, table_name, key_ids_sql)
+        sql = _build_fallback_create_sql("data", table_name, key_ids_sql)
     con.execute(sql)
+    if schema_name == "report":
+        _copy_data_table_to_report(con, table_name, key_ids=key_ids)
+    else:
+        # Keep report schema in sync with data-table availability.
+        _copy_data_table_to_report(con, table_name, key_ids=key_ids)
+    return True
+
+
+def _materialize_single_solution_table_from_subset(
+    con: sqlite3.Connection,
+    *,
+    table_name: str,
+    schema_name: str,
+    key_rows: list[tuple[Any, Any, Any, Any, Any]],
+    zf: ZipFile,
+) -> bool:
+    """Materialize one table using only key rows for that table.
+
+    This path avoids decoding all solution values when only one derived table is requested.
+    """
+    _attach_solution_schemas(con)
+    groups = _build_derived_table_map(con)
+    key_ids = groups.get(("data", table_name))
+    if not key_ids:
+        return False
+
+    period_entries = _bin_entry_name_map(zf)
+    if not period_entries:
+        return False
+    rows_by_period = _group_key_rows_by_period(key_rows, period_entries)
+    if not rows_by_period:
+        return False
+
+    con.execute("DROP TABLE IF EXISTS temp._dv_subset")
+    con.execute(
+        """
+        CREATE TEMP TABLE _dv_subset (
+            key_id INTEGER NOT NULL,
+            period_type_id INTEGER NOT NULL,
+            block_id INTEGER NOT NULL,
+            value REAL NOT NULL
+        )
+        """
+    )
+    insert_sql = "INSERT INTO temp._dv_subset(key_id, period_type_id, block_id, value) VALUES (?, ?, ?, ?)"
+    batch: list[tuple[int, int, int, float]] = []
+    batch_size = 100_000
+    for period_type, rows in rows_by_period.items():
+        entry_name = period_entries.get(period_type)
+        if entry_name is None:
+            continue
+        for row in _decode_period_rows(zf, entry_name, period_type, rows):
+            batch.append(row)
+            if len(batch) >= batch_size:
+                con.executemany(insert_sql, batch)
+                batch.clear()
+    if batch:
+        con.executemany(insert_sql, batch)
+    con.execute("CREATE INDEX IF NOT EXISTS temp.idx_dv_subset_key_id ON _dv_subset(key_id)")
+
+    table_names = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    has_meta = {"t_key", "t_sample", "t_membership", "t_object"}.issubset(table_names)
+    _ensure_join_indexes(con, table_names)
+
+    key_ids_sql = ",".join(str(int(k)) for k in sorted(key_ids))
+    con.execute(f"DROP TABLE IF EXISTS data.{_quote_ident(table_name)}")
+    if has_meta:
+        period_join, datetime_expr = _build_period_join(table_name, table_names)
+        sql = _build_rich_create_sql(
+            "data",
+            table_name,
+            key_ids_sql,
+            period_join,
+            datetime_expr,
+            dv_source="temp._dv_subset",
+        )
+    else:
+        sql = _build_fallback_create_sql("data", table_name, key_ids_sql, dv_source="temp._dv_subset")
+    con.execute(sql)
+    _copy_data_table_to_report(con, table_name, key_ids=key_ids)
     return True
 
 
@@ -499,9 +712,7 @@ def _decode_period_rows(
     entry_name: str,
     period_type: int,
     rows: list[tuple[int, int, int, int]],
-) -> list[tuple[int, int, int, float]]:
-    out_rows: list[tuple[int, int, int, float]] = []
-
+) -> Any:
     # Read keys in byte-order to minimize stream movement and memory overhead.
     sorted_rows = sorted(rows, key=lambda x: x[2])
     with zf.open(entry_name, "r") as stream:
@@ -530,9 +741,7 @@ def _decode_period_rows(
             values = struct.unpack(f"<{num_values}d", chunk)
             for idx, value in enumerate(values):
                 block_id = offset + idx + 1
-                out_rows.append((key_id, period_type, block_id, float(value)))
-
-    return out_rows
+                yield (key_id, period_type, block_id, float(value))
 
 
 def _decode_bin_values(con: sqlite3.Connection, zf: ZipFile) -> None:
@@ -575,8 +784,7 @@ def _decode_bin_values(con: sqlite3.Connection, zf: ZipFile) -> None:
         if entry_name is None:
             continue
 
-        period_batch = _decode_period_rows(zf, entry_name, period_type, rows)
-        for row in period_batch:
+        for row in _decode_period_rows(zf, entry_name, period_type, rows):
             batch.append(row)
             if len(batch) >= batch_size:
                 con.executemany(insert_sql, batch)
@@ -697,7 +905,11 @@ class PLEXOS2SQLite:
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='t_data_values' LIMIT 1"
         ).fetchone()
         if table is not None:
-            return
+            row_count = self.connection.execute("SELECT COUNT(*) FROM t_data_values").fetchone()[0]
+            if row_count and int(row_count) > 0:
+                return
+            # Recover from stale/partial outputs where the table exists but is empty.
+            self.connection.execute("DROP TABLE IF EXISTS t_data_values")
 
         with ZipFile(self.input_path, "r") as zf:
             _decode_bin_values(self.connection, zf)
@@ -725,15 +937,53 @@ class PLEXOS2SQLite:
         if schema not in {"data", "report"}:
             raise ValueError("schema must be 'data' or 'report'")
 
-        self._ensure_data_values_decoded()
+        # Fast path: if t_data_values is missing/empty, decode only key rows for this table.
+        tdata_table = self.connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='t_data_values' LIMIT 1"
+        ).fetchone()
+        has_full_data = False
+        if tdata_table is not None:
+            tdata_rows = self.connection.execute("SELECT COUNT(*) FROM t_data_values").fetchone()[0]
+            has_full_data = bool(tdata_rows and int(tdata_rows) > 0)
+
+        if not has_full_data:
+            groups = _build_derived_table_map(self.connection)
+            key_ids = groups.get(("data", table))
+            if not key_ids:
+                return False
+
+            self.connection.execute("DROP TABLE IF EXISTS temp._target_keys")
+            self.connection.execute("CREATE TEMP TABLE _target_keys(key_id TEXT PRIMARY KEY)")
+            self.connection.executemany(
+                "INSERT OR IGNORE INTO _target_keys(key_id) VALUES (?)",
+                [(str(int(k)),) for k in key_ids],
+            )
+            key_rows = self.connection.execute(
+                """
+                SELECT ki.key_id, ki.period_type_id, ki.length, ki.position, COALESCE(ki.period_offset, 0)
+                FROM t_key_index ki
+                JOIN temp._target_keys tk ON tk.key_id = CAST(ki.key_id AS TEXT)
+                """
+            ).fetchall()
+            if not key_rows:
+                return False
+
+            with ZipFile(self.input_path, "r") as zf:
+                return _materialize_single_solution_table_from_subset(
+                    self.connection,
+                    table_name=table,
+                    schema_name=schema,
+                    key_rows=key_rows,
+                    zf=zf,
+                )
+
         return _materialize_single_solution_table(self.connection, schema, table)
 
     def list_tables(self, schema: str = "data") -> list[str]:
         """Return names of all available derived tables for a given schema.
 
         Tables are derived from the solution metadata; they do not need to be
-        materialized first.  Use schema='data' for interval/period results and
-        schema='report' for summary results.
+        materialized first. `report` mirrors `data` table names
         """
         if self.connection is None:
             raise RuntimeError("No active connection. Use this method inside a 'with client as db' block.")
@@ -742,7 +992,132 @@ class PLEXOS2SQLite:
             raise ValueError("schema must be 'data' or 'report'")
 
         groups = _build_derived_table_map(self.connection)
+        if schema == "report":
+            return sorted(name for (s, name) in groups if s == "data")
         return sorted(name for (s, name) in groups if s == schema)
+
+    def _timestamp_block_names(self) -> list[str]:
+        if self.connection is None:
+            return []
+        table_names = {
+            r[0] for r in self.connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+        period_map = {
+            "Interval": "t_period_0",
+            "Day": "t_period_1",
+            "Year": "t_period_4",
+        }
+        phase_map = {
+            "PASA": "t_phase_2",
+            "MT": "t_phase_3",
+            "ST": "t_phase_4",
+        }
+        names: list[str] = []
+        for phase_name, phase_table in phase_map.items():
+            if phase_table not in table_names:
+                continue
+            for period_name, period_table in period_map.items():
+                if period_table in table_names:
+                    names.append(f"timestamp_block_{phase_name}__{period_name}")
+        return sorted(names)
+
+    def _raw_table_names(self) -> list[str]:
+        # Raw object names.
+        names = [
+            "attribute_data",
+            "attributes",
+            "bands",
+            "categories",
+            "class_groups",
+            "classes",
+            "collections",
+            "config",
+            "custom_columns",
+            "key_indexes",
+            "keys",
+            "memberships",
+            "memo_objects",
+            "models",
+            "objects",
+            "properties",
+            "samples",
+            "timeslices",
+            "units",
+        ]
+        names.extend(self._timestamp_block_names())
+        return sorted(set(names))
+
+    def _processed_table_names(self) -> list[str]:
+        names = [
+            n for n in self._raw_table_names() if n in {"classes", "memberships", "objects", "properties"}
+        ]
+        names.extend(self._timestamp_block_names())
+        return sorted(set(names))
+
+    def list_catalog_tables(self) -> list[dict[str, str]]:
+        """Return catalog of logical tables/views.
+
+        Output rows include: table_catalog, table_schema, table_name, table_type.
+        This is a compatibility view for tooling that expects
+        schema layout (main/raw/processed/data/report).
+        """
+        if self.connection is None:
+            raise RuntimeError("No active connection. Use this method inside a 'with client as db' block.")
+
+        table_catalog = self.input_path.stem
+        rows: list[dict[str, str]] = []
+
+        # main
+        rows.append(
+            {
+                "table_catalog": table_catalog,
+                "table_schema": "main",
+                "table_name": "plexos2sqlite",
+                "table_type": "BASE TABLE",
+            }
+        )
+
+        # raw + processed logical objects
+        for table_name in self._raw_table_names():
+            rows.append(
+                {
+                    "table_catalog": table_catalog,
+                    "table_schema": "raw",
+                    "table_name": table_name,
+                    "table_type": "BASE TABLE",
+                }
+            )
+        for table_name in self._processed_table_names():
+            rows.append(
+                {
+                    "table_catalog": table_catalog,
+                    "table_schema": "processed",
+                    "table_name": table_name,
+                    "table_type": "VIEW",
+                }
+            )
+
+        # data/report derived tables
+        for table_name in self.list_tables(schema="data"):
+            rows.append(
+                {
+                    "table_catalog": table_catalog,
+                    "table_schema": "data",
+                    "table_name": table_name,
+                    "table_type": "BASE TABLE",
+                }
+            )
+            rows.append(
+                {
+                    "table_catalog": table_catalog,
+                    "table_schema": "report",
+                    "table_name": table_name,
+                    "table_type": "VIEW",
+                }
+            )
+
+        rows.sort(key=lambda r: (r["table_schema"], r["table_name"]))
+        return rows
 
     def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
         if self.connection is not None:
