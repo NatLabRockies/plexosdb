@@ -131,6 +131,26 @@ def test_validate_string_with_special_characters():
     assert result == "test@string.com"
 
 
+def test_validate_string_with_oversized_positive_integer_keeps_string():
+    """Verify oversized positive integers stay strings for SQLite safety."""
+    from plexosdb.utils import validate_string
+
+    value = "11339885002100928821"
+    result = validate_string(value)
+    assert isinstance(result, str)
+    assert result == value
+
+
+def test_validate_string_with_oversized_negative_integer_keeps_string():
+    """Verify oversized negative integers stay strings for SQLite safety."""
+    from plexosdb.utils import validate_string
+
+    value = "-9223372036854775809"
+    result = validate_string(value)
+    assert isinstance(result, str)
+    assert result == value
+
+
 def test_normalize_names_with_single_string():
     """Verify normalize_names returns list with single string."""
     from plexosdb.utils import normalize_names
