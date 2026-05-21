@@ -1,6 +1,8 @@
 import pytest
 
 from plexosdb.db import PlexosDB
+from plexosdb.enums import ClassEnum
+from plexosdb.exceptions import NotFoundError
 
 
 def test_smoke_test():
@@ -13,6 +15,60 @@ def test_initialize_instance():
     assert db is not None
     assert getattr(db, "_db") is not None
     assert isinstance(db, PlexosDB)
+
+
+def test_create_schema_without_seed_defaults_keeps_lookup_tables_empty():
+    """Default create_schema should not inject model metadata rows."""
+    db = PlexosDB()
+    db.create_schema()
+
+    assert db.query("SELECT COUNT(*) FROM t_class")[0][0] == 0
+    with pytest.raises(NotFoundError):
+        db.add_object(ClassEnum.Generator, name="GEN1")
+
+
+def test_create_schema_with_seed_defaults_supports_add_object():
+    """Opt-in seed should bootstrap enough metadata for add_object workflows."""
+    db = PlexosDB()
+    db.create_schema(seed_defaults=True)
+
+    assert db.query("SELECT COUNT(*) FROM t_class")[0][0] > 0
+    object_id = db.add_object(ClassEnum.Generator, name="GEN1")
+    assert object_id > 0
+
+
+def test_create_schema_sets_default_version_in_config_when_row_exists():
+    """create_schema should update existing Version row to default 9.2."""
+    schema = """
+    CREATE TABLE IF NOT EXISTS t_config (
+        element TEXT PRIMARY KEY,
+        value   TEXT
+    );
+    INSERT INTO t_config(element, value) VALUES ('Version', '0.0');
+    """
+    db = PlexosDB()
+    db.create_schema(schema=schema)
+
+    result = db.query("SELECT value FROM t_config WHERE element = ?", ("Version",))
+    assert result
+    assert result[0][0] == "9.2"
+
+
+def test_create_schema_accepts_custom_version_in_config():
+    """create_schema should apply custom version when Version row exists."""
+    schema = """
+    CREATE TABLE IF NOT EXISTS t_config (
+        element TEXT PRIMARY KEY,
+        value   TEXT
+    );
+    INSERT INTO t_config(element, value) VALUES ('Version', '0.0');
+    """
+    db = PlexosDB()
+    db.create_schema(schema=schema, version="11.0")
+
+    result = db.query("SELECT value FROM t_config WHERE element = ?", ("Version",))
+    assert result
+    assert result[0][0] == "11.0"
 
 
 @pytest.mark.empty_database
@@ -80,6 +136,13 @@ def test_get_plexos_version(db_base, _master_xml_param):
     assert db.get_plexos_version() == expected_version
 
 
+def test_dynamic_config_enabled_after_xml_import(db_base):
+    """Verify Dynamic config is enabled after XML import workflow."""
+    result = db_base.query("SELECT value FROM t_config WHERE element = ?", ("Dynamic",))
+    assert result
+    assert result[0][0] == "1"
+
+
 @pytest.mark.export
 def test_export_to_xml(db_base, tmp_path):
     db = db_base
@@ -109,6 +172,24 @@ def test_xml_round_trip(db_base, tmp_path):
 def test_xml_not_exist():
     with pytest.raises(FileNotFoundError):
         _ = PlexosDB.from_xml("not/existing/path")
+
+
+def test_from_xml_accepts_oversized_t_data_uid(tmp_path):
+    xml_content = """<?xml version=\"1.0\" encoding=\"utf-8\"?>
+<MasterDataSet>
+    <t_data>
+        <data_id>1</data_id>
+        <uid>11339885002100928821</uid>
+    </t_data>
+</MasterDataSet>
+"""
+    xml_path = tmp_path / "oversized_uid.xml"
+    xml_path.write_text(xml_content, encoding="utf-8")
+
+    db = PlexosDB.from_xml(xml_path)
+    rows = db.query("SELECT uid FROM t_data WHERE data_id = 1")
+    assert len(rows) == 1
+    assert rows[0][0] is not None
 
 
 def test_plexosdb_version_property_refresh(db_with_topology):

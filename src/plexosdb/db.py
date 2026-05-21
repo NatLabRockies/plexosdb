@@ -13,6 +13,7 @@ import warnings
 
 from loguru import logger
 
+from . import checks as checks_module
 from .db_manager import SQLiteManager
 from .enums import (
     ClassEnum,
@@ -45,7 +46,7 @@ from .xml_handler import XMLHandler
 SQLITE_BACKEND_KWARGS = {"in_memory"}
 CHECK_QUERY = "SELECT 1 FROM ${schema} ${where_clause}"
 PLEXOS_DEFAULT_SCHEMA = fpath = files("plexosdb").joinpath("schema.sql").read_text(encoding="utf-8-sig")
-PROPERTY_QUERY = files("plexosdb.queries").joinpath("object_properties.sql").read_text(encoding="utf-8-sig")
+PROPERTY_QUERY = files("plexosdb.sql").joinpath("object_properties.sql").read_text(encoding="utf-8-sig")
 MASTER_TEMPLATE_FILES: dict[int, str] = {
     9: "master_9.2R6_btu.xml",
     10: "master_10.0R2_btu.xml",
@@ -279,7 +280,7 @@ class PlexosDB:
             raise FileNotFoundError(msg)
 
         instance = cls(new_db=True, **kwargs)
-        instance.create_schema(schema=schema)
+        instance.create_schema(schema=schema, version=None)
 
         # Temporarily disable foreign key constraints for bulk XML import
         instance._db.execute("PRAGMA foreign_keys = OFF")
@@ -354,7 +355,7 @@ class PlexosDB:
         state : int | None, optional
             State value, by default None
         """
-        if not self.check_data_id_exist(data_id):
+        if not checks_module.check_data_id_exist(self, data_id):
             msg = "data_id not found on t_data. Check that data_id for  the property was added correctly."
             raise NotFoundError(msg)
 
@@ -400,7 +401,7 @@ class PlexosDB:
         >>> db.add_category("mycategory", ClassEnum.Generator)
         1
         """
-        if self.check_category_exists(class_enum, name):
+        if checks_module.check_category_exists(self, class_enum, name):
             logger.debug("Category `{}` for `{}` already exist. Returning id instead.", name, class_enum)
             return self.get_category_id(class_enum, name)
 
@@ -752,7 +753,7 @@ class PlexosDB:
         """
         category_id = None
         category = category or "-"
-        if not self.check_category_exists(class_enum, category):
+        if not checks_module.check_category_exists(self, class_enum, category):
             category_id = self.add_category(class_enum, category)
 
         category_id = category_id or self.get_category_id(class_enum, category)
@@ -820,7 +821,7 @@ class PlexosDB:
         category_id = None
         category = category or "-"
 
-        if not self.check_category_exists(class_enum, category):
+        if not checks_module.check_category_exists(self, class_enum, category):
             category_id = self.add_category(class_enum, category)
 
         class_id = self.get_class_id(class_enum)
@@ -1133,7 +1134,7 @@ class PlexosDB:
         1
         """
         # Ensure object exist
-        if not self.check_object_exists(object_class_enum, object_name):
+        if not checks_module.check_object_exists(self, object_class_enum, object_name):
             msg = f"Object = `{object_name}` does not exist on the system. "
             f"Check available objects for class `{object_class_enum}` using `list_objects_by_class`"
             raise NotFoundError(msg)
@@ -1174,7 +1175,7 @@ class PlexosDB:
         data_id = self._db.last_insert_rowid()
 
         if scenario is not None:
-            if not self.check_scenario_exists(scenario):
+            if not checks_module.check_scenario_exists(self, scenario):
                 scenario_id = self.add_scenario(scenario)
             else:
                 scenario_id = self.get_scenario_id(scenario)
@@ -1217,7 +1218,7 @@ class PlexosDB:
         >>> db.list_scenarios()
         [("TestScenario")]
         """
-        if self.check_scenario_exists(name):
+        if checks_module.check_scenario_exists(self, name):
             msg = f"Scenario = `{name}` exist on the database. "
             "Select a different name."
             raise NameError(msg)
@@ -1397,527 +1398,6 @@ class PlexosDB:
     def backup_database(self, target_path: str | Path) -> None:
         """Backup the in-memory database to a file."""
         raise NotImplementedError  # pragma: no cover
-
-    def check_attribute_exists(
-        self, attribute_name: str, /, *, object_name: str, object_class: ClassEnum
-    ) -> bool:
-        """Check if an attribute exists for a specific object."""
-        raise NotImplementedError  # pragma: no cover
-
-    def check_category_exists(self, class_enum: ClassEnum, name: str) -> bool:
-        """Check if a category exists for a specific class.
-
-        Determines whether a category with the given name exists for the specified class.
-
-        Parameters
-        ----------
-        class_enum : ClassEnum
-            Class enumeration to check the category for
-        name : str
-            Name of the category to check
-
-        Returns
-        -------
-        bool
-            True if the category exists, False otherwise
-
-        Raises
-        ------
-        NotFoundError
-            If class_enum does not exist in the database. This indicates a programming
-            error - you cannot check categories for a non-existent class.
-
-        See Also
-        --------
-        get_class_id : Get the ID for a class
-        add_category : Add a new category
-        check_class_exists : Check if a class exists
-
-        Examples
-        --------
-        >>> db = PlexosDB()
-        >>> db.create_schema()
-        >>> db.add_category(ClassEnum.Generator, "my_category")
-        >>> db.check_category_exists(ClassEnum.Generator, "my_category")
-        True
-        >>> db.check_category_exists(ClassEnum.Generator, "nonexistent")
-        False
-        """
-        # Validate class exists first
-        if not self.check_class_exists(class_enum):
-            msg = (
-                f"Class '{class_enum}' does not exist. "
-                "Cannot check category for non-existent class. "
-                "Use `list_classes()` to see available classes."
-            )
-            raise NotFoundError(msg)
-
-        query = f"SELECT 1 FROM {Schema.Categories.name} WHERE name = ? AND class_id = ?"
-        class_id = self.get_class_id(class_enum)
-        return bool(self._db.query(query, (name, class_id)))
-
-    def check_class_exists(self, class_enum: ClassEnum) -> bool:
-        """Check if a class exists in the database.
-
-        Determines whether a class with the given enumeration exists in the schema.
-
-        Parameters
-        ----------
-        class_enum : ClassEnum
-            Class enumeration to check
-
-        Returns
-        -------
-        bool
-            True if the class exists, False otherwise
-
-        See Also
-        --------
-        get_class_id : Get the ID for a class
-        list_classes : List all available classes
-
-        Examples
-        --------
-        >>> db = PlexosDB()
-        >>> db.create_schema()
-        >>> db.check_class_exists(ClassEnum.Generator)
-        True
-        >>> db.check_class_exists(ClassEnum.Generator)
-        True
-        """
-        query = f"SELECT 1 FROM {Schema.Class.name} WHERE name = ?"
-        return bool(self._db.query(query, (class_enum,)))
-
-    def check_collection_exists(
-        self,
-        collection_enum: CollectionEnum,
-        /,
-        *,
-        parent_class: ClassEnum | None = None,
-        child_class: ClassEnum | None = None,
-    ) -> bool:
-        """Check if a collection exists in the database.
-
-        Determines whether a collection with the given enumeration exists, optionally
-        filtered by parent and/or child class.
-
-        Parameters
-        ----------
-        collection_enum : CollectionEnum
-            Collection enumeration to check
-        parent_class : ClassEnum | None, optional
-            Parent class enumeration to filter by, by default None
-        child_class : ClassEnum | None, optional
-            Child class enumeration to filter by, by default None
-
-        Returns
-        -------
-        bool
-            True if the collection exists (matching all specified criteria), False otherwise
-
-        Raises
-        ------
-        NotFoundError
-            If parent_class or child_class is specified but does not exist in the database.
-            This indicates a programming error - you cannot search for a collection
-            associated with a non-existent class.
-
-        See Also
-        --------
-        get_collection_id : Get the ID for a collection
-        list_collections : List all available collections
-        check_class_exists : Check if a class exists
-
-        Notes
-        -----
-        The method returns False only when the collection itself doesn't exist or doesn't
-        match the specified parent/child class criteria. If you explicitly pass a parent_class
-        or child_class that doesn't exist, it raises NotFoundError because this is a
-        programming error - you cannot look for a collection for a non-existing class.
-
-        Examples
-        --------
-        >>> db = PlexosDB()
-        >>> db.create_schema()
-        >>> db.check_collection_exists(CollectionEnum.Generators)
-        True
-        >>> db.check_collection_exists(
-        ...     CollectionEnum.Generators, parent_class=ClassEnum.System, child_class=ClassEnum.Generator
-        ... )
-        True
-        >>> # This returns False - collection exists but not for this combination
-        >>> db.check_collection_exists(CollectionEnum.Generators, parent_class=ClassEnum.Region)
-        False
-        >>> # This raises NotFoundError - the class itself doesn't exist
-        >>> db.check_collection_exists(CollectionEnum.Generators, parent_class=ClassEnum.InvalidClass)
-        NotFoundError: Parent class 'InvalidClass' does not exist
-        """
-        conditions = ["name = ?"]
-        params: list[str | int] = [str(collection_enum)]
-
-        if parent_class and not self.check_class_exists(parent_class):
-            msg = (
-                f"Parent class '{parent_class}' does not exist. "
-                "Cannot search for collection with non-existent parent class. "
-                "Use `list_classes()` to see available classes."
-            )
-            raise NotFoundError(msg)
-
-        if parent_class:
-            parent_class_id = self.get_class_id(parent_class)
-            conditions.append("parent_class_id = ?")
-            params.append(parent_class_id)
-
-        if child_class is not None and not self.check_class_exists(child_class):
-            msg = (
-                f"Child class '{child_class}' does not exist. "
-                "Cannot search for collection with non-existent child class. "
-                "Use `list_classes()` to see available classes."
-            )
-            raise NotFoundError(msg)
-
-        if child_class:
-            child_class_id = self.get_class_id(child_class)
-            conditions.append("child_class_id = ?")
-            params.append(child_class_id)
-
-        where_clause = " AND ".join(conditions)
-        query = f"SELECT 1 FROM {Schema.Collection.name} WHERE {where_clause}"
-        return bool(self._db.query(query, tuple(params)))
-
-    def check_data_id_exist(self, data_id: int) -> bool:
-        """Check that a data id is present on t_data table."""
-        query = "SELECT 1 FROM t_data where data_id = ?"
-        return bool(self.query(query, (data_id,)))
-
-    def check_tag_exists(self, data_id: int, object_id: int) -> bool:
-        """Check if a tag exists linking a data record to an object.
-
-        Parameters
-        ----------
-        data_id : int
-            The data ID to check for
-        object_id : int
-            The object ID to check for
-
-        Returns
-        -------
-        bool
-            True if a tag exists with the given data_id and object_id, False otherwise
-        """
-        query = "SELECT 1 FROM t_tag WHERE data_id = ? AND object_id = ?"
-        return bool(self.query(query, (data_id, object_id)))
-
-    def check_membership_exists(
-        self,
-        parent_object_name: str,
-        child_object_name: str,
-        /,
-        *,
-        parent_class: ClassEnum,
-        child_class: ClassEnum,
-        collection: CollectionEnum,
-    ) -> bool:
-        """Check if a membership exists between two objects.
-
-        Determines whether a membership relationship exists between the specified
-        parent and child objects within the given collection.
-
-        Parameters
-        ----------
-        parent_object_name : str
-            Name of the parent object
-        child_object_name : str
-            Name of the child object
-        parent_class : ClassEnum
-            Class enumeration of the parent object
-        child_class : ClassEnum
-            Class enumeration of the child object
-        collection : CollectionEnum
-            Collection enumeration defining the relationship type
-
-        Returns
-        -------
-        bool
-            True if the membership exists, False otherwise
-
-        See Also
-        --------
-        add_membership : Add a membership between two objects
-        get_membership_id : Get the ID for an existing membership
-        get_object_id : Get the ID for an object
-        get_collection_id : Get the ID for a collection
-
-        Examples
-        --------
-        >>> db = PlexosDB()
-        >>> db.create_schema()
-        >>> db.add_object(ClassEnum.Region, "Region1")
-        >>> db.add_object(ClassEnum.Node, "Node1")
-        >>> db.add_membership(
-        ...     parent_class_enum=ClassEnum.Region,
-        ...     child_class_enum=ClassEnum.Node,
-        ...     parent_object_name="Region1",
-        ...     child_object_name="Node1",
-        ...     collection_enum=CollectionEnum.ReferenceNode,
-        ... )
-        >>> db.check_membership_exists(
-        ...     "Region1",
-        ...     "Node1",
-        ...     parent_class=ClassEnum.Region,
-        ...     child_class=ClassEnum.Node,
-        ...     collection=CollectionEnum.ReferenceNode,
-        ... )
-        True
-        >>> db.check_membership_exists(
-        ...     "Region1",
-        ...     "Node100",
-        ...     parent_class=ClassEnum.Region,
-        ...     child_class=ClassEnum.Node,
-        ...     collection=CollectionEnum.ReferenceNode,
-        ... )
-        False
-        """
-        # Validate classes and collection exist - raise NotFoundError if not
-        # This is a programming error if passing non-existent classes
-        if not self.check_class_exists(parent_class):
-            msg = (
-                f"Parent class '{parent_class}' does not exist. "
-                "Cannot check membership for non-existent parent class. "
-                "Use `list_classes()` to see available classes."
-            )
-            raise NotFoundError(msg)
-
-        if not self.check_class_exists(child_class):
-            msg = (
-                f"Child class '{child_class}' does not exist. "
-                "Cannot check membership for non-existent child class. "
-                "Use `list_classes()` to see available classes."
-            )
-            raise NotFoundError(msg)
-
-        if not self.check_collection_exists(collection, parent_class=parent_class, child_class=child_class):
-            msg = (
-                f"Collection '{collection}' does not exist for "
-                f"parent_class={parent_class} and child_class={child_class}. "
-                "Check available collections using `list_collections()`"
-            )
-            raise NotFoundError(msg)
-
-        # Now try to get object IDs - if objects don't exist, return False
-        # (that's what we're checking for)
-        parent_object_id = self.get_object_id(parent_class, parent_object_name)
-        child_object_id = self.get_object_id(child_class, child_object_name)
-        collection_id = self.get_collection_id(collection, parent_class, child_class)
-
-        query = """
-        SELECT 1 FROM t_membership
-        WHERE parent_object_id = ?
-        AND child_object_id = ?
-        AND collection_id = ?
-        """
-        result = bool(self._db.query(query, (parent_object_id, child_object_id, collection_id)))
-        return bool(result)
-
-    def check_object_exists(
-        self, class_enum: ClassEnum, /, name: str, *, category: str | None = None
-    ) -> bool:
-        """Check if an object exists in the database.
-
-        Determines whether an object with the given name and class exists,
-        optionally filtered by category.
-
-        Parameters
-        ----------
-        class_enum : ClassEnum
-            Class enumeration of the object
-        name : str
-            Name of the object to check
-        category : str | None, optional
-            Category name to filter by, by default None
-
-        Returns
-        -------
-        bool
-            True if the object exists (and matches category if specified), False otherwise
-
-        Raises
-        ------
-        NotFoundError
-            If class_enum does not exist in the database. This indicates a programming
-            error - you cannot check objects for a non-existent class.
-
-        See Also
-        --------
-        get_class_id : Get the ID for a class
-        get_object_id : Get the ID for an object
-        add_object : Add an object to the database
-        check_class_exists : Check if a class exists
-        check_category_exists : Check if a category exists
-
-        Examples
-        --------
-        >>> db = PlexosDB()
-        >>> db.create_schema()
-        >>> db.add_object(ClassEnum.Generator, "TestObject")
-        >>> db.check_object_exists(ClassEnum.Generator, "TestObject")
-        True
-        >>> db.check_object_exists(ClassEnum.Generator, "NonExistent")
-        False
-        >>> # Check with category
-        >>> db.add_object(ClassEnum.Generator, "Gen2", category="Thermal")
-        >>> db.check_object_exists(ClassEnum.Generator, "Gen2", category="Thermal")
-        True
-        >>> db.check_object_exists(ClassEnum.Generator, "Gen2", category="Hydro")
-        False
-        """
-        if not self.check_class_exists(class_enum):
-            msg = (
-                f"Class '{class_enum}' does not exist. "
-                "Cannot check object for non-existent class. "
-                "Use `list_classes()` to see available classes."
-            )
-            raise NotFoundError(msg)
-
-        class_id = self.get_class_id(class_enum)
-
-        # Build query based on whether category is specified
-        if category is None:
-            query = f"SELECT 1 FROM {Schema.Objects.name} WHERE name = ? AND class_id = ?"
-            params: tuple[str, int] | tuple[str, int, str] = (name, class_id)
-        else:
-            # If category is specified, join with categories table
-            query = f"""
-            SELECT 1 FROM {Schema.Objects.name} obj
-            JOIN {Schema.Categories.name} cat ON obj.category_id = cat.category_id
-            WHERE obj.name = ? AND obj.class_id = ? AND cat.name = ?
-            """
-            params = (name, class_id, category)
-
-        return bool(self._db.query(query, params))
-
-    def check_property_exists(
-        self,
-        collection_enum: CollectionEnum,
-        /,
-        object_class: ClassEnum,
-        property_names: str | Iterable[str],
-        *,
-        parent_class: ClassEnum | None = None,
-    ) -> bool:
-        """Check if properties exist for a specific collection and class.
-
-        Verifies that all specified property names are valid for the given collection and class.
-
-        Parameters
-        ----------
-        collection_enum : CollectionEnum
-            Collection enumeration the properties should belong to
-        object_class : ClassEnum
-            Class enumeration of the object
-        property_names : str | Iterable[str]
-            Property name or names to check
-        parent_class : ClassEnum | None, optional
-            Class enumeration of the parent object, by default None
-
-        Returns
-        -------
-        bool
-            True if all properties exist, False otherwise
-
-        See Also
-        --------
-        list_valid_properties : Get list of valid property names for a collection
-        normalize_names : Normalize property names for checking
-
-        Notes
-        -----
-        If any property in the list is invalid, the function returns False and logs
-        the invalid properties.
-
-        Examples
-        --------
-        >>> db = PlexosDB()
-        >>> db.create_schema()
-        >>> db.check_property_exists(CollectionEnum.Generators, ClassEnum.Generator, "Max Capacity")
-        True
-        >>> db.check_property_exists(CollectionEnum.Generators, ClassEnum.Generator, ["Invalid Property"])
-        False
-        """
-        # Validate parent class exists (if specified)
-        if parent_class and not self.check_class_exists(parent_class):
-            msg = (
-                f"Parent class '{parent_class}' does not exist. "
-                "Cannot check properties for non-existent parent class. "
-                "Use `list_classes()` to see available classes."
-            )
-            raise NotFoundError(msg)
-
-        # Validate object class exists
-        if not self.check_class_exists(object_class):
-            msg = (
-                f"Child class '{object_class}' does not exist. "
-                "Cannot check properties for non-existent child class. "
-                "Use `list_classes()` to see available classes."
-            )
-            raise NotFoundError(msg)
-
-        # Validate collection exists
-        if not self.check_collection_exists(
-            collection_enum, parent_class=parent_class or ClassEnum.System, child_class=object_class
-        ):
-            msg = (
-                f"Collection '{collection_enum}' does not exist for "
-                f"parent_class={parent_class or ClassEnum.System} and child_class={object_class}. "
-                "Check available collections using `list_collections()`"
-            )
-            raise NotFoundError(msg)
-
-        property_names = normalize_names(property_names)
-        valid_props = self.list_valid_properties(
-            collection_enum,
-            parent_class_enum=parent_class or ClassEnum.System,
-            child_class_enum=object_class,
-        )
-        invalid = [prop for prop in property_names if prop not in valid_props]
-        if invalid:
-            logger.error("Invalid properties {} for collection {}", property_names, collection_enum)
-            return False
-        return True
-
-    def check_scenario_exists(self, name: str) -> bool:
-        """Check if a scenario exists in the database.
-
-        Determines whether a scenario with the given name exists.
-
-        Parameters
-        ----------
-        name : str
-            Name of the scenario to check
-
-        Returns
-        -------
-        bool
-            True if the scenario exists, False otherwise
-
-        See Also
-        --------
-        get_class_id : Get the ID for a class
-        ClassEnum.Scenario : Scenario class enumeration
-
-        Examples
-        --------
-        >>> db = PlexosDB()
-        >>> db.create_schema()
-        >>> db.add_object("Base Scenario", ClassEnum.Scenario)
-        >>> db.check_scenario_exists("Base Scenario")
-        True
-        >>> db.check_scenario_exists("Nonexistent Scenario")
-        False
-        """
-        query = f"SELECT 1 FROM {Schema.Objects.name} WHERE name = ? AND class_id = ?"
-        class_id = self.get_class_id(ClassEnum.Scenario)
-        return bool(self._db.query(query, (name, class_id)))
 
     def copy_object(
         self,
@@ -2110,10 +1590,64 @@ class PlexosDB:
         """Create a new scenario with specific property values for an object."""
         raise NotImplementedError  # pragma: no cover
 
+    def _seed_default_model_data(self) -> None:
+        """Seed minimal lookup data so object workflows work on a fresh schema.
+
+        This bootstrap inserts class definitions, System->child collections, and a
+        canonical System object. It only runs when t_class is empty.
+        """
+        existing_classes = self.query("SELECT COUNT(*) FROM t_class")[0][0]
+        if existing_classes:
+            return
+
+        with self._db.transaction():
+            # Seed classes from the enum values used by API checks.
+            for class_id, class_enum in enumerate(ClassEnum, start=1):
+                self._db.execute(
+                    "INSERT INTO t_class(class_id, name, description, is_enabled) VALUES (?, ?, ?, 1)",
+                    (class_id, class_enum.value, f"{class_enum.value} class"),
+                )
+
+            system_class_id = self.get_class_id(ClassEnum.System)
+
+            # Seed default System->Class collections for add_object/get_default_collection.
+            collection_id = 1
+            for child_class in ClassEnum:
+                if child_class == ClassEnum.System:
+                    continue
+
+                try:
+                    collection = get_default_collection(child_class)
+                except KeyError:
+                    continue
+
+                child_class_id = self.get_class_id(child_class)
+                insert_collection_query = (
+                    "INSERT INTO t_collection("
+                    "collection_id, parent_class_id, child_class_id, name, is_enabled"
+                    ") VALUES (?, ?, ?, ?, 1)"
+                )
+                self._db.execute(
+                    insert_collection_query,
+                    (collection_id, system_class_id, child_class_id, collection.value),
+                )
+                collection_id += 1
+
+            # Seed default category and canonical System object used as membership parent.
+            self._db.execute(
+                "INSERT INTO t_category(category_id, class_id, name, rank) VALUES (?, ?, ?, ?)",
+                (1, system_class_id, "-", 1),
+            )
+            self._db.execute(
+                "INSERT INTO t_object(object_id, name, class_id, category_id, GUID) VALUES (?, ?, ?, ?, ?)",
+                (1, "System", system_class_id, 1, str(uuid.uuid4())),
+            )
+
     def create_schema(
         self,
         schema: str | None = None,
         *,
+        seed_defaults: bool = False,
         version: int | str | tuple[int, ...] | None = None,
     ) -> bool:
         """Create database schema from SQL script.
@@ -2127,6 +1661,9 @@ class PlexosDB:
         schema : str | None, optional
             Direct SQL schema content to execute. If None, uses the default schema,
             by default None
+        seed_defaults : bool, optional
+            If True, seed minimal classes/collections/System object after schema creation
+            so workflows like add_object work without loading XML, by default False
         version : int | str | tuple[int, ...] | None, optional
             PLEXOS major version used to preload the matching master template
             from ``plexosdb/config``. Supported versions are 9, 10, 11, and 12.
@@ -2145,12 +1682,35 @@ class PlexosDB:
         Notes
         -----
         This is typically the first method called after initializing a new PlexosDB
-        instance, as it sets up all the required tables for the database.
+        instance, as it sets up the required tables for the database.
+
+        Calling this method with defaults creates schema structure only; it does
+        not seed lookup/model rows needed by higher-level object workflows.
+        Use ``seed_defaults=True`` (or load XML / provide seeded custom schema)
+        when you want methods like ``add_object`` to work immediately.
 
         Examples
         --------
         >>> db = PlexosDB()
         >>> db.create_schema()
+        True
+
+        >>> db = PlexosDB()
+        >>> db.create_schema(seed_defaults=True)
+        True
+
+        >>> db = PlexosDB()
+        >>> db.create_schema(version="11.0")
+        True
+
+        >>> custom_schema = '''
+        ... CREATE TABLE IF NOT EXISTS t_config (
+        ...     element TEXT PRIMARY KEY,
+        ...     value TEXT
+        ... );
+        ... '''
+        >>> db = PlexosDB()
+        >>> db.create_schema(schema=custom_schema)
         True
         """
         existing_tables = set(self._db.tables)
@@ -2166,6 +1726,9 @@ class PlexosDB:
             creation_status = self._db.executescript(schema_sql)
             if not creation_status:
                 return False
+
+        if seed_defaults:
+            self._seed_default_model_data()
 
         if version is None:
             return True
@@ -2321,7 +1884,7 @@ class PlexosDB:
         >>> db.delete_property(ClassEnum.Generator, "Generator1", property_name="Max Capacity")
         """
         # Ensure object exists
-        if not self.check_object_exists(object_class, object_name):
+        if not checks_module.check_object_exists(self, object_class, object_name):
             msg = f"Object = `{object_name}` does not exist for class `{object_class}`."
             raise NotFoundError(msg)
 
@@ -2360,7 +1923,7 @@ class PlexosDB:
         # Build the delete query
         if scenario is not None:
             # Delete only property data associated with the specific scenario
-            if not self.check_scenario_exists(scenario):
+            if not checks_module.check_scenario_exists(self, scenario):
                 msg = f"Scenario '{scenario}' does not exist."
                 raise NotFoundError(msg)
 
@@ -2982,13 +2545,14 @@ class PlexosDB:
         if not collection_enum:
             collection_enum = get_default_collection(class_enum)
         if category:
-            if not self.check_category_exists(class_enum, category):
+            if not checks_module.check_category_exists(self, class_enum, category):
                 raise KeyError
             filters += " AND cat.name = ?"
             params.append(category)
 
         if property_names:
-            if not self.check_property_exists(
+            if not checks_module.check_property_exists(
+                self,
                 collection_enum,
                 class_enum,
                 property_names,
@@ -3033,6 +2597,8 @@ class PlexosDB:
         parent_class_enum: ClassEnum | None = None,
         collection_enum: CollectionEnum | None = None,
         category: str | None = None,
+        scenario: str | Iterable[str] | None = None,
+        scenario_category: str | Iterable[str] | None = None,
     ) -> list[PropertyRecord]:
         """Retrieve properties for a specific object.
 
@@ -3055,6 +2621,10 @@ class PlexosDB:
             (if not specified, the default collection for the class is used)
         category : str | None, optional
             Category to filter by, by default None
+        scenario : str | Iterable[str] | None, optional
+            Scenario name(s) to filter properties by, by default None
+        scenario_category : str | Iterable[str] | None, optional
+            Scenario category name(s) to filter properties by, by default None
 
         Returns
         -------
@@ -3091,7 +2661,7 @@ class PlexosDB:
         >>> properties[0]["value"]
         100.0
         """
-        if not self.check_object_exists(class_enum, name):
+        if not checks_module.check_object_exists(self, class_enum, name):
             msg = f"Object = `{name}` does not exist in class = {class_enum}. "
             msg += "See available objects with list_objects_by_class"
             raise NotFoundError(msg)
@@ -3108,6 +2678,8 @@ class PlexosDB:
                 collection=collection_enum,
                 parent_class=parent_class_enum,
                 category=category,
+                scenario=scenario,
+                scenario_category=scenario_category,
             )
         )
 
@@ -3412,6 +2984,8 @@ class PlexosDB:
         parent_class: ClassEnum | None = None,
         collection: CollectionEnum | None = None,
         category: str | None = None,
+        scenario: str | Iterable[str] | None = None,
+        scenario_category: str | Iterable[str] | None = None,
         batch_size: int = 1000,
     ) -> Iterator[PropertyRecord]:
         """Iterate through properties with chunked processing to handle large datasets efficiently.
@@ -3433,6 +3007,12 @@ class PlexosDB:
             Parent class enumeration for filtering properties, defaults to ClassEnum.System
         collection : CollectionEnum | None, optional
             Collection enumeration to filter properties by
+        category : str | None, optional
+            Category name to filter objects by
+        scenario : str | Iterable[str] | None, optional
+            Scenario name(s) to filter property rows by
+        scenario_category : str | Iterable[str] | None, optional
+            Scenario category name(s) to filter property rows by
         batch_size : int, optional
             Number of records to process in each database query chunk, by default 1000
 
@@ -3453,18 +3033,24 @@ class PlexosDB:
             If specified category does not exist
         """
         conditions: list[str] = []
+        query_params: list[Any] = []
 
-        if class_enum and self.check_class_exists(class_enum):
+        if class_enum and checks_module.check_class_exists(self, class_enum):
             conditions.append(f"child_class.name = '{class_enum}'")
 
-        if parent_class and self.check_class_exists(parent_class):
+        if parent_class and checks_module.check_class_exists(self, parent_class):
             conditions.append(f"parent_class.name = '{parent_class}'")
 
         if (
             collection
             and parent_class
             and class_enum
-            and self.check_collection_exists(collection, parent_class=parent_class, child_class=class_enum)
+            and checks_module.check_collection_exists(
+                self,
+                collection,
+                parent_class=parent_class,
+                child_class=class_enum,
+            )
         ):
             collection_id = self.get_collection_id(collection, parent_class, class_enum)
             conditions.append(f"membership.collection_id = {collection_id}")
@@ -3490,13 +3076,28 @@ class PlexosDB:
             joined = ", ".join(f"'{p}'" for p in props)
             conditions.append(f"property.name IN ({joined})")
 
-        if category and class_enum and not self.check_category_exists(class_enum, category):
+        if category and class_enum and not checks_module.check_category_exists(self, class_enum, category):
             msg = f"Category '{category}' does not exist for class {class_enum}."
             raise NotFoundError(msg)
 
+        if scenario:
+            scenarios = normalize_names(scenario)
+            placeholders = ", ".join("?" for _ in scenarios)
+            conditions.append(f"scenario.name IN ({placeholders})")
+            query_params.extend(scenarios)
+
+        if scenario_category:
+            scenario_categories = normalize_names(scenario_category)
+            placeholders = ", ".join("?" for _ in scenario_categories)
+            conditions.append(f"scenario.category_name IN ({placeholders})")
+            query_params.extend(scenario_categories)
+
         where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
         query = Template(PROPERTY_QUERY).safe_substitute(where_clause=where_clause)
-        yield from cast(Iterator[PropertyRecord], self._db.iter_dicts(query, batch_size=batch_size))
+        params = tuple(query_params) if query_params else None
+        yield from cast(
+            Iterator[PropertyRecord], self._db.iter_dicts(query, params=params, batch_size=batch_size)
+        )
 
     def list_attributes(self, class_enum: ClassEnum) -> list[str]:
         """Get all attributes for a specific class.
@@ -3831,7 +3432,7 @@ class PlexosDB:
             query = f"SELECT name FROM {Schema.Objects.name} WHERE class_id = ? ORDER BY name"
             params = (class_id,)
         else:
-            if not self.check_category_exists(class_enum, category):
+            if not checks_module.check_category_exists(self, class_enum, category):
                 msg = f"Category '{category}' does not exist for class {class_enum}."
                 raise NotFoundError(msg)
 
@@ -4478,7 +4079,7 @@ class PlexosDB:
     ) -> list[str]:
         """Validate objects exist and return filtered list of valid names."""
         names = normalize_names(object_names)
-        valid_names = [n for n in names if self.check_object_exists(class_enum, n)]
+        valid_names = [n for n in names if checks_module.check_object_exists(self, class_enum, n)]
         if not valid_names:
             msg = (
                 f"None of the objects {names} exist in class {class_enum}. "
@@ -4497,10 +4098,19 @@ class PlexosDB:
     ) -> list[str]:
         """Validate properties exist for collection and return normalized list."""
         props = normalize_names(property_names)
-        if not self.check_property_exists(collection, class_enum, props, parent_class=parent_class):
+        if not checks_module.check_property_exists(
+            self,
+            collection,
+            class_enum,
+            props,
+            parent_class=parent_class,
+        ):
             msg = (
                 f"Invalid property {props} for collection={collection}. "
                 "Use `list_valid_properties()` to check valid properties."
             )
             raise NameError(msg)
         return props
+
+
+checks_module.register_plexosdb_check_methods(PlexosDB)

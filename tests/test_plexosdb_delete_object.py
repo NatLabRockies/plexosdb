@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
+import plexosdb.checks as checks_module
 
 if TYPE_CHECKING:
     from plexosdb.db import PlexosDB
@@ -26,7 +27,7 @@ def test_delete_object_with_no_properties(db_base: PlexosDB, caplog):
 
     db.delete_object(object_class, name=object_name)
 
-    assert not db.check_object_exists(object_class, name=object_name)
+    assert not checks_module.check_object_exists(db, object_class, name=object_name)
     assert object_name not in db.list_objects_by_class(object_class)
     assert len(db.list_objects_by_class(object_class)) == 1
 

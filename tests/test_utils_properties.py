@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 import pytest
+import plexosdb.checks as checks_module
 
 if TYPE_CHECKING:
     from plexosdb import PlexosDB
@@ -123,7 +124,7 @@ def test_apply_scenario_tags_creates_scenario(db_with_topology: PlexosDB) -> Non
         apply_scenario_tags(db_with_topology, params, scenario="Test Scenario", chunksize=1000)
 
         # Verify scenario was created
-        scenario_exists = db_with_topology.check_scenario_exists("Test Scenario")
+        scenario_exists = checks_module.check_scenario_exists(db_with_topology, "Test Scenario")
         assert scenario_exists is True
 
 
@@ -599,7 +600,7 @@ def test_apply_scenario_tags_creates_new_scenario(db_with_topology: PlexosDB) ->
         apply_scenario_tags(db_with_topology, params, scenario="NewScenario", chunksize=1000)
 
         # Verify scenario was created
-        scenario_exists = db_with_topology.check_scenario_exists("NewScenario")
+        scenario_exists = checks_module.check_scenario_exists(db_with_topology, "NewScenario")
         assert scenario_exists is True
 
 
@@ -723,7 +724,7 @@ def test_apply_scenario_tags_empty_params(db_with_topology: PlexosDB) -> None:
         apply_scenario_tags(db_with_topology, [], scenario="EmptyTest", chunksize=1000)
 
         # Verify scenario was still created
-        scenario_exists = db_with_topology.check_scenario_exists("EmptyTest")
+        scenario_exists = checks_module.check_scenario_exists(db_with_topology, "EmptyTest")
         assert scenario_exists is True
 
 
