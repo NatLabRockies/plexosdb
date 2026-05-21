@@ -15,6 +15,9 @@ from loguru import logger
 from .enums import ClassEnum
 from .exceptions import NotFoundError
 
+SQLITE_INT64_MIN = -(2**63)
+SQLITE_INT64_MAX = 2**63 - 1
+
 if TYPE_CHECKING:
     from plexosdb import CollectionEnum, PlexosDB
     from plexosdb.db_manager import SQLiteManager
@@ -58,7 +61,12 @@ def validate_string(value: str) -> Any:
     if value is None:
         return None
     try:
-        return int(value)
+        parsed_int = int(value)
+        if SQLITE_INT64_MIN <= parsed_int <= SQLITE_INT64_MAX:
+            return parsed_int
+        # Keep oversized integers as strings to avoid sqlite3 OverflowError
+        # during executemany bindings.
+        return str(parsed_int)
     except ValueError:
         pass
     try:
@@ -71,10 +79,9 @@ def validate_string(value: str) -> Any:
         return False
     try:
         value = ast.literal_eval(value)
-    except:  # noqa: E722
+    except Exception:
         logger.trace("Could not parse {}", value)
-    finally:
-        return value
+    return value
 
 
 def no_space(a: str, b: str) -> int:
@@ -118,14 +125,14 @@ def get_sql_query(query_name: str) -> str:
     Parameters
     ----------
     query_name : str
-        Name of the query file to load from plexosdb.queries
+        Name of the query file to load from plexosdb.sql
 
     Returns
     -------
     str
         Content of the SQL query file as a string
     """
-    fpath = files("plexosdb.queries").joinpath(query_name)
+    fpath = files("plexosdb.sql").joinpath(query_name)
     return fpath.read_text(encoding="utf-8-sig")
 
 
@@ -604,10 +611,10 @@ def apply_scenario_tags(
     if scenario is None:
         return
 
-    if not db.check_scenario_exists(scenario):
-        scenario_id = db.add_scenario(scenario)
-    else:
+    try:
         scenario_id = db.get_scenario_id(scenario)
+    except NotFoundError:
+        scenario_id = db.add_scenario(scenario)
 
     if data_id_map is not None:
         tag_rows = [
@@ -833,6 +840,7 @@ def get_scenario_id(db: PlexosDB, scenario: str) -> int:
     int
         Scenario object ID
     """
-    if not db.check_scenario_exists(scenario):
+    try:
+        return db.get_scenario_id(scenario)
+    except NotFoundError:
         return db.add_scenario(scenario)
-    return db.get_scenario_id(scenario)
