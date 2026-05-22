@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
+import plexosdb.checks as checks_module
 
 if TYPE_CHECKING:
     from plexosdb import PlexosDB
@@ -33,7 +34,7 @@ def test_add_datafile_tag_to_property_succeeds(
     result: int = db_with_topology.add_datafile_tag(property_data_id, str(data_file))
 
     assert result is not None
-    assert db_with_topology.check_tag_exists(property_data_id, datafile_id)
+    assert checks_module.check_tag_exists(db_with_topology, property_data_id, datafile_id)
 
 
 def test_add_datafile_tag_with_description_succeeds(
@@ -60,7 +61,7 @@ def test_add_datafile_tag_with_description_succeeds(
     )
 
     assert result is not None
-    assert db_with_topology.check_tag_exists(property_data_id, datafile_id)
+    assert checks_module.check_tag_exists(db_with_topology, property_data_id, datafile_id)
 
 
 def test_add_datafile_tag_creates_link_between_property_and_datafile(
@@ -84,7 +85,7 @@ def test_add_datafile_tag_creates_link_between_property_and_datafile(
 
     db_with_topology.add_datafile_tag(property_data_id, str(data_file))
 
-    assert db_with_topology.check_tag_exists(property_data_id, datafile_id)
+    assert checks_module.check_tag_exists(db_with_topology, property_data_id, datafile_id)
 
 
 def test_add_datafile_tag_to_multiple_properties_succeeds(
@@ -110,8 +111,8 @@ def test_add_datafile_tag_to_multiple_properties_succeeds(
     db_with_topology.add_datafile_tag(thermal_prop_id, str(data_file))
     db_with_topology.add_datafile_tag(solar_prop_id, str(data_file))
 
-    assert db_with_topology.check_tag_exists(thermal_prop_id, datafile_id)
-    assert db_with_topology.check_tag_exists(solar_prop_id, datafile_id)
+    assert checks_module.check_tag_exists(db_with_topology, thermal_prop_id, datafile_id)
+    assert checks_module.check_tag_exists(db_with_topology, solar_prop_id, datafile_id)
 
 
 def test_add_datafile_tag_to_property_with_different_object_types(
@@ -138,7 +139,7 @@ def test_add_datafile_tag_to_property_with_different_object_types(
     result: int = db_with_topology.add_datafile_tag(node_prop_id, str(data_file))
 
     assert result is not None
-    assert db_with_topology.check_tag_exists(node_prop_id, datafile_id)
+    assert checks_module.check_tag_exists(db_with_topology, node_prop_id, datafile_id)
 
 
 def test_add_datafile_tag_with_nonexistent_property_data_id_fails(
