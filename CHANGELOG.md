@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.1](https://github.com/NatLabRockies/plexosdb/compare/v1.4.0...v1.4.1) (2026-05-22)
+
+
+### 🐛 Bug Fixes
+
+* copy_object date range metadata copying ([#143](https://github.com/NatLabRockies/plexosdb/issues/143)) ([b60e5ad](https://github.com/NatLabRockies/plexosdb/commit/b60e5ad21032f05702ed74bb345f3f4579e2379d))
+
 ## [1.4.0](https://github.com/NatLabRockies/plexosdb/compare/v1.3.4...v1.4.0) (2026-05-21)
 
 
