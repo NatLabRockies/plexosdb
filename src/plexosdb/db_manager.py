@@ -461,12 +461,16 @@ class SQLiteManager:
             raise ValueError(f"Use execute() for {first_word} statements, not query()")
 
     @overload
-    def query(self, query: str, params: None = None) -> list[tuple[_SQLiteParam, ...]]: ...
+    def query(self, query: str, params: None = None) -> list[tuple[_SQLiteParam, ...]]:
+        """Execute a read-only SQL query without bound parameters."""
+        ...
 
     @overload
     def query(
         self, query: str, params: tuple[_SQLiteParam, ...] | dict[str, _SQLiteParam]
-    ) -> list[tuple[_SQLiteParam, ...]]: ...
+    ) -> list[tuple[_SQLiteParam, ...]]:
+        """Execute a read-only SQL query with tuple or named parameters."""
+        ...
 
     def query(
         self, query: str, params: tuple[_SQLiteParam, ...] | dict[str, _SQLiteParam] | None = None
