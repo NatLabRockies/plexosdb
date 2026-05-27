@@ -1,13 +1,15 @@
 """SQLite database manager."""
 
 import sqlite3
-from collections.abc import Callable, Generator, Iterator
+from collections.abc import Callable, Generator, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Any, cast, overload
-
 from loguru import logger
+from pathlib import Path
+from types import TracebackType
+from typing import TypeAlias, cast, overload
+
+_SQLiteParam: TypeAlias = int | float | str | bytes | None
 
 
 @dataclass(slots=True)
@@ -219,7 +221,9 @@ class SQLiteManager:
             # Always null the connection reference
             self._con = None
 
-    def execute(self, query: str, params: tuple[Any, ...] | dict[str, Any] | None = None) -> bool:
+    def execute(
+        self, query: str, params: tuple[_SQLiteParam, ...] | dict[str, _SQLiteParam] | None = None
+    ) -> bool:
         """Execute a SQL statement that doesn't return results.
 
         Each execution is its own transaction unless used within a transaction context.
@@ -263,7 +267,9 @@ class SQLiteManager:
                 logger.error(f"Rollback error: {rb_error}")
             return False
 
-    def executemany(self, query: str, params_seq: list[tuple[Any, ...]] | list[dict[str, Any]]) -> bool:
+    def executemany(
+        self, query: str, params_seq: Sequence[tuple[_SQLiteParam, ...]] | Sequence[dict[str, _SQLiteParam]]
+    ) -> bool:
         """Execute a SQL statement with multiple parameter sets.
 
         Parameters
@@ -342,9 +348,9 @@ class SQLiteManager:
     def iter_query(
         self,
         query: str,
-        params: tuple[Any, ...] | dict[str, Any] | None = None,
+        params: tuple[_SQLiteParam, ...] | dict[str, _SQLiteParam] | None = None,
         batch_size: int = 1000,
-    ) -> Iterator[tuple[Any, ...]]:
+    ) -> Iterator[tuple[_SQLiteParam, ...]]:
         """Execute a read-only query and return an iterator of results.
 
         This is memory-efficient for large result sets. Use only for SELECT statements.
@@ -414,7 +420,7 @@ class SQLiteManager:
     def list_table_names(self) -> list[str]:
         """Return a list of current table names on the database."""
         sql = "SELECT name FROM sqlite_master WHERE type ='table'"
-        return [r[0] for r in self.fetchall(sql)]
+        return [cast(str, r[0]) for r in self.fetchall(sql)]
 
     def optimize(self) -> bool:
         """Run optimization routines on the database.
@@ -454,41 +460,30 @@ class SQLiteManager:
         if first_word in write_keywords:
             raise ValueError(f"Use execute() for {first_word} statements, not query()")
 
-    # Add generic type support for query results
     @overload
-    def query(self, query: str, params: None = None) -> list[tuple[Any, ...]]:
-        """Read-only queries without parameters use the default binding."""
-        ...
+    def query(self, query: str, params: None = None) -> list[tuple[_SQLiteParam, ...]]: ...
 
     @overload
-    def query(self, query: str, params: tuple[Any, ...] | dict[str, Any]) -> list[tuple[Any, ...]]:
-        """Read-only queries that bind positional or named parameters."""
-        ...
+    def query(
+        self, query: str, params: tuple[_SQLiteParam, ...] | dict[str, _SQLiteParam]
+    ) -> list[tuple[_SQLiteParam, ...]]: ...
 
     def query(
-        self, query: str, params: tuple[Any, ...] | dict[str, Any] | None = None
-    ) -> list[tuple[Any, ...]]:
-        """Execute a read-only query and return all results.
-
-        Note: This method should ONLY be used for SELECT statements.
-        For INSERT/UPDATE/DELETE, use execute() instead.
+        self, query: str, params: tuple[_SQLiteParam, ...] | dict[str, _SQLiteParam] | None = None
+    ) -> list[tuple[_SQLiteParam, ...]]:
+        """Execute a read-only SELECT query and return all results.
 
         Parameters
         ----------
         query : str
-            SQL query to execute (SELECT statements only)
+            SQL SELECT statement.
         params : tuple or dict, optional
-            Parameters to bind to the query
+            Parameters to bind to the query.
 
         Returns
         -------
-        list
-            Query results (tuples or named tuples based on initialization)
-
-        Raises
-        ------
-        sqlite3.Error
-            If a database error occurs
+        list[tuple]
+            All result rows.
         """
         self._validate_query_type(query)
         cursor = self.connection.cursor()
@@ -496,54 +491,19 @@ class SQLiteManager:
             cursor.execute(query, params or tuple())
             return cursor.fetchall()
         except sqlite3.Error:
-            # Let the caller handle database errors
             raise
         finally:
             cursor.close()
 
     def fetchall(
-        self, query: str, params: tuple[Any, ...] | dict[str, Any] | None = None
-    ) -> list[tuple[Any, ...]]:
-        """Execute a query and return all results as a list of rows.
-
-        This method is a standard DB-API style alias for query().
-
-        Parameters
-        ----------
-        query : str
-            SQL query to execute (SELECT statements only)
-        params : tuple or dict, optional
-            Parameters to bind to the query
-
-        Returns
-        -------
-        list
-            All rows (as tuples or named tuples based on row_factory setting)
-
-        Raises
-        ------
-        sqlite3.Error
-            If a database error occurs
-
-        See Also
-        --------
-        query : Equivalent method with PlexosDB-specific naming
-        fetchone : Get only the first row of results
-        fetchall_dict : Return results as dictionaries
-
-        Examples
-        --------
-        >>> db = SQLiteManager()
-        >>> db.execute("CREATE TABLE test (id INTEGER, name TEXT)")
-        >>> db.execute("INSERT INTO test VALUES (1, 'Alice')")
-        >>> db.fetchall("SELECT * FROM test")
-        [(1, 'Alice')]
-        """
+        self, query: str, params: tuple[_SQLiteParam, ...] | dict[str, _SQLiteParam] | None = None
+    ) -> list[tuple[_SQLiteParam, ...]]:
+        """Alias for query(); returns all rows as a list of tuples."""
         return self.query(query, params)
 
     def fetchall_dict(
-        self, query: str, params: tuple[Any, ...] | dict[str, Any] | None = None
-    ) -> list[dict[str, Any]]:
+        self, query: str, params: tuple[_SQLiteParam, ...] | dict[str, _SQLiteParam] | None = None
+    ) -> list[dict[str, _SQLiteParam]]:
         """Execute a query and return all results as a list of dictionaries.
 
         Parameters
@@ -555,7 +515,7 @@ class SQLiteManager:
 
         Returns
         -------
-        list[dict[str, Any]]
+        list[dict[str, _SQLiteParam]]
             All rows as dictionaries with column names as keys
 
         Raises
@@ -591,8 +551,11 @@ class SQLiteManager:
             cursor.close()
 
     def fetchmany(
-        self, query: str, size: int = 1000, params: tuple[Any, ...] | dict[str, Any] | None = None
-    ) -> list[tuple[Any, ...]]:
+        self,
+        query: str,
+        size: int = 1000,
+        params: tuple[_SQLiteParam, ...] | dict[str, _SQLiteParam] | None = None,
+    ) -> list[tuple[_SQLiteParam, ...]]:
         """Execute a query and return a specified number of rows.
 
         Parameters
@@ -640,7 +603,9 @@ class SQLiteManager:
         finally:
             cursor.close()
 
-    def fetchone(self, query: str, params: tuple[Any, ...] | dict[str, Any] | None = None) -> Any | None:
+    def fetchone(
+        self, query: str, params: tuple[_SQLiteParam, ...] | dict[str, _SQLiteParam] | None = None
+    ) -> tuple[_SQLiteParam, ...] | None:
         """Execute a query and return only the first result row.
 
         Parameters
@@ -688,8 +653,8 @@ class SQLiteManager:
             cursor.close()
 
     def fetchone_dict(
-        self, query: str, params: tuple[Any, ...] | dict[str, Any] | None = None
-    ) -> dict[str, Any] | None:
+        self, query: str, params: tuple[_SQLiteParam, ...] | dict[str, _SQLiteParam] | None = None
+    ) -> dict[str, _SQLiteParam] | None:
         """Execute a query and return only the first result row as a dictionary.
 
         Parameters
@@ -701,7 +666,7 @@ class SQLiteManager:
 
         Returns
         -------
-        dict[str, Any] or None
+        dict[str, _SQLiteParam] or None
             First row as dictionary with column names as keys, or None if no results
 
         Raises
@@ -740,9 +705,9 @@ class SQLiteManager:
     def iter_dicts(
         self,
         query: str,
-        params: tuple[Any, ...] | dict[str, Any] | None = None,
+        params: tuple[_SQLiteParam, ...] | dict[str, _SQLiteParam] | None = None,
         batch_size: int = 1000,
-    ) -> Iterator[dict[str, Any]]:
+    ) -> Iterator[dict[str, _SQLiteParam]]:
         """Execute a read-only query and yield results as dictionaries.
 
         This is memory-efficient for large result sets. Each row is returned
@@ -759,7 +724,7 @@ class SQLiteManager:
 
         Yields
         ------
-        dict[str, Any]
+        dict[str, _SQLiteParam]
             One database row at a time as a dictionary
 
         Raises
@@ -833,7 +798,7 @@ class SQLiteManager:
     def insert_records(
         self,
         table_name: str,
-        records: dict[str, Any] | list[dict[str, Any]],
+        records: dict[str, _SQLiteParam] | list[dict[str, _SQLiteParam]],
     ) -> bool:
         """Insert records into a table using dictionaries with column names as keys.
 
@@ -891,7 +856,10 @@ class SQLiteManager:
         return self
 
     def __exit__(
-        self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: Any
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
     ) -> None:
         """Automatically close connection when exiting context."""
         self.close()

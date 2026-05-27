@@ -8,12 +8,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from importlib.resources import files
 from itertools import islice
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 from loguru import logger
 
 from .enums import ClassEnum
 from .exceptions import NotFoundError
+from .types import DataIdMap, MetadataMap, PropValue, PropertyParams
 
 SQLITE_INT64_MIN = -(2**63)
 SQLITE_INT64_MAX = 2**63 - 1
@@ -27,14 +28,17 @@ if TYPE_CHECKING:
 class PreparedPropertiesResult:
     """Prepared inputs for bulk property insertion."""
 
-    params: list[tuple[int, int, Any]]
+    params: PropertyParams
     collection_properties: list[tuple[str, int]]
-    metadata_map: dict[tuple[int, int, Any, int], dict[str, Any]]
+    metadata_map: MetadataMap
     normalized_records: list[dict[str, Any]]
     deprecated_format_used: bool
 
 
-def batched(iterable: Iterable[Any], n: int) -> Iterator[tuple[Any, ...]]:
+_T = TypeVar("_T")
+
+
+def batched(iterable: Iterable[_T], n: int) -> Iterator[tuple[_T, ...]]:
     """Implement batched iterator.
 
     https://docs.python.org/3/library/itertools.html#itertools.batched
@@ -43,7 +47,7 @@ def batched(iterable: Iterable[Any], n: int) -> Iterator[tuple[Any, ...]]:
     return iter(lambda: tuple(islice(it, n)), ())
 
 
-def validate_string(value: str) -> Any:
+def validate_string(value: str) -> int | float | str | bool | None:
     """Validate string and convert it to python object.
 
     This function also tries to parse floats or ints.
@@ -64,9 +68,7 @@ def validate_string(value: str) -> Any:
         parsed_int = int(value)
         if SQLITE_INT64_MIN <= parsed_int <= SQLITE_INT64_MAX:
             return parsed_int
-        # Keep oversized integers as strings to avoid sqlite3 OverflowError
-        # during executemany bindings.
-        return str(parsed_int)
+        return value  # oversized integer: keep as string for SQLite safety
     except ValueError:
         pass
     try:
@@ -78,7 +80,7 @@ def validate_string(value: str) -> Any:
     if value == "false" or value == "FALSE":
         return False
     try:
-        value = ast.literal_eval(value)
+        return cast("int | float | str | bool | None", ast.literal_eval(value))
     except Exception:
         logger.trace("Could not parse {}", value)
     return value
@@ -111,12 +113,13 @@ def normalize_names(*args: str | Iterable[str]) -> list[str]:
     ValueError
         If the input is neither a string nor an iterable of strings
     """
-    names: Iterable[Any]
     if len(args) == 1 and hasattr(args[0], "__iter__") and not isinstance(args[0], str):
-        names = args[0]
-    else:
-        names = args
-    return list(set(str(name) for name in names if name is not None))
+        maybe_iter = args[0]
+        if not isinstance(maybe_iter, Iterable):
+            raise ValueError("Input must be a string or an iterable of strings")
+        return list({str(name) for name in maybe_iter if name is not None})
+
+    return list({str(name) for name in args if name is not None})
 
 
 def get_sql_query(query_name: str) -> str:
@@ -138,9 +141,9 @@ def get_sql_query(query_name: str) -> str:
 
 def prepare_sql_data_params(
     records: list[dict[str, float]],
-    memberships: list[dict[str, Any]],
+    memberships: list[dict[str, int | str]],
     property_mapping: list[tuple[str, int]],
-) -> list[tuple[int, int, Any]]:
+) -> PropertyParams:
     """Create list of tuples for data ingestion.
 
     Parameters
@@ -155,19 +158,24 @@ def prepare_sql_data_params(
 
     Returns
     -------
-    list[tuple[int, int, Any]]
+    list[tuple[int, int, PropValue]]
         List of tuples containing (membership_id, property_id, value)
         for database insertion
     """
     property_id_map = {prop: pid for prop, pid in property_mapping}
-    name_to_membership = {membership["name"]: membership["membership_id"] for membership in memberships}
-    return [
-        (name_to_membership[record["name"]], property_id_map[prop], value)
-        for record in records
-        if record["name"] in name_to_membership
-        for prop, value in record.items()
-        if prop != "name" and prop in property_id_map
-    ]
+    name_to_membership: dict[str, int] = {
+        cast(str, membership["name"]): cast(int, membership["membership_id"]) for membership in memberships
+    }
+    return cast(
+        PropertyParams,
+        [
+            (name_to_membership[cast(str, record["name"])], property_id_map[prop], value)
+            for record in records
+            if cast(str, record["name"]) in name_to_membership
+            for prop, value in record.items()
+            if prop != "name" and prop in property_id_map
+        ],
+    )
 
 
 def create_membership_record(
@@ -310,7 +318,71 @@ def plan_property_inserts(
 
 def _fetch_collection_properties(db: PlexosDB, *, collection_id: int) -> list[tuple[str, int]]:
     """Fetch property rows for a collection as (name, id) tuples."""
-    return db.query(f"select name, property_id from t_property where collection_id={collection_id}")
+    return cast(
+        list[tuple[str, int]],
+        db.query(f"select name, property_id from t_property where collection_id={collection_id}"),
+    )
+
+
+def _fetch_memberships(
+    db: PlexosDB,
+    *,
+    component_names: tuple[str, ...],
+    object_class: ClassEnum,
+    parent_class: ClassEnum,
+    collection: CollectionEnum,
+) -> list[tuple[Any, ...]] | list[dict[str, Any]]:
+    """Fetch memberships for component names under the requested hierarchy."""
+    if parent_class == ClassEnum.System:
+        try:
+            return db.get_memberships_system(
+                component_names,
+                object_class=object_class,
+                collection=collection,
+            )
+        except Exception as exc:
+            missing = ", ".join(sorted(name for name in component_names if name))
+            raise NotFoundError(
+                f"Objects not found: {missing}. Add them with `add_object` or `add_objects` before "
+                "adding properties."
+            ) from exc
+
+    collection_id = db.get_collection_id(
+        collection, parent_class_enum=parent_class, child_class_enum=object_class
+    )
+    parent_class_id = db.get_class_id(parent_class)
+    child_class_id = db.get_class_id(object_class)
+    placeholders = ",".join("?" for _ in component_names)
+    query = f"""
+        SELECT child_object.name, mem.membership_id
+        FROM t_membership AS mem
+        INNER JOIN t_object AS child_object ON child_object.object_id = mem.child_object_id
+        WHERE mem.parent_class_id = ?
+          AND mem.child_class_id = ?
+          AND mem.collection_id = ?
+          AND child_object.name IN ({placeholders})
+    """
+    params = (parent_class_id, child_class_id, collection_id, *component_names)
+    return db._db.fetchall(query, params)
+
+
+def _membership_entry(membership: tuple[Any, ...] | dict[str, Any]) -> tuple[str, int] | None:
+    """Parse a membership row into a validated (object_name, membership_id) pair."""
+    if isinstance(membership, dict):
+        object_name = membership["name"]
+        membership_id = membership["membership_id"]
+        if isinstance(object_name, str) and isinstance(membership_id, int):
+            return object_name, membership_id
+        return None
+
+    if (
+        isinstance(membership, tuple)
+        and len(membership) > 1
+        and isinstance(membership[0], str)
+        and isinstance(membership[1], int)
+    ):
+        return membership[0], membership[1]
+    return None
 
 
 def _resolve_membership_map(
@@ -326,38 +398,13 @@ def _resolve_membership_map(
     if not component_names:
         return {}
 
-    memberships: list[tuple[str, int]] | list[dict[str, Any]]
-    if parent_class == ClassEnum.System:
-        try:
-            memberships = db.get_memberships_system(
-                component_names,
-                object_class=object_class,
-                collection=collection,
-            )
-        except Exception as exc:
-            missing = ", ".join(sorted(name for name in component_names if name))
-            raise NotFoundError(
-                f"Objects not found: {missing}. Add them with `add_object` or `add_objects` before "
-                "adding properties."
-            ) from exc
-    else:
-        collection_id = db.get_collection_id(
-            collection, parent_class_enum=parent_class, child_class_enum=object_class
-        )
-        parent_class_id = db.get_class_id(parent_class)
-        child_class_id = db.get_class_id(object_class)
-        placeholders = ",".join("?" for _ in component_names)
-        query = f"""
-            SELECT child_object.name, mem.membership_id
-            FROM t_membership AS mem
-            INNER JOIN t_object AS child_object ON child_object.object_id = mem.child_object_id
-            WHERE mem.parent_class_id = ?
-              AND mem.child_class_id = ?
-              AND mem.collection_id = ?
-              AND child_object.name IN ({placeholders})
-        """
-        params: tuple[Any, ...] = (parent_class_id, child_class_id, collection_id, *component_names)
-        memberships = db._db.fetchall(query, params)
+    memberships = _fetch_memberships(
+        db,
+        component_names=component_names,
+        object_class=object_class,
+        parent_class=parent_class,
+        collection=collection,
+    )
 
     if not memberships:
         missing = ", ".join(sorted(name for name in component_names if name))
@@ -369,12 +416,11 @@ def _resolve_membership_map(
     name_to_membership: dict[str, int] = {}
     ambiguous_objects: set[str] = set()
     for membership in memberships:
-        if isinstance(membership, dict):
-            object_name = membership["name"]
-            membership_id = membership["membership_id"]
-        else:
-            object_name = membership[0]
-            membership_id = membership[1]
+        parsed_membership = _membership_entry(membership)
+        if parsed_membership is None:
+            continue
+
+        object_name, membership_id = parsed_membership
         existing_membership_id = name_to_membership.get(object_name)
         if existing_membership_id is not None and existing_membership_id != membership_id:
             ambiguous_objects.add(object_name)
@@ -490,10 +536,10 @@ def _build_property_rows(
     *,
     name_to_membership: dict[str, int],
     property_id_map: dict[str, int],
-) -> tuple[list[tuple[int, int, Any]], dict[tuple[int, int, Any, int], dict[str, Any]]]:
+) -> tuple[PropertyParams, MetadataMap]:
     """Build parameter tuples and metadata for normalized records."""
-    params: list[tuple[int, int, Any]] = []
-    metadata_map: dict[tuple[int, int, Any, int], dict[str, Any]] = {}
+    params: PropertyParams = []
+    metadata_map: MetadataMap = {}
 
     for record in normalized_records:
         membership_id = name_to_membership.get(record["name"])
@@ -523,10 +569,10 @@ def _build_property_rows(
 
 def insert_property_values(
     db: PlexosDB,
-    params: list[tuple[int, int, Any]],
+    params: PropertyParams,
     *,
-    metadata_map: dict[tuple[int, int, Any, int], dict[str, Any]] | None = None,
-) -> dict[tuple[int, int, Any, int], tuple[int, str]]:
+    metadata_map: MetadataMap | None = None,
+) -> DataIdMap:
     """Insert property data and return mapping of data IDs to object names.
 
     Parameters
@@ -571,9 +617,9 @@ def insert_property_values(
             chunk,
         )
         for mid, name in rows:
-            membership_to_name[mid] = name
+            membership_to_name[cast(int, mid)] = cast(str, name)
 
-    data_id_map: dict[tuple[int, int, Any, int], tuple[int, str]] = {}
+    data_id_map: DataIdMap = {}
     for i, (membership_id, property_id, value) in enumerate(params):
         data_id_map[(membership_id, property_id, value, i)] = (
             first_id + i,
@@ -588,12 +634,12 @@ def insert_property_values(
 
 def apply_scenario_tags(
     db: PlexosDB,
-    params: list[tuple[int, int, Any]],
+    params: PropertyParams,
     /,
     *,
     scenario: str,
     chunksize: int,
-    data_id_map: dict[tuple[int, int, Any, int], tuple[int, str]] | None = None,
+    data_id_map: DataIdMap | None = None,
 ) -> None:
     """Insert scenario tags for property data.
 
@@ -625,32 +671,32 @@ def apply_scenario_tags(
             )
             if key in data_id_map
         ]
-        for batch in batched(tag_rows, chunksize):
+        for tag_batch in batched(tag_rows, chunksize):
             db._db.executemany(
                 "INSERT INTO t_tag(data_id, object_id) VALUES (?, ?)",
-                list(batch),
+                list(tag_batch),
             )
     else:
-        for batch in batched(params, chunksize):
+        for data_batch in batched(params, chunksize):
             scenario_query = f"""
                 INSERT into t_tag(data_id, object_id)
                 SELECT d.data_id, {scenario_id}
                 FROM t_data d
                 WHERE d.membership_id = ? AND d.property_id = ? AND d.value = ?
             """
-            db._db.executemany(scenario_query, list(batch))
+            db._db.executemany(scenario_query, list(data_batch))
 
 
 def insert_property_texts(
     db: PlexosDB,
-    params: list[tuple[int, int, Any]],
+    params: PropertyParams,
     /,
     *,
-    data_id_map: dict[tuple[int, int, Any, int], tuple[int, str]],
+    data_id_map: DataIdMap,
     records: list[dict[str, Any]],
     field_name: str,
     text_class: ClassEnum,
-    metadata_map: dict[tuple[int, int, Any, int], dict[str, Any]] | None = None,
+    metadata_map: MetadataMap | None = None,
 ) -> None:
     """Add text data for properties from specified field.
 
@@ -692,8 +738,8 @@ def insert_property_texts(
 def _persist_metadata_for_data(
     db: PlexosDB,
     *,
-    metadata_map: dict[tuple[int, int, Any, int], dict[str, Any]],
-    data_id_map: dict[tuple[int, int, Any, int], tuple[int, str]],
+    metadata_map: MetadataMap,
+    data_id_map: DataIdMap,
 ) -> None:
     """Attach band and date metadata for inserted data rows."""
     bands_to_insert: list[tuple[int, int]] = []
@@ -711,10 +757,14 @@ def _persist_metadata_for_data(
         date_to = metadata.get("date_to")
 
         if band is not None:
-            bands_to_insert.append((data_id, band))
+            bands_to_insert.append((data_id, cast(int, band)))
 
-        _append_date_if_present(dates_from_to_insert, data_id, date_value=date_from, label="date_from")
-        _append_date_if_present(dates_to_to_insert, data_id, date_value=date_to, label="date_to")
+        _append_date_if_present(
+            dates_from_to_insert, data_id, date_value=cast("datetime | None", date_from), label="date_from"
+        )
+        _append_date_if_present(
+            dates_to_to_insert, data_id, date_value=cast("datetime | None", date_to), label="date_to"
+        )
 
     if bands_to_insert:
         db._db.executemany("INSERT INTO t_band(data_id, band_id) VALUES (?, ?)", bands_to_insert)
@@ -737,9 +787,9 @@ def _append_date_if_present(
 
 def _build_text_lookup(
     records: list[dict[str, Any]], *, field_name: str
-) -> dict[tuple[str, str | None], Any]:
+) -> dict[tuple[str, str | None], str | None]:
     """Create a lookup of object/property combinations to text values."""
-    text_map: dict[tuple[str, str | None], Any] = {}
+    text_map: dict[tuple[str, str | None], str | None] = {}
     for rec in records:
         obj_name = rec.get("name")
         if obj_name is None:
@@ -759,16 +809,16 @@ def _build_text_lookup(
 
 
 def _collect_text_rows(
-    params: list[tuple[int, int, Any]],
-    data_id_map: dict[tuple[int, int, Any, int], tuple[int, str]],
+    params: PropertyParams,
+    data_id_map: DataIdMap,
     *,
-    metadata_map: dict[tuple[int, int, Any, int], dict[str, Any]] | None,
-    text_map: dict[tuple[str, str | None], Any],
+    metadata_map: MetadataMap | None,
+    text_map: dict[tuple[str, str | None], str | None],
     class_id: int,
     field_name: str,
-) -> list[tuple[int, int, Any]]:
+) -> list[tuple[int, int, str]]:
     """Convert params and metadata into t_text insert rows."""
-    texts_to_insert: list[tuple[int, int, Any]] = []
+    texts_to_insert: list[tuple[int, int, str]] = []
 
     for i, (membership_id, property_id, value) in enumerate(params):
         row_key = (membership_id, property_id, value, i)
@@ -780,22 +830,26 @@ def _collect_text_rows(
         if metadata_map:
             row_text = metadata_map.get(row_key, {}).get(field_name)
             if row_text is not None:
-                texts_to_insert.append((data_id, class_id, row_text))
+                texts_to_insert.append((data_id, class_id, cast(str, row_text)))
                 continue
 
-        property_name = metadata_map.get(row_key, {}).get("property_name") if metadata_map else None
-        lookup_keys = [(obj_name, property_name), (obj_name, None)]
+        property_name = (
+            cast("str | None", metadata_map.get(row_key, {}).get("property_name")) if metadata_map else None
+        )
+        lookup_keys: list[tuple[str, str | None]] = [(obj_name, property_name), (obj_name, None)]
         for lookup in lookup_keys:
             if lookup in text_map:
-                texts_to_insert.append((data_id, class_id, text_map[lookup]))
+                text_val = text_map[lookup]
+                if text_val is not None:
+                    texts_to_insert.append((data_id, class_id, text_val))
                 break
 
     return texts_to_insert
 
 
 def build_data_id_map(
-    db: SQLiteManager, params: list[tuple[int, int, Any]]
-) -> dict[tuple[int, int, Any], tuple[int, str]]:
+    db: SQLiteManager, params: PropertyParams
+) -> dict[tuple[int, int, PropValue], tuple[int, str]]:
     """Build mapping of (membership_id, property_id, value) to (data_id, obj_name).
 
     Parameters
@@ -817,11 +871,14 @@ def build_data_id_map(
         JOIN t_object o ON m.child_object_id = o.object_id
         WHERE d.membership_id = ? AND d.property_id = ? AND d.value = ?
     """
-    data_id_map = {}
+    data_id_map: dict[tuple[int, int, PropValue], tuple[int, str]] = {}
     for membership_id, property_id, value in params:
         result = db.fetchone(data_ids_query, (membership_id, property_id, value))
         if result:
-            data_id_map[(membership_id, property_id, value)] = (result[0], result[1])
+            data_id = result[0]
+            obj_name = result[1]
+            if isinstance(data_id, int) and isinstance(obj_name, str):
+                data_id_map[(membership_id, property_id, value)] = (data_id, obj_name)
     return data_id_map
 
 

@@ -88,7 +88,7 @@ class XMLHandler:
 
     def create_table_element(
         self,
-        rows: list[tuple[Any, ...]],
+        rows: list[tuple[int | float | str | bytes | None, ...]],
         column_types: dict[str, str],
         table_name: str,
     ) -> bool:
@@ -113,9 +113,9 @@ class XMLHandler:
     def get_records(
         self,
         element_enum: Schema,
-        *elements: Iterable[str | int],
+        *elements: str | int,
         rename_dict: dict[str, str] | None = None,
-        **tag_elements: Any,
+        **tag_elements: str | int,
     ) -> list[dict[str, Any]]:
         """Return a given element(s) as list of dictionaries."""
         if rename_dict is None:
@@ -137,9 +137,9 @@ class XMLHandler:
     def iter(
         self,
         element_type: Schema,
-        *elements: Iterable[str | int],
-        label: str | None = None,
-        **tags: Any,
+        *elements: str | int,
+        label: str | int | None = None,
+        **tags: str | int,
     ) -> Iterable[ET.Element]:
         """Return elements from the XML based on the type.
 
@@ -200,14 +200,14 @@ class XMLHandler:
 
         return True
 
-    def _cache_iter(self, element_type: Schema, **tag_elements: Any) -> Iterator[ET.Element]:
+    def _cache_iter(self, element_type: Schema, **tag_elements: str | int) -> Iterator[ET.Element]:
         """Return iterator over cached XML elements matching filters.
 
         Parameters
         ----------
         element_type : Schema
             Schema enum describing the cached element type.
-        **tag_elements : Any
+        **tag_elements : str | int
             Optional tag filters (usually by label) to narrow the results.
 
         Returns
@@ -232,8 +232,8 @@ class XMLHandler:
     def _iter_elements(
         self,
         element_type: str,
-        *elements: Any,
-        **tag_elements: Any,
+        *elements: str | int,
+        **tag_elements: str | int,
     ) -> Iterator[ET.Element]:
         """Iterate over the xml file.
 
@@ -269,7 +269,7 @@ class XMLHandler:
                 elem.tag = elem.tag[nsl:]
 
 
-def xml_query(element_name: str, *tags: Any, **tag_elements: Any) -> str:
+def xml_query(element_name: str, *tags: str | int, **tag_elements: str | int) -> str:
     """Construct XPath query for extracting data from a XML with no namespace.
 
     Parameters
