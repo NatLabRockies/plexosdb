@@ -60,12 +60,8 @@ def test_copy_object_copies_date_from_and_date_to(db_base: PlexosDB):
         date_to=date_to,
     )
 
-    original_date_from = db.query(
-        "SELECT date FROM t_date_from WHERE data_id = ?", (original_data_id,)
-    )
-    original_date_to = db.query(
-        "SELECT date FROM t_date_to WHERE data_id = ?", (original_data_id,)
-    )
+    original_date_from = db.query("SELECT date FROM t_date_from WHERE data_id = ?", (original_data_id,))
+    original_date_to = db.query("SELECT date FROM t_date_to WHERE data_id = ?", (original_data_id,))
     assert original_date_from == [(date_from.isoformat(),)]
     assert original_date_to == [(date_to.isoformat(),)]
 
@@ -77,12 +73,8 @@ def test_copy_object_copies_date_from_and_date_to(db_base: PlexosDB):
     new_data_id = new_data_ids[0]
     assert new_data_id != original_data_id
 
-    copied_date_from = db.query(
-        "SELECT date FROM t_date_from WHERE data_id = ?", (new_data_id,)
-    )
-    copied_date_to = db.query(
-        "SELECT date FROM t_date_to WHERE data_id = ?", (new_data_id,)
-    )
+    copied_date_from = db.query("SELECT date FROM t_date_from WHERE data_id = ?", (new_data_id,))
+    copied_date_to = db.query("SELECT date FROM t_date_to WHERE data_id = ?", (new_data_id,))
     assert copied_date_from == [(date_from.isoformat(),)]
     assert copied_date_to == [(date_to.isoformat(),)]
 
