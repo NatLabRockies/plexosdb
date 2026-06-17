@@ -35,7 +35,7 @@ uv add plexosdb
 - MCP server package (includes MCP CLI entrypoint):
 
 ```console
-uv add mcp-server-plexosdb
+uv add plexosdb-mcp
 ```
 
 For local development from this repository:
@@ -46,88 +46,95 @@ uv sync --all-groups
 
 ## 2) Start the MCP server
 
-If installed via `uv add mcp-server-plexosdb`, run:
+Happy path — run from a published package using `uvx`:
 
 ```console
-uv run plexosdb-mcp
+uvx plexosdb-mcp
 ```
 
-If running from this repo checkout without publishing, run the standalone
-package project:
+Safe path — read-only mode (recommended for untrusted prompts/hosts):
 
 ```console
-uv run --project src/mcp-server-plexosdb plexosdb-mcp
+uvx plexosdb-mcp --read-only
 ```
 
-If it starts successfully, it will wait for MCP client requests.
-
-Start in read-only mode (recommended for untrusted prompts/hosts):
+Smoke checks — verify the server is reachable without starting the MCP daemon:
 
 ```console
-uv run plexosdb-mcp --read-only
+uvx plexosdb-mcp health
+uvx plexosdb-mcp --version
+uvx plexosdb-mcp --help
 ```
 
 You can also set read-only mode via environment variable:
 
 ```console
-PLEXOSDB_MCP_READ_ONLY=1 uv run plexosdb-mcp
-```
-
-## 2a) Start with uvx (recommended for installed package usage)
-
-`uvx` runs the console script in an isolated environment, so users do not need
-to clone the repo or create a local virtualenv.
-
-Run from a published package:
-
-```console
-uvx --from mcp-server-plexosdb plexosdb-mcp
+PLEXOSDB_MCP_READ_ONLY=1 uvx plexosdb-mcp
 ```
 
 Pin a specific version in production:
 
 ```console
-uvx --from mcp-server-plexosdb==0.1.0 plexosdb-mcp
+uvx plexosdb-mcp==0.1.0
+uvx plexosdb-mcp==0.1.0 --read-only
 ```
 
-Read-only with uvx:
+## 2a) Local development (repo checkout)
+
+When working from this repository before publishing, use the nested project path
+so `uv` installs `plexosdb-mcp` rather than the root `plexosdb` package:
 
 ```console
-uvx --from mcp-server-plexosdb==0.1.0 plexosdb-mcp --read-only
+uv run --project src/plexosdb-mcp plexosdb-mcp health
+uv run --project src/plexosdb-mcp plexosdb-mcp --read-only
 ```
 
-Run from your local checkout (useful before publishing):
+If it starts successfully, it will wait for MCP client requests.
+
+## 2b) One-shot CLI commands (no Node.js required)
+
+All diagnostic subcommands output JSON to stdout and exit. Errors write a
+structured JSON object to stderr and exit with code 1. This makes them safe to
+use in pipelines and agent scripts.
+
+| Command                     | Output                                                                 |
+| --------------------------- | ---------------------------------------------------------------------- |
+| `plexosdb-mcp health`       | `{"ok": true, "active_sessions": 0, "mode": "cli"}`                    |
+| `plexosdb-mcp version`      | `{"ok": true, "version": "…", "plexosdb_version": "…", "python": "…"}` |
+| `plexosdb-mcp doctor`       | `{"ok": true, "checks": [{…}, …]}` — exits 1 if any check fails        |
+| `plexosdb-mcp capabilities` | `{"ok": true, "tools": {…}, "subcommands": […]}`                       |
+
+All data-bearing commands accept `--json` for explicit machine-readable output:
 
 ```console
-uvx --from . plexosdb-mcp
+uvx plexosdb-mcp health --json
+uvx plexosdb-mcp version --json
+uvx plexosdb-mcp doctor --json
+uvx plexosdb-mcp capabilities --json
 ```
 
-## 2b) Use production CLI mode (no Node.js required)
+**CLI contract:**
 
-You can run one-shot CLI commands directly without any MCP client:
+- Data goes to **stdout** as compact JSON.
+- Diagnostic messages (TTY warnings) go to **stderr**.
+- Failures emit `{"ok": false, "error": "…"}` to **stderr** and exit with code
+  **1**.
+- Usage errors (bad flags) exit with code **2** (argparse default).
+- `plexosdb-mcp --version` prints the version string and exits 0.
+
+`doctor` is the recommended pre-flight check for agents before opening a
+session:
 
 ```console
-uv run plexosdb-mcp --cli-command health
-uv run plexosdb-mcp --cli-command create-empty-session
-uv run plexosdb-mcp --cli-command open-xml-session --xml-path /path/to/model.xml
+uvx plexosdb-mcp doctor --json && echo "ready"
 ```
-
-These commands print JSON output and exit. This mode is useful for production
-scripts, automation checks, and environments where you do not want to install
-Node.js.
 
 ## 3) Interact with the server and verify tools
 
 A simple way to test is with the MCP Inspector:
 
 ```console
-npx @modelcontextprotocol/inspector uv run plexosdb-mcp
-```
-
-Or with `uvx` as the server command:
-
-```console
-npx @modelcontextprotocol/inspector uvx --from mcp-server-plexosdb plexosdb-mcp
+npx @modelcontextprotocol/inspector uvx plexosdb-mcp
 ```
 
 `npx` is only required for Inspector UI testing. It is not required for
@@ -167,12 +174,7 @@ shape:
   "mcpServers": {
     "plexosdb": {
       "command": "uvx",
-      "args": [
-        "--from",
-        "mcp-server-plexosdb==0.1.0",
-        "plexosdb-mcp",
-        "--read-only"
-      ]
+      "args": ["plexosdb-mcp==0.1.0", "--read-only"]
     }
   }
 }
