@@ -764,6 +764,7 @@ def test_smoke_doctor_exits_1_when_check_fails(
     """'doctor' exits with code 1 and writes JSON to stderr when a check fails."""
 
     def _broken_state() -> None:
+        """Simulate a broken server state that fails the doctor check."""
         raise RuntimeError("db broken")
 
     monkeypatch.setattr(mcp_server, "MCPServerState", _broken_state)
@@ -806,6 +807,7 @@ def test_main_runtime_error_exits_1_with_json_on_stderr(
     monkeypatch.setattr(mcp_server.sys, "stdin", StubStdin(False))
 
     def _boom(**_: object) -> None:
+        """Simulate an unexpected error in server startup that would otherwise crash the process."""
         raise RuntimeError("boom")
 
     monkeypatch.setattr(mcp_server, "build_mcp_server", _boom)

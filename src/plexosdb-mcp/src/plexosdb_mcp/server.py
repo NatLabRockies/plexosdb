@@ -907,7 +907,7 @@ def _run_doctor_command() -> None:
         result = state.create_empty_session()
         state.close_session(result["session_id"])
         checks.append({"name": "empty_session", "ok": True})
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         checks.append({"name": "empty_session", "ok": False, "detail": str(exc)})
 
     all_ok = all(c["ok"] for c in checks)
