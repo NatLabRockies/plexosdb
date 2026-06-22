@@ -16,12 +16,14 @@ class _BOMStripStream:
     _BOM = b"\xef\xbb\xbf"
 
     def __init__(self, stream: Any) -> None:
+        """Wrap *stream*, consuming and discarding a leading UTF-8 BOM if present."""
         self._stream = stream
         # Peek at first 3 bytes; put them back if they are not the BOM.
         head = stream.read(3)
         self._prefix: bytes = b"" if head == self._BOM else head
 
     def read(self, n: int = -1) -> bytes:
+        """Return up to *n* bytes, prepending any saved non-BOM prefix bytes first."""
         if self._prefix:
             if n < 0:
                 data = self._prefix + self._stream.read()
@@ -34,6 +36,7 @@ class _BOMStripStream:
         return self._stream.read(n)
 
     def readable(self) -> bool:  # pragma: no cover
+        """Return True; required by the ``io.RawIOBase`` protocol."""
         return True
 
 
