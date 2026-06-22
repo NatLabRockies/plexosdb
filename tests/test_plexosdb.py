@@ -37,8 +37,8 @@ def test_create_schema_with_seed_defaults_supports_add_object():
     assert object_id > 0
 
 
-def test_create_schema_sets_default_version_in_config_when_row_exists():
-    """create_schema should update existing Version row to default 9.2."""
+def test_create_schema_version_none_leaves_config_unchanged():
+    """create_schema(version=None) should not touch an existing Version row."""
     schema = """
     CREATE TABLE IF NOT EXISTS t_config (
         element TEXT PRIMARY KEY,
@@ -47,28 +47,22 @@ def test_create_schema_sets_default_version_in_config_when_row_exists():
     INSERT INTO t_config(element, value) VALUES ('Version', '0.0');
     """
     db = PlexosDB()
-    db.create_schema(schema=schema)
+    db.create_schema(schema=schema, version=None)
 
     result = db.query("SELECT value FROM t_config WHERE element = ?", ("Version",))
     assert result
-    assert result[0][0] == "9.2"
+    assert result[0][0] == "0.0"
 
 
-def test_create_schema_accepts_custom_version_in_config():
-    """create_schema should apply custom version when Version row exists."""
-    schema = """
-    CREATE TABLE IF NOT EXISTS t_config (
-        element TEXT PRIMARY KEY,
-        value   TEXT
-    );
-    INSERT INTO t_config(element, value) VALUES ('Version', '0.0');
-    """
+def test_create_schema_plain_version_string_loads_master_template():
+    """A plain version string like '11.0' should load the matching master template."""
     db = PlexosDB()
-    db.create_schema(schema=schema, version="11.0")
+    db.create_schema(version="11.0")
 
-    result = db.query("SELECT value FROM t_config WHERE element = ?", ("Version",))
-    assert result
-    assert result[0][0] == "11.0"
+    class_count = db.query("SELECT COUNT(*) FROM t_class")[0][0]
+    assert class_count > 0
+    assert db.version is not None
+    assert db.version[0] == 11
 
 
 @pytest.mark.empty_database
@@ -204,7 +198,7 @@ def test_plexosdb_version_property_refresh(db_with_topology):
     assert version1 == version2
 
 
-@pytest.mark.parametrize("version", [9, 10, 11, 12, "v10.0R2", (11, 0, 4)])
+@pytest.mark.parametrize("version", [9, 10, 11, 12, "v10.0R2", (11, 0, 4), "9.2", "10.0", "11.0", "12.0"])
 def test_create_schema_with_versioned_template(version):
     db = PlexosDB()
     db.create_schema(version=version)

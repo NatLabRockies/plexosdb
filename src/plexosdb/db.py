@@ -1677,19 +1677,6 @@ class PlexosDB:
         creation_status = self._db.executescript(schema_sql)
         return False, bool(creation_status)
 
-    def _set_config_version(self, version: str) -> None:
-        """Update t_config.Version when the config table is available."""
-        has_config = bool(
-            self._db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='t_config'")
-        )
-        if not has_config:
-            return
-
-        self._db.execute(
-            "UPDATE t_config SET value = ? WHERE element = ?",
-            (version, "Version"),
-        )
-
     def _import_master_template(self, major_version: int, *, has_schema: bool) -> None:
         """Import versioned master template after compatibility and safety checks."""
         existing_version = self._get_plexos_version()
@@ -1733,7 +1720,7 @@ class PlexosDB:
         schema: str | None = None,
         *,
         seed_defaults: bool = False,
-        version: int | str | tuple[int, ...] | None = "9.2",
+        version: int | str | tuple[int, ...] | None = None,
     ) -> bool:
         """Create database schema from SQL script.
 
@@ -1752,6 +1739,8 @@ class PlexosDB:
         version : int | str | tuple[int, ...] | None, optional
             PLEXOS major version used to preload the matching master template
             from ``plexosdb/config``. Supported versions are 9, 10, 11, and 12.
+            All forms are equivalent: ``9``, ``"9.2"``, ``"v9.2R6"``, and
+            ``(9, 2, 6)`` all load the v9 master template.
             If None, no master template is loaded.
 
         Returns
@@ -1806,12 +1795,6 @@ class PlexosDB:
             self._seed_default_model_data()
 
         if version is None:
-            return True
-
-        # If version is a plain string (e.g. "9.2", "11.0"), update t_config.Version only.
-        # Integer, tuple, or "v..."-prefixed strings trigger full master template loading.
-        if isinstance(version, str) and not version.strip().lower().startswith("v"):
-            self._set_config_version(version)
             return True
 
         major_version = self._parse_schema_version(version)
