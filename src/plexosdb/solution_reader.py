@@ -61,19 +61,71 @@ def _select_xml_entry(zip_path: Path, entries: list[str], model_name: str | None
     return xml_entries[0]
 
 
-def _collect_xml_rows(xml_content: str) -> dict[str, list[dict[str, Any]]]:
-    """Parse solution XML content into a table-name to row-dictionaries map."""
-    root = ET.fromstring(xml_content)
-    rows_by_table: dict[str, list[dict[str, Any]]] = defaultdict(list)
+class _BOMStripStream:
+    """Wrap a binary stream and strip a leading UTF-8 BOM (EF BB BF) if present."""
 
-    for table_element in root:
-        table_name = _local_name(table_element.tag)
-        row: dict[str, Any] = {}
-        for col in table_element:
-            row[_local_name(col.tag)] = _coerce_value(col.text)
-        rows_by_table[table_name].append(row)
+    _BOM = b"\xef\xbb\xbf"
 
-    return rows_by_table
+    def __init__(self, stream: Any) -> None:
+        self._stream = stream
+        # Peek at first 3 bytes; put them back if they are not the BOM.
+        head = stream.read(3)
+        self._prefix: bytes = b"" if head == self._BOM else head
+
+    def read(self, n: int = -1) -> bytes:
+        if self._prefix:
+            if n < 0:
+                data = self._prefix + self._stream.read()
+                self._prefix = b""
+                return data
+            chunk = self._prefix[:n]
+            self._prefix = self._prefix[len(chunk) :]
+            remaining = n - len(chunk)
+            return chunk + (self._stream.read(remaining) if remaining > 0 else b"")
+        return self._stream.read(n)
+
+    def readable(self) -> bool:  # pragma: no cover
+        return True
+
+
+def _stream_xml_to_sqlite(
+    con: sqlite3.Connection,
+    stream: Any,
+    *,
+    batch_size: int = 1_000,
+) -> None:
+    """Parse XML from a binary stream and insert rows into *con* in batches.
+
+    Uses ``xml.etree.ElementTree.iterparse`` with depth tracking so that only
+    *batch_size* row-dicts per table are held in memory at a time.  Each
+    completed row element is cleared from the in-memory tree immediately after
+    processing, keeping peak memory proportional to the widest batch rather
+    than the full XML size.
+    """
+    buffers: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    depth = 0
+    root: ET.Element | None = None
+
+    for event, element in ET.iterparse(_BOMStripStream(stream), events=("start", "end")):
+        if event == "start":
+            depth += 1
+            if depth == 1:
+                root = element
+        else:  # "end"
+            if depth == 2 and root is not None:
+                # Direct child of root — this is a table-row element.
+                tag = _local_name(element.tag)
+                row: dict[str, Any] = {_local_name(col.tag): _coerce_value(col.text) for col in element}
+                buffers[tag].append(row)
+                # Detach the processed element from root to free memory.
+                root.clear()
+                if len(buffers[tag]) >= batch_size:
+                    _create_and_insert_rows(con, tag, buffers.pop(tag))
+            depth -= 1
+
+    for tag, rows in buffers.items():
+        if rows:
+            _create_and_insert_rows(con, tag, rows)
 
 
 def _resolve_input_zip_path(input_path: str | Path) -> Path:
@@ -851,11 +903,8 @@ def plexos_to_sqlite(
 
     with ZipFile(zip_path, "r") as zf:
         xml_entry = _select_xml_entry(zip_path, zf.namelist(), model_name=model_name)
-        xml_content = zf.read(xml_entry).decode("utf-8-sig")
-        rows_by_table = _collect_xml_rows(xml_content)
-
-        for table, rows in rows_by_table.items():
-            _create_and_insert_rows(con, table, rows)
+        with zf.open(xml_entry, "r") as xml_stream:
+            _stream_xml_to_sqlite(con, xml_stream)
 
         if decode_bin_values:
             _decode_bin_values(con, zf)
