@@ -247,3 +247,39 @@ def test_delete_attribute_fails_with_undefined_attribute(
             object_name="Model1",
             object_class=ClassEnum.Model,
         )
+
+
+def test_check_attribute_exists_for_assigned_attribute(
+    db_with_model_attributes: PlexosDB,
+):
+    """Return True for an assigned attribute."""
+    from plexosdb import ClassEnum
+
+    db = db_with_model_attributes
+    db.add_object(ClassEnum.Model, "Model1")
+    db.add_attributes_from_records(
+        [{"name": "Model1", "Enabled": -1}],
+        object_class=ClassEnum.Model,
+    )
+
+    assert db.check_attribute_exists(
+        "Enabled",
+        object_name="Model1",
+        object_class=ClassEnum.Model,
+    )
+
+
+def test_check_attribute_exists_for_unassigned_attribute(
+    db_with_model_attributes: PlexosDB,
+):
+    """Return False for an unassigned attribute."""
+    from plexosdb import ClassEnum
+
+    db = db_with_model_attributes
+    db.add_object(ClassEnum.Model, "Model1")
+
+    assert not db.check_attribute_exists(
+        "Enabled",
+        object_name="Model1",
+        object_class=ClassEnum.Model,
+    )

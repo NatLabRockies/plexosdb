@@ -66,7 +66,19 @@ def check_attribute_exists(
     -----
     This check is not yet implemented.
     """
-    raise NotImplementedError
+    query = """
+        SELECT 1
+        FROM t_attribute_data AS data
+        JOIN t_object AS obj ON obj.object_id = data.object_id
+        JOIN t_attribute AS attr ON attr.attribute_id = data.attribute_id
+        JOIN t_class AS class ON class.class_id = obj.class_id
+        WHERE obj.name = ?
+        AND class.name = ?
+        AND attr.name = ?
+        AND attr.class_id = obj.class_id
+        LIMIT 1
+    """
+    return bool(db._db.query(query, (object_name, object_class, attribute_name)))
 
 
 def check_class_exists(db: PlexosDB, class_enum: ClassEnum) -> bool:
