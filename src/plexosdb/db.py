@@ -2202,10 +2202,67 @@ class PlexosDB:
         /,
         *,
         object_class: ClassEnum,
-        attribute_names: list[str] | None = None,
+        attribute_names: str | Iterable[str] | None = None,
     ) -> list[dict[str, Any]]:
-        """Get all attributes for a specific object."""
-        raise NotImplementedError  # pragma: no cover
+        """Retrieve assigned attribute values for a specific object.
+
+        Parameters
+        ----------
+        object_name : str
+            Name of the object.
+        object_class : ClassEnum
+            Class of the object.
+        attribute_names : str | Iterable[str] | None, optional
+            Attribute name or names to retrieve. If omitted, retrieves all
+            assigned attribute values.
+
+        Returns
+        -------
+        list[dict[str, Any]]
+            Attribute-value records with ``name``, ``attribute``, ``value``,
+            and ``state`` keys. Returns an empty list when the object has no
+            assigned attribute values.
+
+        Raises
+        ------
+        NotFoundError
+            If the object does not exist for the requested class.
+        """
+        if not checks_module.check_object_exists(self, object_class, object_name):
+            msg = f"Object = `{object_name}` does not exist in class = {object_class}. "
+            msg += "See available objects with list_objects_by_class"
+            raise NotFoundError(msg)
+
+        object_id = self.get_object_id(object_class, object_name)
+        class_id = self.get_class_id(object_class)
+
+        conditions = [
+            "data.object_id = ?",
+            "attr.class_id = ?",
+        ]
+        params: list[Any] = [object_id, class_id]
+
+        if attribute_names is not None:
+            names = normalize_names(attribute_names)
+            if names:
+                placeholders = ", ".join("?" for _ in names)
+                conditions.append(f"attr.name IN ({placeholders})")
+                params.extend(names)
+
+        where_clause = " AND ".join(conditions)
+        query = f"""
+            SELECT
+                obj.name AS name,
+                attr.name AS attribute,
+                data.value,
+                data.state
+            FROM t_attribute_data AS data
+            JOIN t_object AS obj ON obj.object_id = data.object_id
+            JOIN t_attribute AS attr ON attr.attribute_id = data.attribute_id
+            WHERE {where_clause}
+            ORDER BY attr.name
+        """
+        return self._db.fetchall_dict(query, tuple(params))
 
     def get_category_id(self, class_enum: ClassEnum, /, name: str) -> int:
         """Return the ID for a given category.

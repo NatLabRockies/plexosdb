@@ -57,6 +57,92 @@ def test_list_attributes(db_base: PlexosDB):
     assert len(result) == 2
 
 
+def test_get_attributes_returns_assigned_values(db_with_model_attributes: PlexosDB):
+    """Return assigned attributes for one object only."""
+    from plexosdb import ClassEnum
+
+    db = db_with_model_attributes
+    db.add_object(ClassEnum.Model, "Model1")
+    db.add_object(ClassEnum.Model, "Model2")
+    db.add_attributes_from_records(
+        [
+            {"name": "Model1", "attribute": "Enabled", "value": -1, "state": 1},
+            {"name": "Model1", "attribute": "Random Number Seed", "value": 1000},
+            {"name": "Model2", "attribute": "Enabled", "value": 0},
+        ],
+        object_class=ClassEnum.Model,
+    )
+
+    result = db.get_attributes("Model1", object_class=ClassEnum.Model)
+
+    assert result == [
+        {"name": "Model1", "attribute": "Enabled", "value": -1.0, "state": 1},
+        {
+            "name": "Model1",
+            "attribute": "Random Number Seed",
+            "value": 1000.0,
+            "state": None,
+        },
+    ]
+
+
+def test_get_attributes_filters_by_attribute_names(
+    db_with_model_attributes: PlexosDB,
+):
+    """Filter assigned attributes by name."""
+    from plexosdb import ClassEnum
+
+    db = db_with_model_attributes
+    db.add_object(ClassEnum.Model, "Model1")
+    db.add_attributes_from_records(
+        [{"name": "Model1", "Enabled": -1, "Random Number Seed": 1000}],
+        object_class=ClassEnum.Model,
+    )
+
+    single_result = db.get_attributes(
+        "Model1",
+        object_class=ClassEnum.Model,
+        attribute_names="Enabled",
+    )
+    assert [record["attribute"] for record in single_result] == ["Enabled"]
+
+    multiple_result = db.get_attributes(
+        "Model1",
+        object_class=ClassEnum.Model,
+        attribute_names=["Random Number Seed", "Enabled"],
+    )
+    assert [record["attribute"] for record in multiple_result] == [
+        "Enabled",
+        "Random Number Seed",
+    ]
+
+
+def test_get_attributes_returns_empty_list_without_assignments(
+    db_with_model_attributes: PlexosDB,
+):
+    """Return an empty list when an object has no assigned attributes."""
+    from plexosdb import ClassEnum
+
+    db = db_with_model_attributes
+    db.add_object(ClassEnum.Model, "Model1")
+
+    assert db.get_attributes("Model1", object_class=ClassEnum.Model) == []
+
+
+def test_get_attributes_fails_with_nonexistent_object(
+    db_with_model_attributes: PlexosDB,
+):
+    """Raise NotFoundError when the object does not exist."""
+    from plexosdb import ClassEnum
+    from plexosdb.exceptions import NotFoundError
+
+    with pytest.raises(NotFoundError, match="Object = `MissingModel` does not exist"):
+        db_with_model_attributes.get_attributes(
+            "MissingModel",
+            object_class=ClassEnum.Model,
+        )
+
+
 def test_delete_attribute_removes_single_attribute(db_with_model_attributes: PlexosDB):
     """Delete one attribute value without removing other attributes."""
     from plexosdb import ClassEnum
