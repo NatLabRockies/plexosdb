@@ -183,37 +183,36 @@ class PlexosDB:
         xml_handler = XMLHandler.parse(fpath=xml_path)
         xml_tags = {element.tag for element in xml_handler.root}
 
-        for tag in xml_tags:
-            # Only parse valid schemas that we maintain.
-            # NOTE: If there are some missing tables, we need to add them to the Enums.
-            schema_enum = str2enum(tag)
-            if not schema_enum:
-                continue
+        with self._db.transaction():
+            for tag in xml_tags:
+                # Only parse valid schemas that we maintain.
+                # NOTE: If there are some missing tables, we need to add them to the Enums.
+                schema_enum = str2enum(tag)
+                if not schema_enum:
+                    continue
 
-            record_dict = xml_handler.get_records(schema_enum)
-            if not record_dict:  # Skip if no records
-                continue
+                record_dict = xml_handler.get_records(schema_enum)
+                if not record_dict:  # Skip if no records
+                    continue
 
-            # Group records by column structure to avoid mismatches
-            column_groups: dict[frozenset[str], list[dict[str, Any]]] = {}
-            for record in record_dict:
-                # Create a hashable key from the record's column names
-                column_key = frozenset(record.keys())
-                if column_key not in column_groups:
-                    column_groups[column_key] = []
-                column_groups[column_key].append(record)
+                # Group records by column structure to avoid mismatches
+                column_groups: dict[frozenset[str], list[dict[str, Any]]] = {}
+                for record in record_dict:
+                    # Create a hashable key from the record's column names
+                    column_key = frozenset(record.keys())
+                    if column_key not in column_groups:
+                        column_groups[column_key] = []
+                    column_groups[column_key].append(record)
 
-            # Process each group of consistently structured records separately
-            for columns, records in column_groups.items():
-                column_names = list(columns)
-                placeholders = ", ".join([f":{s}" for s in column_names])
-                columns_sql = ", ".join([f"`{key}`" for key in column_names])
-                query = f"INSERT INTO {tag} ({columns_sql}) values({placeholders})"
-                logger.trace("{}", query)
+                # Process each group of consistently structured records separately
+                for columns, records in column_groups.items():
+                    column_names = list(columns)
+                    placeholders = ", ".join([f":{s}" for s in column_names])
+                    columns_sql = ", ".join([f"`{key}`" for key in column_names])
+                    query = f"INSERT INTO {tag} ({columns_sql}) values({placeholders})"
+                    logger.trace("{}", query)
 
-                insert_result = self._db.executemany(query, records)
-                if not insert_result:
-                    logger.warning(f"No rows inserted for {tag} with columns {column_names}")
+                    self._db.executemany(query, records)
 
     @classmethod
     def from_xml(
