@@ -60,11 +60,7 @@ def check_attribute_exists(
     Returns
     -------
     bool
-        True if the attribute exists for the object.
-
-    Notes
-    -----
-    This check is not yet implemented.
+        True if the object has an assigned value for the attribute.
     """
     query = """
         SELECT 1

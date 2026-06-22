@@ -282,15 +282,6 @@ class PlexosDB:
         -------
         int
             attribute_id
-
-        Raises
-        ------
-        RuntimeError
-            If the attribute value could not be inserted.
-
-        Notes
-        -----
-        By default, we add all objects to the system membership.
         """
         object_id = self.get_object_id(object_class, name=object_name)
         attribute_id = self.get_attribute_id(object_class, name=attribute_name)
@@ -1899,8 +1890,8 @@ class PlexosDB:
         Raises
         ------
         NotFoundError
-            If the object does not exist or the attribute value is not assigned
-            to the object.
+            If the object does not exist, the attribute is not defined for the
+            object's class or the attribute value is not assigned to the object.
 
         Examples
         --------
@@ -2140,7 +2131,7 @@ class PlexosDB:
         object_name: str,
         attribute_name: str,
     ) -> Any:
-        """Get attribute details for a specific object."""
+        """Get an assigned attribute value for a specific object."""
         query = """
         SELECT
             t_attribute_data.value
@@ -2172,12 +2163,12 @@ class PlexosDB:
         Returns
         -------
         int
-            ID of the category
+            ID of the attribute
 
         Raises
         ------
-        AssertionError
-            If the category does not exist
+        NotFoundError
+            If the attribute does not exist for the specified class.
         """
         query = """
         SELECT
@@ -3319,7 +3310,7 @@ class PlexosDB:
         Parameters
         ----------
         class_enum : ClassEnum
-            Class enumeration to list categories for
+            Class enumeration to list attributes
 
         Returns
         -------
