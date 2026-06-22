@@ -4,35 +4,55 @@ All notable changes to this project will be documented in this file.
 
 ## [1.4.1](https://github.com/NatLabRockies/plexosdb/compare/v1.4.0...v1.4.1) (2026-05-22)
 
-
 ### 🐛 Bug Fixes
 
-* copy_object date range metadata copying ([#143](https://github.com/NatLabRockies/plexosdb/issues/143)) ([b60e5ad](https://github.com/NatLabRockies/plexosdb/commit/b60e5ad21032f05702ed74bb345f3f4579e2379d))
+- copy_object date range metadata copying
+  ([#143](https://github.com/NatLabRockies/plexosdb/issues/143))
+  ([b60e5ad](https://github.com/NatLabRockies/plexosdb/commit/b60e5ad21032f05702ed74bb345f3f4579e2379d))
 
 ## [1.4.0](https://github.com/NatLabRockies/plexosdb/compare/v1.3.4...v1.4.0) (2026-05-21)
 
-
 ### 🚀 Features
 
-* add new Purchaser enum for handling new type of loads ([#127](https://github.com/NatLabRockies/plexosdb/issues/127)) ([c5d9a38](https://github.com/NatLabRockies/plexosdb/commit/c5d9a38e29ba929869c0194da4fddca3860bcc3c))
-* address mixed issues ([#128](https://github.com/NatLabRockies/plexosdb/issues/128)) ([eabaa5b](https://github.com/NatLabRockies/plexosdb/commit/eabaa5bdd80e3898a5ddb37aa082b4736f4579e9))
-
+- add new Purchaser enum for handling new type of loads
+  ([#127](https://github.com/NatLabRockies/plexosdb/issues/127))
+  ([c5d9a38](https://github.com/NatLabRockies/plexosdb/commit/c5d9a38e29ba929869c0194da4fddca3860bcc3c))
+- address mixed issues
+  ([#128](https://github.com/NatLabRockies/plexosdb/issues/128))
+  ([eabaa5b](https://github.com/NatLabRockies/plexosdb/commit/eabaa5bdd80e3898a5ddb37aa082b4736f4579e9))
 
 ### 🐛 Bug Fixes
 
-* add safe parsing for long int values ([#140](https://github.com/NatLabRockies/plexosdb/issues/140)) ([c565313](https://github.com/NatLabRockies/plexosdb/commit/c565313d5b37839def642261ab05dd493ab1e879))
-* resolve bug on add properties from records related methods ([#129](https://github.com/NatLabRockies/plexosdb/issues/129)) ([b3f4dbb](https://github.com/NatLabRockies/plexosdb/commit/b3f4dbb5d85cb2077e0402b499fa929a67221df7))
-
+- add safe parsing for long int values
+  ([#140](https://github.com/NatLabRockies/plexosdb/issues/140))
+  ([c565313](https://github.com/NatLabRockies/plexosdb/commit/c565313d5b37839def642261ab05dd493ab1e879))
+- resolve bug on add properties from records related methods
+  ([#129](https://github.com/NatLabRockies/plexosdb/issues/129))
+  ([b3f4dbb](https://github.com/NatLabRockies/plexosdb/commit/b3f4dbb5d85cb2077e0402b499fa929a67221df7))
 
 ### 📦 Build
 
-* **deps-dev:** bump ipython from 9.8.0 to 9.13.0 ([#137](https://github.com/NatLabRockies/plexosdb/issues/137)) ([98c66d4](https://github.com/NatLabRockies/plexosdb/commit/98c66d4046183ae059e6bc4354913809f711e74a))
-* **deps-dev:** bump sphinxcontrib-mermaid from 1.0.0 to 2.0.2 ([#136](https://github.com/NatLabRockies/plexosdb/issues/136)) ([8c26ac3](https://github.com/NatLabRockies/plexosdb/commit/8c26ac3ee0ffe32060d90b74d68745c3434117dd))
-* **deps:** bump actions/upload-artifact from 7.0.0 to 7.0.1 ([#121](https://github.com/NatLabRockies/plexosdb/issues/121)) ([85194fe](https://github.com/NatLabRockies/plexosdb/commit/85194fec3d3c14f924ec0f33126271ceb0ec8524))
-* **deps:** bump astral-sh/setup-uv from 7.6.0 to 8.1.0 ([#122](https://github.com/NatLabRockies/plexosdb/issues/122)) ([e189e14](https://github.com/NatLabRockies/plexosdb/commit/e189e146477ee75f38e70c473d0b612979ed787f))
-* **deps:** bump benchmark-action/github-action-benchmark from 1.21.0 to 1.22.0 ([#120](https://github.com/NatLabRockies/plexosdb/issues/120)) ([4ac3c99](https://github.com/NatLabRockies/plexosdb/commit/4ac3c991fd18d703caceb68c38dc7556477d2385))
-* **deps:** bump codecov/codecov-action from 5.5.3 to 6.0.0 ([#118](https://github.com/NatLabRockies/plexosdb/issues/118)) ([fc5c2e8](https://github.com/NatLabRockies/plexosdb/commit/fc5c2e8834f1932f960db3003a70d0a0dee9df87))
-* **deps:** bump googleapis/release-please-action from 4.4.0 to 4.4.1 ([#123](https://github.com/NatLabRockies/plexosdb/issues/123)) ([8959d18](https://github.com/NatLabRockies/plexosdb/commit/8959d183c9872c450906af288148ba033d45b77f))
+- **deps-dev:** bump ipython from 9.8.0 to 9.13.0
+  ([#137](https://github.com/NatLabRockies/plexosdb/issues/137))
+  ([98c66d4](https://github.com/NatLabRockies/plexosdb/commit/98c66d4046183ae059e6bc4354913809f711e74a))
+- **deps-dev:** bump sphinxcontrib-mermaid from 1.0.0 to 2.0.2
+  ([#136](https://github.com/NatLabRockies/plexosdb/issues/136))
+  ([8c26ac3](https://github.com/NatLabRockies/plexosdb/commit/8c26ac3ee0ffe32060d90b74d68745c3434117dd))
+- **deps:** bump actions/upload-artifact from 7.0.0 to 7.0.1
+  ([#121](https://github.com/NatLabRockies/plexosdb/issues/121))
+  ([85194fe](https://github.com/NatLabRockies/plexosdb/commit/85194fec3d3c14f924ec0f33126271ceb0ec8524))
+- **deps:** bump astral-sh/setup-uv from 7.6.0 to 8.1.0
+  ([#122](https://github.com/NatLabRockies/plexosdb/issues/122))
+  ([e189e14](https://github.com/NatLabRockies/plexosdb/commit/e189e146477ee75f38e70c473d0b612979ed787f))
+- **deps:** bump benchmark-action/github-action-benchmark from 1.21.0 to 1.22.0
+  ([#120](https://github.com/NatLabRockies/plexosdb/issues/120))
+  ([4ac3c99](https://github.com/NatLabRockies/plexosdb/commit/4ac3c991fd18d703caceb68c38dc7556477d2385))
+- **deps:** bump codecov/codecov-action from 5.5.3 to 6.0.0
+  ([#118](https://github.com/NatLabRockies/plexosdb/issues/118))
+  ([fc5c2e8](https://github.com/NatLabRockies/plexosdb/commit/fc5c2e8834f1932f960db3003a70d0a0dee9df87))
+- **deps:** bump googleapis/release-please-action from 4.4.0 to 4.4.1
+  ([#123](https://github.com/NatLabRockies/plexosdb/issues/123))
+  ([8959d18](https://github.com/NatLabRockies/plexosdb/commit/8959d183c9872c450906af288148ba033d45b77f))
 
 ## [1.3.4](https://github.com/NatLabRockies/plexosdb/compare/v1.3.3...v1.3.4) (2026-03-27)
 

@@ -283,6 +283,11 @@ class PlexosDB:
         int
             attribute_id
 
+        Raises
+        ------
+        RuntimeError
+            If the attribute value could not be inserted.
+
         Notes
         -----
         By default, we add all objects to the system membership.
@@ -294,7 +299,8 @@ class PlexosDB:
         query = (
             f"INSERT INTO {Schema.AttributeData.name}(object_id, attribute_id, value) VALUES({placeholders})"
         )
-        attribute_id = self._db.execute(query, params)
+        result = self._db.execute(query, params)
+        assert result, f"Failed to add attribute '{attribute_name}' to object '{object_name}'."
         return attribute_id
 
     def add_band(
@@ -1873,8 +1879,38 @@ class PlexosDB:
         object_name: str,
         object_class: ClassEnum,
     ) -> None:
-        """Delete an attribute from an object."""
-        if not self.check_object_exists(object_class, object_name):
+        """Delete an attribute value from an object.
+
+        Removes an object-level attribute value from the database.
+
+        Parameters
+        ----------
+        attribute_name : str
+            Name of the attribute to delete.
+        object_name : str
+            Name of the object the attribute belongs to.
+        object_class : ClassEnum
+            Class enumeration of the object.
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        NotFoundError
+            If the object does not exist or the attribute value is not assigned
+            to the object.
+
+        Examples
+        --------
+        >>> db.delete_attribute(
+        ...     "Enabled",
+        ...     object_name="Base_Model",
+        ...     object_class=ClassEnum.Model,
+        ... )
+        """
+        if not checks_module.check_object_exists(self, object_class, object_name):
             msg = f"Object = `{object_name}` does not exist for class `{object_class}`."
             raise NotFoundError(msg)
 
@@ -2155,7 +2191,9 @@ class PlexosDB:
         AND t_class.name = ?
         """
         result = self._db.fetchone(query, (name, class_enum))
-        assert result
+        if not result:
+            msg = f"Attribute '{name}' not found for class '{class_enum}'."
+            raise NotFoundError(msg)
         return cast(int, result[0])
 
     def get_attributes(

@@ -28,6 +28,25 @@ def test_add_attribute(db_base: PlexosDB):
     assert result == 10.1
 
 
+def test_add_attribute_returns_attribute_id(db_base: PlexosDB):
+    """Return the attribute definition ID rather than an insert-success flag."""
+    from plexosdb.enums import ClassEnum
+
+    db: PlexosDB = db_base
+    db.add_object(ClassEnum.Generator, "TestGen")
+
+    attribute_id = db.get_attribute_id(ClassEnum.Generator, "Longitude")
+    result = db.add_attribute(
+        ClassEnum.Generator,
+        "TestGen",
+        attribute_name="Longitude",
+        attribute_value=10.1,
+    )
+
+    assert type(result) is int
+    assert result == attribute_id
+
+
 def test_list_attributes(db_base: PlexosDB):
     from plexosdb.enums import ClassEnum
 
@@ -121,3 +140,24 @@ def test_delete_attribute_fails_with_nonexistent_attribute_value(
 
     with pytest.raises(NotFoundError, match="Attribute 'Enabled' not found for object 'Model1'"):
         db.delete_attribute("Enabled", object_name="Model1", object_class=ClassEnum.Model)
+
+
+def test_delete_attribute_fails_with_undefined_attribute(
+    db_with_model_attributes: PlexosDB,
+):
+    """Raise NotFoundError when the attribute is undefined for the object's class."""
+    from plexosdb import ClassEnum
+    from plexosdb.exceptions import NotFoundError
+
+    db = db_with_model_attributes
+    db.add_object(ClassEnum.Model, "Model1")
+
+    with pytest.raises(
+        NotFoundError,
+        match="Attribute 'Non_Valid_Attribute' not found for class 'Model'",
+    ):
+        db.delete_attribute(
+            "Non_Valid_Attribute",
+            object_name="Model1",
+            object_class=ClassEnum.Model,
+        )
