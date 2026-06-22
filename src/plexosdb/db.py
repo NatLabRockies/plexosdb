@@ -1734,8 +1734,10 @@ class PlexosDB:
             Direct SQL schema content to execute. If None, uses the default schema,
             by default None
         seed_defaults : bool, optional
-            If True, seed minimal classes/collections/System object after schema creation
-            so workflows like add_object work without loading XML, by default False
+            If True, seed minimal classes/collections/System object after schema
+            creation so workflows like ``add_object`` work immediately on a fresh
+            database without loading XML. Mutually exclusive with ``version``;
+            passing both raises ``ValueError``, by default False
         version : int | str | tuple[int, ...] | None, optional
             PLEXOS major version used to preload the matching master template
             from ``plexosdb/config``. Supported versions are 9, 10, 11, and 12.
@@ -1790,6 +1792,15 @@ class PlexosDB:
         has_schema, creation_ok = self._ensure_schema_created(schema)
         if not creation_ok:
             return False
+
+        if seed_defaults and version is not None:
+            raise ValueError(
+                "seed_defaults=True and version=... cannot be used together. "
+                "seed_defaults inserts minimal stub rows, while version loads a full master template; "
+                "combining them risks duplicate-row collisions. "
+                "Use version=... alone to load a master template, or seed_defaults=True alone "
+                "for a lightweight schema without a template."
+            )
 
         if seed_defaults:
             self._seed_default_model_data()

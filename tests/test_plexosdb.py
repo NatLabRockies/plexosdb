@@ -216,6 +216,13 @@ def test_create_schema_with_invalid_template_version_raises():
         db.create_schema(version=8)
 
 
+def test_create_schema_seed_defaults_and_version_raises():
+    """Combining seed_defaults=True with a versioned template must be rejected."""
+    db = PlexosDB()
+    with pytest.raises(ValueError, match=r"seed_defaults.*version"):
+        db.create_schema(seed_defaults=True, version=9)
+
+
 def test_create_schema_twice_with_version_does_not_recreate_tables():
     db = PlexosDB()
     assert db.create_schema()
