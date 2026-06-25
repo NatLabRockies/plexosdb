@@ -1,3 +1,4 @@
+import shutil
 import struct
 import sqlite3
 from io import BytesIO
@@ -6,13 +7,14 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 import pytest
 
-from plexosdb import PLEXOS2SQLite, plexos_to_sqlite
+from plexosdb import PlexosSolution
 import plexosdb.solution_reader as sr
 from plexosdb.solution_reader import (
     _build_phase_sets,
     _build_property_map,
     _build_derived_table_map,
     _build_key_period_map,
+    _build_period_join,
     _decode_period_rows,
     _coerce_value,
     _decode_bin_values,
@@ -24,6 +26,14 @@ from plexosdb.solution_reader import (
     _sanitize_name,
     _select_xml_entry,
     _skip_bytes,
+    _stream_xml_to_sqlite,
+)
+from plexosdb.solution_reader.display import (
+    _box_border,
+    _box_data_line,
+    _box_dots_line,
+    _print_box_table,
+    show_db_tables,
 )
 
 
@@ -50,270 +60,112 @@ def _build_test_solution_zip(path: Path) -> None:
         zf.writestr("t_data_0.BIN", values)
 
 
-def _build_namespaced_solution_zip(path: Path) -> None:
-    xml = """<?xml version=\"1.0\" encoding=\"utf-8\"?>
-<MasterDataSet xmlns=\"http://tempuri.org/SolutionDataset.xsd\">
-    <t_key_index>
-        <key_id>200</key_id>
-        <period_type_id>0</period_type_id>
-        <length>1</length>
-        <position>0</position>
-        <period_offset>0</period_offset>
-    </t_key_index>
-    <t_object>
-        <object_id>2</object_id>
-        <name>SystemNS</name>
-    </t_object>
+def test_plexos_solution_to_sqlite_and_context_manager(tmp_path, solution_zip):
+    sol = PlexosSolution.from_zip(solution_zip)
+    result = sol.to_sqlite(str(tmp_path / "solution.sqlite"), if_exists="replace", decode_bin_values=False)
+    assert str(result.database).endswith(".sqlite")
+
+    with sol:
+        assert sol.connection is not None
+        count = sol.connection.execute("SELECT COUNT(*) FROM t_object").fetchone()
+        assert count is not None
+        assert count[0] > 0
+
+
+def test_plexos_solution_if_exists_fail_raises(tmp_path, solution_zip):
+    output_path = tmp_path / "out.sqlite"
+
+    sol = PlexosSolution.from_zip(solution_zip)
+    sol.to_sqlite(str(output_path), if_exists="replace", decode_bin_values=False)
+    sol.close()
+
+    sol2 = PlexosSolution.from_zip(solution_zip)
+    with pytest.raises(FileExistsError):
+        sol2.to_sqlite(str(output_path), if_exists="fail")
+    sol2.close()
+
+
+def test_plexos_solution_materializes_data_and_report_objects(solution_sqlite):
+    sol = PlexosSolution.from_sqlite(solution_sqlite)
+    sol.materialize_table("ST__Interval__Generators__Generation", schema="data")
+    con = sol.connection
+
+    data_rows = con.execute('SELECT COUNT(*) FROM data."ST__Interval__Generators__Generation"').fetchone()
+    assert data_rows is not None
+    assert data_rows[0] == 35040
+
+    # Rich schema columns should be present
+    col_names = [
+        r[1] for r in con.execute('PRAGMA data.table_info("ST__Interval__Generators__Generation")').fetchall()
+    ]
+    assert "name" in col_names
+    assert "sample_name" in col_names
+    assert "band_id" in col_names
+    assert "datetime" in col_names
+    assert "value" in col_names
+
+    # Spot-check: first row for Coal_Gen should have expected values
+    sample = con.execute(
+        "SELECT name, sample_name, band_id, value"
+        ' FROM data."ST__Interval__Generators__Generation"'
+        " ORDER BY name, block_id"
+        " LIMIT 1"
+    ).fetchone()
+    assert sample[0] == "Coal_Gen"
+    assert sample[1] == "Mean"
+    assert sample[2] == 1
+    assert sample[3] == 353.0
+
+    # Report schema
+    sol.materialize_table("ST__Interval__Generators__Generation", schema="report")
+
+    report_cols = [
+        r[1]
+        for r in con.execute('PRAGMA report.table_info("ST__Interval__Generators__Generation")').fetchall()
+    ]
+    assert report_cols == [
+        "band",
+        "sample_name",
+        "name",
+        "category",
+        "timestamp",
+        "interval_length",
+        "Generation",
+        "unit",
+    ]
+    report_sample = con.execute(
+        'SELECT band, sample_name, name, category, timestamp, interval_length, "Generation", unit'
+        ' FROM report."ST__Interval__Generators__Generation" ORDER BY timestamp LIMIT 1'
+    ).fetchone()
+    assert report_sample == (
+        1,
+        "Mean",
+        "Coal_Gen",
+        "-",
+        "2017-01-01 00:00:00",
+        1,
+        353.0,
+        "MW",
+    )
+    sol.close()
+
+
+def test_stream_xml_to_sqlite_strips_namespace_in_table_names(tmp_path):
+    xml = b"""<?xml version="1.0" encoding="utf-8"?>
+<MasterDataSet xmlns:foo="http://example.com/">
+  <foo:t_object><object_id>1</object_id><name>System</name></foo:t_object>
+  <foo:t_key_index><key_id>1</key_id></foo:t_key_index>
 </MasterDataSet>
 """
-    with ZipFile(path, "w", compression=ZIP_DEFLATED) as zf:
-        zf.writestr("sample_solution.xml", xml)
-        zf.writestr("t_data_0.BIN", struct.pack("<1d", 9.0))
-
-
-def _build_derived_solution_zip(path: Path) -> None:
-    xml = """<?xml version="1.0" encoding="utf-8"?>
-<MasterDataSet>
-    <t_key>
-        <key_id>1</key_id>
-        <phase_id>4</phase_id>
-        <is_summary>0</is_summary>
-        <membership_id>10</membership_id>
-        <property_id>100</property_id>
-        <sample_id>0</sample_id>
-        <band_id>1</band_id>
-    </t_key>
-    <t_key>
-        <key_id>2</key_id>
-        <phase_id>4</phase_id>
-        <is_summary>1</is_summary>
-        <membership_id>10</membership_id>
-        <property_id>100</property_id>
-        <sample_id>0</sample_id>
-        <band_id>1</band_id>
-    </t_key>
-    <t_key_index>
-        <key_id>1</key_id>
-        <period_type_id>0</period_type_id>
-        <length>2</length>
-        <position>0</position>
-        <period_offset>0</period_offset>
-    </t_key_index>
-    <t_key_index>
-        <key_id>2</key_id>
-        <period_type_id>4</period_type_id>
-        <length>2</length>
-        <position>0</position>
-        <period_offset>0</period_offset>
-    </t_key_index>
-    <t_membership>
-        <membership_id>10</membership_id>
-        <collection_id>20</collection_id>
-        <child_object_id>1</child_object_id>
-    </t_membership>
-    <t_collection>
-        <collection_id>20</collection_id>
-        <name>Batteries</name>
-    </t_collection>
-    <t_property>
-        <property_id>100</property_id>
-        <name>Generation</name>
-        <summary_name>Generation Summary</summary_name>
-        <unit_id>1</unit_id>
-        <summary_unit_id>1</summary_unit_id>
-    </t_property>
-    <t_object>
-        <object_id>1</object_id>
-        <name>Battery1</name>
-        <category_id>10</category_id>
-    </t_object>
-    <t_category>
-        <category_id>10</category_id>
-        <name>battery-category</name>
-    </t_category>
-    <t_unit>
-        <unit_id>1</unit_id>
-        <value>MW</value>
-    </t_unit>
-    <t_sample>
-        <sample_id>0</sample_id>
-        <sample_name>Mean</sample_name>
-    </t_sample>
-    <t_period_0>
-        <interval_id>1</interval_id>
-        <datetime>01/01/2012 00:00:00</datetime>
-    </t_period_0>
-    <t_period_0>
-        <interval_id>2</interval_id>
-        <datetime>01/01/2012 01:00:00</datetime>
-    </t_period_0>
-    <t_phase_4>
-        <phase_id>4</phase_id>
-        <period_id>1</period_id>
-        <interval_id>1</interval_id>
-    </t_phase_4>
-</MasterDataSet>
-"""
-    with ZipFile(path, "w", compression=ZIP_DEFLATED) as zf:
-        zf.writestr("sample_solution.xml", xml)
-        zf.writestr("t_data_0.BIN", struct.pack("<2d", 10.0, 20.0))
-        zf.writestr("t_data_4.BIN", struct.pack("<2d", 30.0, 40.0))
-
-
-def test_plexos_to_sqlite_imports_xml_and_bin(tmp_path):
-    zip_path = tmp_path / "sample_solution.zip"
-    _build_test_solution_zip(zip_path)
-
-    con = plexos_to_sqlite(zip_path)
+    con = sqlite3.connect(":memory:")
     try:
-        object_name = con.execute("SELECT name FROM t_object WHERE object_id = 1").fetchone()
-        assert object_name is not None
-        assert object_name[0] == "System"
-
-        rows = con.execute(
-            "SELECT key_id, period_type_id, block_id, value FROM t_data_values ORDER BY block_id"
-        ).fetchall()
-        assert rows == [
-            (100, 0, 6, 10.5),
-            (100, 0, 7, 20.5),
-        ]
-    finally:
-        con.close()
-
-
-def test_plexos_to_sqlite_writes_file_db(tmp_path):
-    zip_path = tmp_path / "sample_solution.zip"
-    sqlite_path = tmp_path / "solution.sqlite"
-    _build_test_solution_zip(zip_path)
-
-    con = plexos_to_sqlite(zip_path, sqlite_path=sqlite_path)
-    con.close()
-
-    assert sqlite_path.exists()
-
-
-def test_plexos_to_sqlite_strips_xml_namespace_in_table_names(tmp_path):
-    zip_path = tmp_path / "sample_solution.zip"
-    _build_namespaced_solution_zip(zip_path)
-
-    con = plexos_to_sqlite(zip_path)
-    try:
+        _stream_xml_to_sqlite(con, BytesIO(xml))
         tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         assert "t_object" in tables
         assert "t_key_index" in tables
         assert not any(name.startswith("{") for name in tables)
     finally:
         con.close()
-
-
-def test_plexos2sqlite_class_convert_and_context_manager(tmp_path):
-    zip_path = tmp_path / "sample_solution.zip"
-    _build_test_solution_zip(zip_path)
-
-    client = PLEXOS2SQLite(zip_path)
-    output_path = client.convert()
-    assert output_path.endswith(".sqlite")
-
-    with client as db:
-        assert db.connection is not None
-        count = db.connection.execute("SELECT COUNT(*) FROM t_object").fetchone()
-        assert count is not None
-        assert count[0] == 1
-
-
-def test_plexos2sqlite_convert_requires_force_if_output_exists(tmp_path):
-    zip_path = tmp_path / "sample_solution.zip"
-    _build_test_solution_zip(zip_path)
-    output_path = tmp_path / "out.sqlite"
-
-    client = PLEXOS2SQLite(zip_path, output_path=output_path)
-    _ = client.convert()
-
-    client_no_force = PLEXOS2SQLite(zip_path, output_path=output_path, force=False)
-    with pytest.raises(FileExistsError):
-        _ = client_no_force.convert()
-
-
-def test_plexos2sqlite_materializes_data_and_report_objects(tmp_path):
-    zip_path = tmp_path / "sample_solution.zip"
-    _build_derived_solution_zip(zip_path)
-
-    client = PLEXOS2SQLite(zip_path, force=True)
-    _ = client.convert()
-
-    with client as db:
-        con = db.connection
-        assert con is not None
-
-        data_rows = con.execute('SELECT COUNT(*) FROM data."ST__Interval__Batteries__Generation"').fetchone()
-        assert data_rows is not None
-        assert data_rows[0] == 2
-
-        # Rich schema: name/sample_name/band_id/datetime/value should be present
-        col_names = [
-            r[1]
-            for r in con.execute('PRAGMA data.table_info("ST__Interval__Batteries__Generation")').fetchall()
-        ]
-        assert "name" in col_names
-        assert "sample_name" in col_names
-        assert "band_id" in col_names
-        assert "datetime" in col_names
-        assert "value" in col_names
-
-        # Data values should be correct
-        sample = con.execute(
-            "SELECT name, sample_name, band_id, value"
-            ' FROM data."ST__Interval__Batteries__Generation"'
-            " ORDER BY block_id"
-        ).fetchall()
-        assert sample[0][0] == "Battery1"
-        assert sample[0][1] == "Mean"
-        assert sample[0][2] == 1
-        assert sample[0][3] == 10.0
-
-        report_rows = con.execute(
-            'SELECT COUNT(*) FROM report."ST__Year__Batteries__Generation_Summary"'
-        ).fetchone()
-        assert report_rows is not None
-        assert report_rows[0] == 2
-
-        report_cols = [
-            r[1]
-            for r in con.execute('PRAGMA report.table_info("ST__Interval__Batteries__Generation")').fetchall()
-        ]
-        assert report_cols == [
-            "band",
-            "sample_name",
-            "name",
-            "category",
-            "timestamp",
-            "interval_length",
-            "Generation",
-            "unit",
-        ]
-        report_sample = con.execute(
-            'SELECT band, sample_name, name, category, timestamp, interval_length, "Generation", unit'
-            ' FROM report."ST__Interval__Batteries__Generation" ORDER BY timestamp LIMIT 1'
-        ).fetchone()
-        assert report_sample == (
-            1,
-            "Mean",
-            "Battery1",
-            "battery-category",
-            "2012-01-01 00:00:00",
-            1,
-            10.0,
-            "MW",
-        )
-
-
-def test_plexos_to_sqlite_missing_zip_raises(tmp_path):
-    missing = tmp_path / "missing_solution.zip"
-    try:
-        plexos_to_sqlite(missing)
-        assert False, "Expected FileNotFoundError"
-    except FileNotFoundError:
-        assert True
 
 
 def test_select_xml_entry_prefers_model_name_match(tmp_path):
@@ -346,21 +198,15 @@ def test_read_all_bin_entries_filters_invalid_names(tmp_path):
 
 
 def test_decode_bin_values_skips_invalid_rows(tmp_path):
-    xml = """<?xml version=\"1.0\" encoding=\"utf-8\"?>
+    xml = b"""<?xml version="1.0" encoding="utf-8"?>
 <MasterDataSet>
   <t_key_index>
-    <key_id>100</key_id>
-    <period_type_id>0</period_type_id>
-    <length>bad</length>
-    <position>0</position>
-    <period_offset>0</period_offset>
+    <key_id>100</key_id><period_type_id>0</period_type_id>
+    <length>bad</length><position>0</position><period_offset>0</period_offset>
   </t_key_index>
   <t_key_index>
-    <key_id>101</key_id>
-    <period_type_id>0</period_type_id>
-    <length>2</length>
-    <position>100</position>
-    <period_offset>0</period_offset>
+    <key_id>101</key_id><period_type_id>0</period_type_id>
+    <length>2</length><position>100</position><period_offset>0</period_offset>
   </t_key_index>
 </MasterDataSet>
 """
@@ -369,8 +215,11 @@ def test_decode_bin_values_skips_invalid_rows(tmp_path):
         zf.writestr("skip_rows.xml", xml)
         zf.writestr("t_data_0.BIN", struct.pack("<1d", 1.0))
 
-    con = plexos_to_sqlite(zip_path)
+    con = sqlite3.connect(":memory:")
     try:
+        with ZipFile(zip_path, "r") as zf:
+            _stream_xml_to_sqlite(con, BytesIO(xml))
+            _decode_bin_values(con, zf)
         rows = con.execute("SELECT * FROM t_data_values").fetchall()
         assert rows == []
     finally:
@@ -408,26 +257,27 @@ def test_select_xml_entry_prefers_zip_stem_match(tmp_path):
     assert _select_xml_entry(zip_path, entries) == "target_name.xml"
 
 
-def test_resolve_input_zip_path_variants(tmp_path):
-    solution_zip = tmp_path / "one.zip"
-    _build_test_solution_zip(solution_zip)
-
+def test_resolve_input_zip_path_variants(tmp_path, solution_zip):
+    # Direct path to an existing ZIP passes through unchanged.
     assert _resolve_input_zip_path(solution_zip) == solution_zip
 
+    # Non-ZIP extension raises ValueError.
     not_zip = tmp_path / "one.txt"
     not_zip.write_text("x", encoding="utf-8")
     with pytest.raises(ValueError):
         _resolve_input_zip_path(not_zip)
 
+    # Empty directory raises FileNotFoundError.
     empty_dir = tmp_path / "empty"
     empty_dir.mkdir()
     with pytest.raises(FileNotFoundError):
         _resolve_input_zip_path(empty_dir)
 
+    # Directory with more than one ZIP raises ValueError.
     many_dir = tmp_path / "many"
     many_dir.mkdir()
-    _build_test_solution_zip(many_dir / "a.zip")
-    _build_test_solution_zip(many_dir / "b.zip")
+    shutil.copy(solution_zip, many_dir / "a.zip")
+    shutil.copy(solution_zip, many_dir / "b.zip")
     with pytest.raises(ValueError):
         _resolve_input_zip_path(many_dir)
 
@@ -570,17 +420,16 @@ def test_decode_bin_values_returns_early_without_key_index(tmp_path):
         con.close()
 
 
-def test_plexos2sqlite_force_overwrites_existing_file(tmp_path):
-    zip_path = tmp_path / "sample_solution.zip"
-    _build_test_solution_zip(zip_path)
+def test_plexos_solution_if_exists_replace(tmp_path, solution_zip):
     out_path = tmp_path / "forced.sqlite"
     out_path.write_text("not a database", encoding="utf-8")
 
-    client = PLEXOS2SQLite(zip_path, output_path=out_path, force=True)
-    out = client.convert()
-    assert Path(out).exists()
+    sol = PlexosSolution.from_zip(solution_zip)
+    result = sol.to_sqlite(str(out_path), if_exists="replace", decode_bin_values=False)
+    assert result.database is not None and result.database.exists()
+    sol.close()
 
-    con = sqlite3.connect(out)
+    con = sqlite3.connect(str(out_path))
     try:
         tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         assert "t_object" in tables
@@ -588,53 +437,42 @@ def test_plexos2sqlite_force_overwrites_existing_file(tmp_path):
         con.close()
 
 
-def test_plexos2sqlite_enter_triggers_convert_when_output_missing(tmp_path):
-    zip_path = tmp_path / "sample_solution.zip"
-    _build_test_solution_zip(zip_path)
+def test_plexos_solution_creates_file_when_missing(tmp_path, solution_zip):
     out_path = tmp_path / "auto.sqlite"
-    client = PLEXOS2SQLite(zip_path, output_path=out_path, force=False)
 
     assert not out_path.exists()
-    with client as db:
-        assert out_path.exists()
-        assert db.connection is not None
+    sol = PlexosSolution.from_zip(solution_zip)
+    sol.to_sqlite(str(out_path), if_exists="reuse", decode_bin_values=False)
+    assert out_path.exists()
+    with sol:
+        assert sol.connection is not None
 
 
-def test_plexos2sqlite_lazy_materialization_for_single_table(tmp_path):
-    zip_path = tmp_path / "sample_solution.zip"
-    _build_derived_solution_zip(zip_path)
+def test_plexos_solution_lazy_materialization_for_single_table(solution_sqlite):
+    sol = PlexosSolution.from_sqlite(solution_sqlite)
+    con = sol.connection
 
-    client = PLEXOS2SQLite(zip_path, force=True, materialize_on_enter=False)
-    _ = client.convert()
+    with pytest.raises(sqlite3.OperationalError):
+        con.execute('SELECT COUNT(*) FROM data."ST__Interval__Generators__Generation"').fetchone()
 
-    with client as db:
-        con = db.connection
-        assert con is not None
+    mat_result = sol.materialize_table("ST__Interval__Generators__Generation", schema="data")
+    assert mat_result.created is True
 
-        with pytest.raises(sqlite3.OperationalError):
-            con.execute('SELECT COUNT(*) FROM data."ST__Interval__Batteries__Generation"').fetchone()
-
-        created = db.materialize_table("ST__Interval__Batteries__Generation", schema="data")
-        assert created is True
-
-        count = con.execute('SELECT COUNT(*) FROM data."ST__Interval__Batteries__Generation"').fetchone()
-        assert count is not None
-        assert count[0] == 2
+    count = con.execute('SELECT COUNT(*) FROM data."ST__Interval__Generators__Generation"').fetchone()
+    assert count is not None
+    assert count[0] == 35040
+    sol.close()
 
 
-def test_plexos2sqlite_materialize_table_invalid_schema_and_missing_table(tmp_path):
-    zip_path = tmp_path / "sample_solution.zip"
-    _build_derived_solution_zip(zip_path)
+def test_plexos_solution_materialize_table_invalid_schema_and_missing_table(solution_sqlite):
+    sol = PlexosSolution.from_sqlite(solution_sqlite)
 
-    client = PLEXOS2SQLite(zip_path, force=True, materialize_on_enter=False)
-    _ = client.convert()
+    with pytest.raises(ValueError):
+        sol.materialize_table("ST__Interval__Generators__Generation", schema="invalid")
 
-    with client as db:
-        with pytest.raises(ValueError):
-            db.materialize_table("ST__Interval__Batteries__Generation", schema="invalid")
-
-        created = db.materialize_table("DOES_NOT_EXIST", schema="data")
-        assert created is False
+    mat_result = sol.materialize_table("DOES_NOT_EXIST", schema="data")
+    assert mat_result.created is False
+    sol.close()
 
 
 def test_select_xml_entry_falls_back_to_first_xml_when_no_match(tmp_path):
@@ -643,12 +481,12 @@ def test_select_xml_entry_falls_back_to_first_xml_when_no_match(tmp_path):
     assert _select_xml_entry(zip_path, entries, model_name="nomatch") == "zzz.xml"
 
 
-def test_resolve_input_zip_path_directory_with_single_zip(tmp_path):
+def test_resolve_input_zip_path_directory_with_single_zip(tmp_path, solution_zip):
     single = tmp_path / "single"
     single.mkdir()
-    solution_zip = single / "only.zip"
-    _build_test_solution_zip(solution_zip)
-    assert _resolve_input_zip_path(single) == solution_zip
+    zip_copy = single / solution_zip.name
+    shutil.copy(solution_zip, zip_copy)
+    assert _resolve_input_zip_path(single) == zip_copy
 
 
 def test_period_type_name_none_and_unknown():
@@ -702,21 +540,19 @@ def test_build_phase_sets_skips_missing_id_col_and_invalid_values():
         con.close()
 
 
-def test_materialize_solution_tables_uses_fallback_when_meta_tables_missing(tmp_path):
-    zip_path = tmp_path / "sample_solution.zip"
-    _build_derived_solution_zip(zip_path)
+def test_materialize_solution_tables_uses_fallback_when_meta_tables_missing(tmp_path, solution_sqlite):
+    db_copy = tmp_path / "ror_copy.sqlite"
+    shutil.copy(solution_sqlite, db_copy)
 
-    con = plexos_to_sqlite(zip_path)
-    try:
-        con.execute("DROP TABLE IF EXISTS t_sample")
+    sol = PlexosSolution.from_sqlite(db_copy)
+    con = sol.connection
+    con.execute("DROP TABLE IF EXISTS t_sample")
+    con.commit()
 
-        sr._materialize_solution_tables(con)
-        rows = con.execute(
-            'SELECT key_id, period_type_id, block_id, value FROM data."ST__Interval__Batteries__Generation"'
-        ).fetchall()
-        assert len(rows) == 2
-    finally:
-        con.close()
+    sr._materialize_solution_tables(con)
+    count = con.execute('SELECT COUNT(*) FROM data."ST__Interval__Generators__Generation"').fetchone()[0]
+    assert count > 0
+    sol.close()
 
 
 def test_materialize_solution_tables_skips_empty_group(monkeypatch):
@@ -786,85 +622,74 @@ def test_decode_bin_values_returns_early_when_key_index_empty_and_when_no_bin(tm
         con.close()
 
 
-def test_client_runtime_guards_and_list_tables_validation(tmp_path):
-    zip_path = tmp_path / "sample_solution.zip"
-    _build_derived_solution_zip(zip_path)
-    client = PLEXOS2SQLite(zip_path, force=True, materialize_on_enter=False)
+def test_client_runtime_guards_and_list_tables_validation(tmp_path, solution_zip):
+    sol = PlexosSolution.from_zip(solution_zip)
 
     with pytest.raises(RuntimeError):
-        client._ensure_data_values_decoded()
+        sol.materialize_table("ST__Interval__Generators__Generation")
 
     with pytest.raises(RuntimeError):
-        client.materialize_table("ST__Interval__Batteries__Generation")
+        sol.list_tables()
 
-    with pytest.raises(RuntimeError):
-        client.list_tables()
+    sol.to_sqlite(str(tmp_path / "out.sqlite"), if_exists="replace", decode_bin_values=False)
 
-    _ = client.convert()
-    with client as db:
-        with pytest.raises(ValueError):
-            db.list_tables(schema="invalid")
+    with pytest.raises(ValueError):
+        sol.list_tables(schema="invalid")
 
-        assert "ST__Interval__Batteries__Generation" in db.list_tables(schema="data")
-        assert "ST__Interval__Batteries__Generation" in db.list_tables(schema="report")
+    assert "ST__Interval__Generators__Generation" in [t.name for t in sol.list_tables(schema="data")]
+    assert "ST__Interval__Generators__Generation" in [t.name for t in sol.list_tables(schema="report")]
+    sol.close()
 
 
-def test_ensure_data_values_decoded_recovers_from_empty_table(tmp_path):
+def test_plexos_solution_bin_decode_recovery_from_empty_table(tmp_path):
     zip_path = tmp_path / "sample_solution.zip"
     _build_test_solution_zip(zip_path)
+    out_path = tmp_path / "no_bin.sqlite"
 
-    client = PLEXOS2SQLite(
-        zip_path,
-        force=True,
-        materialize_on_enter=False,
-        decode_on_convert=False,
-    )
-    _ = client.convert()
-
-    with client as db:
-        con = db.connection
-        assert con is not None
-
-        # Simulate stale/partial output where t_data_values exists but is empty.
-        con.execute(
-            """
-            CREATE TABLE IF NOT EXISTS t_data_values (
-                key_id INTEGER NOT NULL,
-                period_type_id INTEGER NOT NULL,
-                block_id INTEGER NOT NULL,
-                value REAL NOT NULL
-            )
-            """
+    # Create SQLite file without BIN decoding using lower-level helpers.
+    con = sqlite3.connect(str(out_path))
+    with ZipFile(zip_path, "r") as zf:
+        xml_entry = _select_xml_entry(zip_path, zf.namelist())
+        with zf.open(xml_entry) as xml_stream:
+            _stream_xml_to_sqlite(con, xml_stream)
+    # Simulate stale output: t_data_values exists but is empty.
+    con.execute(
+        """
+        CREATE TABLE IF NOT EXISTS t_data_values (
+            key_id INTEGER NOT NULL,
+            period_type_id INTEGER NOT NULL,
+            block_id INTEGER NOT NULL,
+            value REAL NOT NULL
         )
-        con.commit()
-        assert con.execute("SELECT COUNT(*) FROM t_data_values").fetchone()[0] == 0
+        """
+    )
+    con.commit()
+    assert con.execute("SELECT COUNT(*) FROM t_data_values").fetchone()[0] == 0
+    con.close()
 
-        db._ensure_data_values_decoded()
-        assert con.execute("SELECT COUNT(*) FROM t_data_values").fetchone()[0] > 0
+    # PlexosSolution should detect and re-decode BIN when reusing an existing file.
+    sol = PlexosSolution.from_zip(zip_path)
+    sol.to_sqlite(str(out_path), if_exists="reuse")
+    assert sol.connection.execute("SELECT COUNT(*) FROM t_data_values").fetchone()[0] > 0
+    sol.close()
 
 
-def test_list_catalog_tables_compat_shape(tmp_path):
-    zip_path = tmp_path / "sample_solution.zip"
-    _build_derived_solution_zip(zip_path)
-    client = PLEXOS2SQLite(zip_path, force=True, materialize_on_enter=False)
-    _ = client.convert()
+def test_plexos_solution_list_tables_all_schemas(solution_sqlite):
+    sol = PlexosSolution.from_sqlite(solution_sqlite)
+    sol.materialize_table("ST__Interval__Generators__Generation", schema="data")
+    sol.materialize_table("ST__Interval__Generators__Generation", schema="report")
 
-    with client as db:
-        rows = db.list_catalog_tables()
-        assert rows
+    raw = [t.name for t in sol.list_tables(schema="raw")]
+    assert "t_key" in raw
+    assert "t_membership" in raw
 
-        schemas = {r["table_schema"] for r in rows}
-        assert {"main", "raw", "processed", "data", "report"}.issubset(schemas)
+    data = [t.name for t in sol.list_tables(schema="data")]
+    assert "ST__Interval__Generators__Generation" in data
 
-        by_schema = {}
-        for row in rows:
-            by_schema.setdefault(row["table_schema"], set()).add(row["table_name"])
+    report = [t.name for t in sol.list_tables(schema="report")]
+    assert "ST__Interval__Generators__Generation" in report
 
-        assert "plexos2sqlite" in by_schema["main"]
-        assert "classes" in by_schema["raw"]
-        assert "classes" in by_schema["processed"]
-        assert "ST__Interval__Batteries__Generation" in by_schema["data"]
-        assert "ST__Interval__Batteries__Generation" in by_schema["report"]
+    sol.close()
 
 
 def test_table_label_part_and_report_interval_length_edges():
@@ -1106,46 +931,383 @@ def test_decode_bin_values_no_period_entries_and_no_grouped_rows(tmp_path):
         con.close()
 
 
-def test_materialize_table_full_data_and_empty_key_rows_paths(tmp_path, monkeypatch):
-    zip_path = tmp_path / "sample_solution.zip"
-    _build_derived_solution_zip(zip_path)
-    client = PLEXOS2SQLite(zip_path, force=True, materialize_on_enter=False)
-    _ = client.convert()
+def test_plexos_solution_materialize_table_delegates_to_impl(solution_sqlite, monkeypatch):
+    sol = PlexosSolution.from_sqlite(solution_sqlite)
 
-    with client as db:
-        con = db.connection
-        assert con is not None
+    calls: list[tuple[str, str]] = []
 
-        # No full data table and no key_index rows for selected keys.
-        con.execute("DELETE FROM t_key_index")
-        monkeypatch.setattr(sr, "_build_derived_table_map", lambda _con: {("data", "AnyTable"): {1}})
-        assert db.materialize_table("AnyTable", schema="data") is False
+    def _fake_materialize(_con: sqlite3.Connection, schema_name: str, table_name: str) -> bool:
+        calls.append((schema_name, table_name))
+        return True
 
-        # Full data path delegates to _materialize_single_solution_table.
-        con.execute(
-            "CREATE TABLE IF NOT EXISTS t_data_values ("
-            "key_id INTEGER, period_type_id INTEGER, block_id INTEGER, value REAL"
-            ")"
-        )
-        con.execute("DELETE FROM t_data_values")
-        con.execute("INSERT INTO t_data_values VALUES (1, 0, 1, 1.0)")
-
-        calls: list[tuple[str, str]] = []
-
-        def _fake_materialize(_con: sqlite3.Connection, schema_name: str, table_name: str) -> bool:
-            calls.append((schema_name, table_name))
-            return True
-
-        monkeypatch.setattr(sr, "_materialize_single_solution_table", _fake_materialize)
-        assert db.materialize_table("AnotherTable", schema="report") is True
-        assert calls == [("report", "AnotherTable")]
+    monkeypatch.setattr(sr, "_materialize_single_solution_table", _fake_materialize)
+    result = sol.materialize_table("AnyTable", schema="report")
+    assert result.created is True
+    assert calls == [("report", "AnyTable")]
+    sol.close()
 
 
-def test_timestamp_block_names_and_list_catalog_runtime_guards(tmp_path):
-    zip_path = tmp_path / "sample_solution.zip"
-    _build_test_solution_zip(zip_path)
-    client = PLEXOS2SQLite(zip_path, force=True, materialize_on_enter=False)
+def test_plexos_solution_source_property_and_pre_connect_guards(solution_zip):
+    sol = PlexosSolution.from_zip(solution_zip)
 
-    assert client._timestamp_block_names() == []
+    # source property is set after from_zip
+    assert sol.source == solution_zip
+    assert sol.name == solution_zip.stem
+
+    # list_tables and materialize_table require an active connection
     with pytest.raises(RuntimeError):
-        client.list_catalog_tables()
+        sol.list_tables()
+    with pytest.raises(RuntimeError):
+        sol.materialize_table("any_table")
+    sol.close()
+
+
+def test_plexos_solution_from_sqlite_opens_existing_db(solution_sqlite):
+    # Re-open without the ZIP.
+    sol = PlexosSolution.from_sqlite(solution_sqlite)
+    assert sol.source is None
+    assert sol.name == solution_sqlite.stem
+    assert sol.connection is not None
+
+    # Derived table map is available from the raw SQL tables in the file.
+    tables = [t.name for t in sol.list_tables(schema="data")]
+    assert "ST__Interval__Generators__Generation" in tables
+
+    # data/report schemas are in-memory, so materialize on demand.
+    mat = sol.materialize_table("ST__Interval__Generators__Generation", schema="data")
+    assert mat.created is True
+    count = sol.connection.execute(
+        'SELECT COUNT(*) FROM data."ST__Interval__Generators__Generation"'
+    ).fetchone()
+    assert count[0] == 35040
+
+    sol.close()
+
+
+def test_plexos_solution_from_sqlite_missing_raises(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        PlexosSolution.from_sqlite(tmp_path / "does_not_exist.sqlite")
+
+
+# ---------------------------------------------------------------------------
+# display.py coverage
+# ---------------------------------------------------------------------------
+
+
+def test_box_border_structure():
+    border = _box_border([6, 8], "┌", "┬", "┐")
+    assert border.startswith("┌")
+    assert border.endswith("┐")
+    assert "┬" in border
+    assert border.count("─") == 14  # 6 + 8
+
+
+def test_box_data_line_left_and_center():
+    widths = [10, 12]
+    left = _box_data_line(widths, ["hello", "world"])
+    assert left.startswith("│")
+    assert "hello" in left
+    centered = _box_data_line(widths, ["hi", "there"], center=True)
+    assert "hi" in centered
+    assert centered.startswith("│")
+
+
+def test_box_data_line_null_value():
+    line = _box_data_line([10], [None])
+    assert "NULL" in line
+
+
+def test_box_dots_line():
+    line = _box_dots_line([10, 8])
+    assert line.startswith("│")
+    assert line.endswith("│")
+    assert "·" in line
+
+
+def test_print_box_table_short_output(capsys):
+    _print_box_table(["col_a", "col_b"], [("v1", "v2"), ("v3", "v4")], max_rows=20)
+    out = capsys.readouterr().out
+    assert "col_a" in out
+    assert "v1" in out
+    assert "2 rows" in out
+    assert "shown" not in out
+
+
+def test_print_box_table_truncation(capsys):
+    rows = [(f"row_{i}", str(i)) for i in range(25)]
+    _print_box_table(["name", "num"], rows, max_rows=10)
+    out = capsys.readouterr().out
+    assert "·" in out
+    assert "25 rows" in out
+    assert "10 shown" in out
+
+
+def test_show_db_tables_basic(tmp_path, solution_zip, capsys):
+    sol = PlexosSolution.from_zip(solution_zip)
+    sol.to_sqlite(str(tmp_path / "catalog.sqlite"), if_exists="replace", decode_bin_values=False)
+    show_db_tables(sol)
+    out = capsys.readouterr().out
+    assert "table_name" in out  # column header is always visible
+    assert "rows" in out  # footer always contains row count
+    sol.close()
+
+
+def test_show_db_tables_truncates_with_small_max_rows(tmp_path, solution_zip, capsys):
+    sol = PlexosSolution.from_zip(solution_zip)
+    sol.to_sqlite(str(tmp_path / "catalog2.sqlite"), if_exists="replace", decode_bin_values=False)
+    show_db_tables(sol, max_rows=4)
+    out = capsys.readouterr().out
+    assert "shown" in out
+    sol.close()
+
+
+# ---------------------------------------------------------------------------
+# solution.py coverage
+# ---------------------------------------------------------------------------
+
+
+def test_to_sqlite_raises_when_called_on_from_sqlite_instance(solution_sqlite):
+    sol = PlexosSolution.from_sqlite(solution_sqlite)
+    with pytest.raises(RuntimeError, match="No ZIP path"):
+        sol.to_sqlite()
+    sol.close()
+
+
+def test_apply_materialize_with_single_string_name(solution_sqlite):
+    # _apply_materialize(str) covers the elif isinstance(materialize, str) branch
+    sol = PlexosSolution.from_sqlite(solution_sqlite)
+    sol._apply_materialize("ST__Interval__Generators__Generation")
+    # Table is created in the in-memory "data" schema
+    result = sol.connection.execute(
+        "SELECT name FROM data.sqlite_master WHERE name=?",
+        ("ST__Interval__Generators__Generation",),
+    ).fetchone()
+    assert result is not None
+    sol.close()
+
+
+def test_apply_materialize_with_list_of_names(solution_sqlite):
+    # _apply_materialize(list) covers the else branch (Sequence[str])
+    sol = PlexosSolution.from_sqlite(solution_sqlite)
+    sol._apply_materialize(["ST__Interval__Generators__Generation"])
+    result = sol.connection.execute(
+        "SELECT name FROM data.sqlite_master WHERE name=?",
+        ("ST__Interval__Generators__Generation",),
+    ).fetchone()
+    assert result is not None, "Table should be materialized from list"
+    sol.close()
+
+
+def test_info_returns_solution_info_from_zip(solution_zip):
+    from plexosdb.solution_reader.types import SolutionInfo
+
+    sol = PlexosSolution.from_zip(solution_zip)
+    info = sol.info()
+    assert isinstance(info, SolutionInfo)
+    assert info.source == solution_zip
+    assert info.xml_entry.endswith(".xml")
+    assert info.model_name is None
+    sol.close()
+
+
+def test_info_with_model_name_hint(solution_zip):
+    sol = PlexosSolution.from_zip(solution_zip, model_name="Base")
+    info = sol.info()
+    assert info.model_name == "Base"
+    sol.close()
+
+
+def test_info_raises_on_from_sqlite_instance(solution_sqlite):
+    sol = PlexosSolution.from_sqlite(solution_sqlite)
+    with pytest.raises(RuntimeError, match="No ZIP path"):
+        sol.info()
+    sol.close()
+
+
+def test_list_tables_processed_schema(solution_sqlite):
+    sol = PlexosSolution.from_sqlite(solution_sqlite)
+    processed = {t.name for t in sol.list_tables(schema="processed")}
+    assert {"t_class", "t_object", "t_membership", "t_property"}.issubset(processed)
+    for ti in sol.list_tables(schema="processed"):
+        assert ti.schema == "processed"
+    sol.close()
+
+
+def test_materialize_table_if_exists_fail_raises(solution_sqlite):
+    sol = PlexosSolution.from_sqlite(solution_sqlite)
+    sol.materialize_table("ST__Interval__Generators__Generation", schema="data")
+    with pytest.raises(FileExistsError, match="already exists"):
+        sol.materialize_table(
+            "ST__Interval__Generators__Generation",
+            schema="data",
+            if_exists="fail",
+        )
+    sol.close()
+
+
+def test_materialize_table_if_exists_replace(solution_sqlite):
+    sol = PlexosSolution.from_sqlite(solution_sqlite)
+    sol.materialize_table("ST__Interval__Generators__Generation", schema="data")
+    result = sol.materialize_table(
+        "ST__Interval__Generators__Generation",
+        schema="data",
+        if_exists="replace",
+    )
+    assert result.created is True
+    sol.close()
+
+
+def test_solution_name_returns_unknown_for_bare_instance():
+    sol = PlexosSolution()
+    assert sol.name == "unknown"
+
+
+def test_ensure_bin_decoded_noop_when_zip_path_is_none(solution_sqlite):
+    sol = PlexosSolution.from_sqlite(solution_sqlite)
+    assert sol._zip_path is None
+    sol._ensure_bin_decoded()  # should be a no-op
+    sol.close()
+
+
+def test_connection_property_raises_before_to_sqlite():
+    sol = PlexosSolution()
+    with pytest.raises(RuntimeError, match="No active connection"):
+        _ = sol.connection
+
+
+def test_close_is_idempotent(solution_sqlite):
+    sol = PlexosSolution.from_sqlite(solution_sqlite)
+    sol.close()
+    sol.close()  # second call should be a no-op, not raise
+
+
+def test_context_manager_enter_returns_self_and_exit_closes(tmp_path, solution_zip):
+    sol = PlexosSolution.from_zip(solution_zip)
+    sol.to_sqlite(str(tmp_path / "cm.sqlite"), if_exists="replace", decode_bin_values=False)
+    with sol as ctx:
+        assert ctx is sol
+        assert ctx.connection is not None
+    assert sol._connection is None
+
+
+# ---------------------------------------------------------------------------
+# materialize.py — uncovered branches
+# ---------------------------------------------------------------------------
+
+
+def test_build_period_join_returns_null_when_no_period_table_present():
+    # period table exists in meta but not in the provided table_names set
+    result = _build_period_join("ST__Interval__Generators__Generation", set())
+    assert result == ("", "NULL AS datetime")
+
+
+def test_build_period_join_returns_null_for_unknown_period_type():
+    result = _build_period_join("ST__Unknown__Generators__Generation", {"t_period_0"})
+    assert result == ("", "NULL AS datetime")
+
+
+def test_resolve_report_unit_without_is_summary_column():
+    con = sqlite3.connect(":memory:")
+    try:
+        con.execute("CREATE TABLE t_key (key_id TEXT, property_id TEXT)")
+        con.execute("CREATE TABLE t_property (property_id TEXT, unit_id TEXT, summary_unit_id TEXT)")
+        con.execute("CREATE TABLE t_unit (unit_id TEXT, value TEXT)")
+        con.execute("INSERT INTO t_key VALUES ('1', '10')")
+        con.execute("INSERT INTO t_property VALUES ('10', '99', NULL)")
+        con.execute("INSERT INTO t_unit VALUES ('99', 'MW')")
+        unit = sr._resolve_report_unit(con, key_ids={1})
+        assert unit == "MW"
+    finally:
+        con.close()
+
+
+def test_copy_data_table_to_report_plain_mirror_when_no_rich_columns():
+    con = sqlite3.connect(":memory:")
+    try:
+        con.execute("ATTACH DATABASE ':memory:' AS data")
+        con.execute("ATTACH DATABASE ':memory:' AS report")
+        # Data table without required rich columns → plain SELECT * mirror
+        con.execute('CREATE TABLE data."Plain" (key_id INTEGER, value REAL)')
+        con.execute('INSERT INTO data."Plain" VALUES (1, 42.0)')
+        sr._copy_data_table_to_report(con, "Plain", key_ids={1})
+        row = con.execute('SELECT * FROM report."Plain"').fetchone()
+        assert row == (1, 42.0)
+    finally:
+        con.close()
+
+
+def test_copy_data_table_to_report_with_unit_text():
+    con = sqlite3.connect(":memory:")
+    try:
+        con.execute("ATTACH DATABASE ':memory:' AS data")
+        con.execute("ATTACH DATABASE ':memory:' AS report")
+        # Main schema has t_key / t_property / t_unit for unit resolution
+        con.execute("CREATE TABLE t_key (key_id TEXT, property_id TEXT, is_summary TEXT)")
+        con.execute("CREATE TABLE t_property (property_id TEXT, unit_id TEXT, summary_unit_id TEXT)")
+        con.execute("CREATE TABLE t_unit (unit_id TEXT, value TEXT)")
+        con.execute("CREATE TABLE t_object (object_id TEXT, name TEXT, category_id TEXT)")
+        con.execute("CREATE TABLE t_category (category_id TEXT, name TEXT)")
+        con.execute("INSERT INTO t_key VALUES ('1', '10', '0')")
+        con.execute("INSERT INTO t_property VALUES ('10', '99', NULL)")
+        con.execute("INSERT INTO t_unit VALUES ('99', 'GW')")
+        con.execute("INSERT INTO t_object VALUES ('1', 'Gen1', '5')")
+        con.execute("INSERT INTO t_category VALUES ('5', 'thermal')")
+        # Data table with rich columns (band_id, sample_name, name, datetime, value)
+        con.execute(
+            'CREATE TABLE data."ST__Interval__Gen__Power" '
+            "(band_id INT, sample_name TEXT, name TEXT, datetime TEXT, value REAL)"
+        )
+        con.execute(
+            'INSERT INTO data."ST__Interval__Gen__Power"'
+            " VALUES (1, 'Mean', 'Gen1', '2017-01-01T00:00:00', 100.0)"
+        )
+        sr._copy_data_table_to_report(con, "ST__Interval__Gen__Power", key_ids={1})
+        row = con.execute('SELECT unit FROM report."ST__Interval__Gen__Power"').fetchone()
+        assert row is not None
+        assert row[0] == "GW"
+    finally:
+        con.close()
+
+
+def test_materialize_solution_tables_fallback_when_no_meta_tables():
+    con = sqlite3.connect(":memory:")
+    try:
+        con.execute("ATTACH DATABASE ':memory:' AS data")
+        con.execute("ATTACH DATABASE ':memory:' AS report")
+        # Minimal set without t_sample / t_object / t_membership — triggers fallback sql
+        con.execute(
+            "CREATE TABLE t_key ("
+            "key_id TEXT, phase_id TEXT, is_summary TEXT, membership_id TEXT,"
+            " property_id TEXT, sample_id TEXT, band_id TEXT)"
+        )
+        con.execute(
+            "CREATE TABLE t_key_index"
+            " (key_id TEXT, period_type_id TEXT, length TEXT, position TEXT, period_offset TEXT)"
+        )
+        con.execute(
+            "CREATE TABLE t_membership (membership_id TEXT, collection_id TEXT, child_object_id TEXT)"
+        )
+        con.execute("CREATE TABLE t_collection (collection_id TEXT, name TEXT)")
+        con.execute(
+            "CREATE TABLE t_property (property_id TEXT, name TEXT, unit_id TEXT, summary_unit_id TEXT)"
+        )
+        con.execute(
+            "CREATE TABLE t_data_values"
+            " (key_id INTEGER, period_type_id INTEGER, block_id INTEGER, value REAL)"
+        )
+        con.execute("INSERT INTO t_key VALUES ('1','4','0','10','100','0','1')")
+        con.execute("INSERT INTO t_key_index VALUES ('1','0','1','0','0')")
+        con.execute("INSERT INTO t_membership VALUES ('10','20','1')")
+        con.execute("INSERT INTO t_collection VALUES ('20','Generators')")
+        con.execute("INSERT INTO t_property VALUES ('100','Generation',NULL,NULL)")
+        con.execute("INSERT INTO t_data_values VALUES (1,0,1,99.0)")
+        con.execute("CREATE TABLE t_phase_4 (phase_id TEXT)")
+        con.execute("INSERT INTO t_phase_4 VALUES ('4')")
+        sr._materialize_solution_tables(con)
+        # Table should be created even without metadata joins
+        tables = {
+            r[0] for r in con.execute("SELECT name FROM data.sqlite_master WHERE type='table'").fetchall()
+        }
+        assert len(tables) > 0
+    finally:
+        con.close()
