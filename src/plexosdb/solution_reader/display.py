@@ -28,10 +28,12 @@ _TABLE_CATALOG_COLUMNS: list[str] = [
 
 
 def _box_border(widths: list[int], left: str, mid: str, right: str) -> str:
+    """Return a horizontal border line using box-drawing characters."""
     return left + mid.join("\u2500" * w for w in widths) + right
 
 
 def _box_data_line(widths: list[int], vals: Sequence[object], *, center: bool = False) -> str:
+    """Return a data row line with values padded to *widths*, bordered by ``│``."""
     parts = []
     for i, v in enumerate(vals):
         s = "NULL" if v is None else str(v)
@@ -41,6 +43,7 @@ def _box_data_line(widths: list[int], vals: Sequence[object], *, center: bool = 
 
 
 def _box_dots_line(widths: list[int]) -> str:
+    """Return an ellipsis row (``·``) used when output is truncated."""
     dot = "\u00b7"  # middle dot ·
     return "\u2502" + "\u2502".join(f" {dot:^{w - 2}} " for w in widths) + "\u2502"
 
