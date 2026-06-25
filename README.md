@@ -80,18 +80,17 @@ db.create_schema(version=(12, 0, 3))
 ## Read PLEXOS Solution ZIP Tables with pandas
 
 ```python
-from plexosdb import PLEXOS2SQLite
+from plexosdb import PlexosSolution
 import pandas as pd
 
 PLEXOS_SOLUTION = "/path/to/solution.zip"
 
-client = PLEXOS2SQLite(PLEXOS_SOLUTION, force=True, materialize_on_enter=False)
-client.convert()
+sol = PlexosSolution.from_zip(PLEXOS_SOLUTION)
+sol.to_sqlite("output.sqlite", if_exists="replace")
 
 table = "ST__Interval__Regions__Fixed_Load"
-with client as db:
-    db.materialize_table(table, schema="report")
-    df_table = pd.read_sql_query(f'SELECT * FROM report."{table}"', db.connection)
+sol.materialize_table(table, schema="report")
+df_table = pd.read_sql_query(f'SELECT * FROM report."{table}"', sol.connection)
 ```
 
 This pattern is useful when you only need a few report/data tables from a large

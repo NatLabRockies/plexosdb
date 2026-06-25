@@ -20,33 +20,33 @@ print(f"Imported PLEXOS model version: {version}")
 
 ## Importing a PLEXOS solution ZIP and reading report tables
 
-Use `PLEXOS2SQLite` when you want to analyze PLEXOS solution ZIP outputs. With
-`materialize_on_enter=False`, you can materialize only the table you need.
+Use `PlexosSolution` when you want to analyze PLEXOS solution ZIP outputs. With
+the default `materialize="none"`, you can materialize only the table you need.
 
 ```python
-from plexosdb import PLEXOS2SQLite
+from plexosdb import PlexosSolution
 import pandas as pd
 
 PLEXOS_SOLUTION = "/path/to/solution.zip"
 
-client = PLEXOS2SQLite(PLEXOS_SOLUTION, force=True, materialize_on_enter=False)
-client.convert()
+sol = PlexosSolution.from_zip(PLEXOS_SOLUTION)
+sol.to_sqlite("output.sqlite", if_exists="replace")
 
 table = "ST__Interval__Regions__Fixed_Load"
-with client as db:
-    db.materialize_table(table, schema="report")
-    df_table = pd.read_sql_query(f'SELECT * FROM report."{table}"', db.connection)
+sol.materialize_table(table, schema="report")
+df_table = pd.read_sql_query(f'SELECT * FROM report."{table}"', sol.connection)
 ```
 
 How to use this flow:
 
-1. Create a `PLEXOS2SQLite` client with `materialize_on_enter=False` to avoid
-   materializing every derived solution table.
-2. Call `convert()` once to create the SQLite database from the solution ZIP.
-3. Inside `with client as db:`, call `materialize_table(..., schema="report")`
-   for the table you want.
+1. Create a `PlexosSolution` via `PlexosSolution.from_zip(zip_path)`.
+2. Call `to_sqlite(path, if_exists="replace")` to import the ZIP into SQLite.
+   Use `materialize="none"` (default) to avoid materializing every derived table
+   up-front.
+3. Call `materialize_table(table, schema="report")` for the specific table you
+   want.
 4. Read that table with pandas using `pd.read_sql_query(...)` and
-   `db.connection`.
+   `sol.connection`.
 
 ## Exporting to XML
 
