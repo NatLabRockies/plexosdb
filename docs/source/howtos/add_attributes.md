@@ -9,7 +9,7 @@ Attributes are different from properties in the following ways:
   `t_attribute_data`.
 
 ```{note}
-See the [API Reference](api/index.md) for class-specific attribute
+See the [API Reference](../api/index.md) for class-specific attribute
 tables that list available attributes, default values, validation rules and
 descriptions.
 ```
