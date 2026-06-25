@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.0](https://github.com/NatLabRockies/plexosdb/compare/v1.4.1...v1.5.0) (2026-06-25)
+
+
+### 🚀 Features
+
+* add agent markdown for better integration call ([#142](https://github.com/NatLabRockies/plexosdb/issues/142)) ([3003e52](https://github.com/NatLabRockies/plexosdb/commit/3003e523aa916e3a52ea1c59743c60fef45f51c2))
+
+
+### 🐛 Bug Fixes
+
+* attributes ([#130](https://github.com/NatLabRockies/plexosdb/issues/130)) ([b4d276b](https://github.com/NatLabRockies/plexosdb/commit/b4d276bc1e0cb5ee8dbbdd6db534582c7bea10ce))
+
 ## [1.4.1](https://github.com/NatLabRockies/plexosdb/compare/v1.4.0...v1.4.1) (2026-05-22)
 
 ### 🐛 Bug Fixes
