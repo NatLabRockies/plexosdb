@@ -6,9 +6,8 @@ inspect its table catalog using the `show_db_tables` helper.
 ## Converting a solution
 
 Use `PlexosSolution` to import the ZIP into SQLite. Pass
-`decode_bin_values=False` to skip writing BIN payload data — the table
-catalog only needs the XML metadata tables and is then fast even for large
-solutions:
+`decode_bin_values=False` to skip writing BIN payload data — the table catalog
+only needs the XML metadata tables and is then fast even for large solutions:
 
 ```python
 from plexosdb import PlexosSolution, show_db_tables
@@ -58,8 +57,8 @@ show_db_tables(sol)
   267 rows (20 shown)  13 columns
 ```
 
-Rows that do not fit within `max_rows` are replaced by three `·` rows.
-The default limit is 20; pass a different value to show more:
+Rows that do not fit within `max_rows` are replaced by three `·` rows. The
+default limit is 20; pass a different value to show more:
 
 ```python
 with client as db:
@@ -68,20 +67,20 @@ with client as db:
 
 ## Columns
 
-| Column | Description |
-|--------|-------------|
-| `table_catalog` | Stem of the source ZIP file (used as the catalog name). |
-| `table_schema` | SQLite schema name: `main`, `data`, `report`, or any other attached schema. |
-| `table_name` | Name of the table or view. |
-| `table_type` | `BASE TABLE` for tables; `VIEW` for views. |
-| `is_insertable_into` | `YES` for writable tables, `NO` for views. |
-| `is_typed` | Always `NO`. |
-| remaining columns | `NULL` — present for compatibility with `information_schema.tables`. |
+| Column               | Description                                                                 |
+| -------------------- | --------------------------------------------------------------------------- |
+| `table_catalog`      | Stem of the source ZIP file (used as the catalog name).                     |
+| `table_schema`       | SQLite schema name: `main`, `data`, `report`, or any other attached schema. |
+| `table_name`         | Name of the table or view.                                                  |
+| `table_type`         | `BASE TABLE` for tables; `VIEW` for views.                                  |
+| `is_insertable_into` | `YES` for writable tables, `NO` for views.                                  |
+| `is_typed`           | Always `NO`.                                                                |
+| remaining columns    | `NULL` — present for compatibility with `information_schema.tables`.        |
 
 ## Schema meanings
 
-- **`main`** — raw tables imported directly from the PLEXOS solution XML
-  (e.g. `t_class`, `t_object`, `t_membership`).
+- **`main`** — raw tables imported directly from the PLEXOS solution XML (e.g.
+  `t_class`, `t_object`, `t_membership`).
 - **`data`** — derived result tables that can be materialized from BIN files
   (e.g. `ST__Interval__Generators__Generation`).
 - **`report`** — same derived tables exposed as views with enriched metadata
