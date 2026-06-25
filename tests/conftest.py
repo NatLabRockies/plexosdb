@@ -1,6 +1,6 @@
-import shutil
 import uuid
 from collections.abc import Generator
+from pathlib import Path
 
 import pytest
 from _pytest.logging import LogCaptureFixture
@@ -8,7 +8,10 @@ from _pytest.logging import LogCaptureFixture
 from plexosdb import PlexosDB
 from plexosdb.db_manager import SQLiteManager
 
-DB_FILENAME = "plexosdb.xml"
+_RUN_OF_RIVER_DIR = Path(__file__).parent / "data" / "run_of_river_case"
+_SOLUTION_ZIP_PATH = (
+    _RUN_OF_RIVER_DIR / "Model Base + Run of River Solution" / "Model Base + Run of River Solution.zip"
+)
 TEST_SCHEMA = (
     "CREATE TABLE generators (id INTEGER PRIMARY KEY, name TEXT, capacity REAL, fuel_type TEXT);"
     "CREATE TABLE properties (id INTEGER PRIMARY KEY, generator_id INTEGER, property_name TEXT, "
@@ -55,16 +58,27 @@ def db_instance():
     db._db.close()
 
 
-@pytest.fixture()
-def db_instance_with_xml(data_folder, tmp_path):
-    """Create a base DB instance that lasts the entire test session."""
-    xml_fname = data_folder / DB_FILENAME
-    xml_copy = tmp_path / f"copy_{DB_FILENAME}"
-    shutil.copy(xml_fname, xml_copy)
-    db = PlexosDB.from_xml(xml_path=xml_copy)
-    yield db
-    db._db.close()
-    xml_copy.unlink()
+@pytest.fixture(scope="session")
+def solution_zip():
+    """Path to the Run of River PLEXOS solution ZIP fixture."""
+    return _SOLUTION_ZIP_PATH
+
+
+@pytest.fixture(scope="session")
+def solution_sqlite(tmp_path_factory):
+    """Session-scoped SQLite imported from the real solution ZIP (BIN decoded).
+
+    Imported once per session. Tests open it via ``PlexosSolution.from_sqlite()``,
+    which attaches fresh ephemeral *data* and *report* schemas per call, so
+    materialize operations across tests do not conflict.
+    """
+    from plexosdb import PlexosSolution
+
+    db_path = tmp_path_factory.mktemp("ror_session") / "run_of_river.sqlite"
+    sol = PlexosSolution.from_zip(_SOLUTION_ZIP_PATH)
+    sol.to_sqlite(str(db_path), if_exists="replace")
+    sol.close()
+    return db_path
 
 
 @pytest.fixture(scope="function")

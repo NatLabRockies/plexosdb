@@ -7,7 +7,8 @@ from loguru import logger
 from .db import PlexosDB, PropertyRecord
 from .db_manager import SQLiteManager
 from .enums import ClassEnum, CollectionEnum
-from .solution_reader import PLEXOS2SQLite, plexos_to_sqlite
+from .solution_reader import PlexosSolution, show_db_tables
+from .solution_reader import MaterializeResult, SolutionInfo, SQLiteResult, TableInfo
 from .xml_handler import XMLHandler
 
 __version__ = version("plexosdb")
@@ -17,10 +18,13 @@ logger.disable("r2x_core")
 __all__ = (
     "ClassEnum",
     "CollectionEnum",
-    "PLEXOS2SQLite",
+    "MaterializeResult",
     "PlexosDB",
+    "PlexosSolution",
     "PropertyRecord",
-    "SQLiteManager",
+    "SQLiteResult",
+    "SolutionInfo",
+    "TableInfo",
     "XMLHandler",
-    "plexos_to_sqlite",
+    "show_db_tables",
 )

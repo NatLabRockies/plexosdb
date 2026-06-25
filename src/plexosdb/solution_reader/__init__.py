@@ -1,14 +1,15 @@
 """Public facade for plexosdb solution reader.
 
-Import ``plexos_to_sqlite`` or ``PLEXOS2SQLite`` from here.  All private
-helpers are re-exported so that existing ``from plexosdb.solution_reader
-import _foo`` call-sites (e.g. tests) continue to work without change.
+Import ``PlexosSolution`` from here.
+All private helpers are re-exported so that existing
+``from plexosdb.solution_reader import _foo`` call-sites (e.g. tests)
+continue to work without change.
 """
 
 from __future__ import annotations
 
-from ._api import PLEXOS2SQLite, plexos_to_sqlite
-from ._bin_decode import (
+from .archive import _resolve_input_zip_path, _select_xml_entry
+from .bin_decoder import (
     _bin_entry_name_map,
     _decode_bin_values,
     _decode_period_rows,
@@ -16,7 +17,7 @@ from ._bin_decode import (
     _read_all_bin_entries,
     _skip_bytes,
 )
-from ._materialize import (
+from .materialize import (
     _PERIOD_TABLE_META,
     _attach_solution_schemas,
     _attached_db_names,
@@ -40,11 +41,16 @@ from ._materialize import (
     _table_columns,
     _table_label_part,
 )
-from ._utils import _coerce_value, _local_name, _quote_ident
-from ._xml_import import _BOMStripStream, _create_and_insert_rows, _stream_xml_to_sqlite
-from ._zip import _resolve_input_zip_path, _select_xml_entry
+from .display import show_db_tables
+from .solution import PlexosSolution
+from .types import MaterializeResult, SolutionInfo, SQLiteResult, TableInfo
+from .utils import _coerce_value, _local_name, _quote_ident
+from .xml_parser import _BOMStripStream, _create_and_insert_rows, _stream_xml_to_sqlite
 
 __all__ = [
-    "PLEXOS2SQLite",
-    "plexos_to_sqlite",
+    "MaterializeResult",
+    "PlexosSolution",
+    "SQLiteResult",
+    "SolutionInfo",
+    "TableInfo",
 ]

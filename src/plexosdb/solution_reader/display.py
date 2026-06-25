@@ -123,17 +123,26 @@ def show_db_tables(client: PlexosSolution, *, max_rows: int = 20) -> None:
     # Physical objects present in all currently attached schemas.
     for _, schema, *_ in con.execute("PRAGMA database_list").fetchall():
         for name, obj_type in con.execute(
-            f"SELECT name, type FROM {schema}.sqlite_master"
-            " WHERE type IN ('table', 'view') ORDER BY name"
+            f"SELECT name, type FROM {schema}.sqlite_master WHERE type IN ('table', 'view') ORDER BY name"
         ).fetchall():
             table_type = "BASE TABLE" if obj_type == "table" else "VIEW"
             insertable = "YES" if obj_type == "table" else "NO"
             seen.add((schema, name))
             rows.append(
                 (
-                    catalog, schema, name, table_type,
-                    None, None, None, None, None,
-                    insertable, "NO", None, None,
+                    catalog,
+                    schema,
+                    name,
+                    table_type,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    insertable,
+                    "NO",
+                    None,
+                    None,
                 )
             )
 
@@ -145,9 +154,19 @@ def show_db_tables(client: PlexosSolution, *, max_rows: int = 20) -> None:
             if (schema, table_info.name) not in seen:
                 rows.append(
                     (
-                        catalog, schema, table_info.name, ttype,
-                        None, None, None, None, None,
-                        insertable, "NO", None, None,
+                        catalog,
+                        schema,
+                        table_info.name,
+                        ttype,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        insertable,
+                        "NO",
+                        None,
+                        None,
                     )
                 )
 
