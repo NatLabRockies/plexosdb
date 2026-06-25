@@ -42,6 +42,7 @@ class PlexosSolution:
     """
 
     def __init__(self) -> None:
+        """Initialise an empty :class:`PlexosSolution` with no source configured."""
         self._zip_path: Path | None = None
         self._model_name: str | None = None
         self._database_path: Path | None = None
