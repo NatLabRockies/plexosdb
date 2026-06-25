@@ -40,6 +40,7 @@ from .utils import (
     normalize_names,
     plan_property_inserts,
     resolve_membership_id,
+    _normalize_attribute_records,
 )
 from .xml_handler import XMLHandler
 
@@ -281,10 +282,6 @@ class PlexosDB:
         -------
         int
             attribute_id
-
-        Notes
-        -----
-        By default, we add all objects to the system membership.
         """
         object_id = self.get_object_id(object_class, name=object_name)
         attribute_id = self.get_attribute_id(object_class, name=attribute_name)
@@ -293,7 +290,8 @@ class PlexosDB:
         query = (
             f"INSERT INTO {Schema.AttributeData.name}(object_id, attribute_id, value) VALUES({placeholders})"
         )
-        attribute_id = self._db.execute(query, params)
+        result = self._db.execute(query, params)
+        assert result, f"Failed to add attribute '{attribute_name}' to object '{object_name}'."
         return attribute_id
 
     def add_band(
@@ -961,6 +959,140 @@ class PlexosDB:
         logger.debug(f"Successfully processed {len(records)} property and text records in batches")
         return
 
+    def add_attributes_from_records(
+        self,
+        records: list[dict[str, Any]],
+        /,
+        *,
+        object_class: ClassEnum,
+        chunksize: int = 10_000,
+    ) -> None:
+        """Bulk insert attribute values for objects.
+
+        Efficiently adds multiple object-level attribute values in batches.
+        This method is much more efficient than calling `add_attribute` repeatedly.
+
+        Each record should contain:
+            - 'name': object name
+            - 'attribute': attribute name
+            - 'value': attribute value
+
+        Alternatively, records may be provided in the following format:
+            - {'name': ..., 'Attr1': val1, 'Attr2': val2}
+
+        Optional:
+            - 'state'
+
+        Parameters
+        ----------
+        records : list[dict[str, Any]]
+            List of attribute records in explicit or wide format.
+        object_class : ClassEnum
+            Class of the objects.
+        chunksize : int, optional
+            Batch size for inserts, by default 10_000.
+
+        Returns
+        -------
+        None
+
+        See Also
+        --------
+        add_attribute
+        add_properties_from_records
+        add_memberships_from_records
+
+        Examples
+        --------
+        >>> records = [
+        ...     {"name": "2020", "Step Type": 4.0, "Chrono Step Count": 366.0},
+        ... ]
+
+        >>> db.add_attributes_from_records(records, object_class=ClassEnum.Horizon)
+        """
+        if not records:
+            logger.warning("No records provided for bulk attribute insertion")
+            return
+
+        records = _normalize_attribute_records(records)
+
+        if chunksize < 1:
+            msg = f"chunksize must be >= 1, received {chunksize}"
+            raise ValueError(msg)
+
+        class_id = self.get_class_id(object_class)
+
+        object_names = tuple({record["name"] for record in records})
+        name_to_object_id: dict[str, int] = {}
+
+        CHUNK = 900  # noqa: N806
+        for i in range(0, len(object_names), CHUNK):
+            chunk = object_names[i : i + CHUNK]
+            object_placeholders = ", ".join("?" for _ in chunk)
+
+            object_rows = self._db.query(
+                f"""
+                SELECT object_id, name
+                FROM t_object
+                WHERE class_id = ?
+                AND name IN ({object_placeholders})
+                """,
+                (class_id, *chunk),
+            )
+            name_to_object_id.update({name: object_id for object_id, name in object_rows})
+
+        attribute_rows = self._db.query(
+            """
+            SELECT attribute_id, name
+            FROM t_attribute
+            WHERE class_id = ?
+            """,
+            (class_id,),
+        )
+        name_to_attribute_id = {name: attribute_id for attribute_id, name in attribute_rows}
+
+        params: list[tuple[int, int, Any, Any]] = []
+        seen: set[tuple[int, int]] = set()
+
+        for record in records:
+            try:
+                object_id = name_to_object_id[record["name"]]
+                attribute_id = name_to_attribute_id[record["attribute"]]
+            except KeyError as exc:
+                raise KeyError(f"Invalid attribute record: {record}") from exc
+
+            key = (object_id, attribute_id)
+            if key in seen:
+                raise ValueError(
+                    f"Duplicate attribute record for object={record['name']!r}, "
+                    f"attribute={record['attribute']!r}"
+                )
+            seen.add(key)
+
+            params.append(
+                (
+                    object_id,
+                    attribute_id,
+                    record["value"],
+                    record.get("state"),
+                )
+            )
+
+        query = f"""
+            INSERT INTO {Schema.AttributeData.name}
+                (object_id, attribute_id, value, state)
+            VALUES (?, ?, ?, ?)
+        """
+
+        with self._db.transaction():
+            for batch in batched(params, chunksize):
+                result = self._db.executemany(query, list(batch))
+                if not result:
+                    msg = f"Failed to add attribute values for {object_class}."
+                    raise RuntimeError(msg)
+
+        logger.debug("Added {} attribute values.", len(params))
+
     def _handle_dates(
         self,
         data_id: int,
@@ -1365,14 +1497,25 @@ class PlexosDB:
         original_object_name: str,
         new_object_name: str,
         copy_properties: bool = True,
+        copy_attributes: bool = True,
     ) -> int:
-        """Copy an object and its properties, tags, and texts."""
+        """Copy an object and its memberships, attributes, properties, tags and texts."""
         object_id = self.get_object_id(object_class, name=original_object_name)
         category_id = self.query("SELECT category_id from t_object WHERE object_id = ?", (object_id,))
         category = self.query("SELECT name from t_category WHERE category_id = ?", (category_id[0][0],))
+
         new_object_id = self.add_object(object_class, new_object_name, category=category[0][0])
+
+        if copy_attributes:
+            self._copy_object_attributes(
+                old_object_id=object_id,
+                new_object_id=new_object_id,
+            )
+
         membership_mapping = self.copy_object_memberships(
-            object_class=object_class, original_name=original_object_name, new_name=new_object_name
+            object_class=object_class,
+            original_name=original_object_name,
+            new_name=new_object_name,
         )
 
         system_collection = get_default_collection(object_class)
@@ -1550,6 +1693,16 @@ class PlexosDB:
             self._db.execute("DROP TABLE IF EXISTS temp_data_mapping")
         return True
 
+    def _copy_object_attributes(self, old_object_id: int, new_object_id: int) -> bool:
+        """Copy attribute values from original object to new object."""
+        query = """
+            INSERT INTO t_attribute_data (object_id, attribute_id, value, state)
+            SELECT ?, attribute_id, value, state
+            FROM t_attribute_data
+            WHERE object_id = ?
+        """
+        return self._db.execute(query, (new_object_id, old_object_id))
+
     def create_object_scenario(
         self,
         object_name: str,
@@ -1717,8 +1870,62 @@ class PlexosDB:
         object_name: str,
         object_class: ClassEnum,
     ) -> None:
-        """Delete an attribute from an object."""
-        raise NotImplementedError  # pragma: no cover
+        """Delete an attribute value from an object.
+
+        Removes an object-level attribute value from the database.
+
+        Parameters
+        ----------
+        attribute_name : str
+            Name of the attribute to delete.
+        object_name : str
+            Name of the object the attribute belongs to.
+        object_class : ClassEnum
+            Class enumeration of the object.
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        NotFoundError
+            If the object does not exist, the attribute is not defined for the
+            object's class or the attribute value is not assigned to the object.
+
+        Examples
+        --------
+        >>> db.delete_attribute(
+        ...     "Enabled",
+        ...     object_name="Base_Model",
+        ...     object_class=ClassEnum.Model,
+        ... )
+        """
+        if not checks_module.check_object_exists(self, object_class, object_name):
+            msg = f"Object = `{object_name}` does not exist for class `{object_class}`."
+            raise NotFoundError(msg)
+
+        object_id = self.get_object_id(object_class, name=object_name)
+        attribute_id = self.get_attribute_id(object_class, name=attribute_name)
+
+        find_query = """
+        SELECT 1
+        FROM t_attribute_data
+        WHERE object_id = ? AND attribute_id = ?
+        """
+        result = self._db.fetchone(find_query, (object_id, attribute_id))
+
+        if not result:
+            msg = f"Attribute '{attribute_name}' not found for object '{object_name}'."
+            raise NotFoundError(msg)
+
+        delete_query = """
+        DELETE FROM t_attribute_data
+        WHERE object_id = ? AND attribute_id = ?
+        """
+
+        with self._db.transaction():
+            self._db.execute(delete_query, (object_id, attribute_id))
 
     def delete_category(self, category: str, /, *, class_name: ClassEnum) -> None:
         """Delete a category from the database."""
@@ -1924,7 +2131,7 @@ class PlexosDB:
         object_name: str,
         attribute_name: str,
     ) -> Any:
-        """Get attribute details for a specific object."""
+        """Get an assigned attribute value for a specific object."""
         query = """
         SELECT
             t_attribute_data.value
@@ -1956,12 +2163,12 @@ class PlexosDB:
         Returns
         -------
         int
-            ID of the category
+            ID of the attribute
 
         Raises
         ------
-        AssertionError
-            If the category does not exist
+        NotFoundError
+            If the attribute does not exist for the specified class.
         """
         query = """
         SELECT
@@ -1975,7 +2182,9 @@ class PlexosDB:
         AND t_class.name = ?
         """
         result = self._db.fetchone(query, (name, class_enum))
-        assert result
+        if not result:
+            msg = f"Attribute '{name}' not found for class '{class_enum}'."
+            raise NotFoundError(msg)
         return cast(int, result[0])
 
     def get_attributes(
@@ -1984,10 +2193,67 @@ class PlexosDB:
         /,
         *,
         object_class: ClassEnum,
-        attribute_names: list[str] | None = None,
+        attribute_names: str | Iterable[str] | None = None,
     ) -> list[dict[str, Any]]:
-        """Get all attributes for a specific object."""
-        raise NotImplementedError  # pragma: no cover
+        """Retrieve assigned attribute values for a specific object.
+
+        Parameters
+        ----------
+        object_name : str
+            Name of the object.
+        object_class : ClassEnum
+            Class of the object.
+        attribute_names : str | Iterable[str] | None, optional
+            Attribute name or names to retrieve. If omitted, retrieves all
+            assigned attribute values.
+
+        Returns
+        -------
+        list[dict[str, Any]]
+            Attribute-value records with ``name``, ``attribute``, ``value``,
+            and ``state`` keys. Returns an empty list when the object has no
+            assigned attribute values.
+
+        Raises
+        ------
+        NotFoundError
+            If the object does not exist for the requested class.
+        """
+        if not checks_module.check_object_exists(self, object_class, object_name):
+            msg = f"Object = `{object_name}` does not exist in class = {object_class}. "
+            msg += "See available objects with list_objects_by_class"
+            raise NotFoundError(msg)
+
+        object_id = self.get_object_id(object_class, object_name)
+        class_id = self.get_class_id(object_class)
+
+        conditions = [
+            "data.object_id = ?",
+            "attr.class_id = ?",
+        ]
+        params: list[Any] = [object_id, class_id]
+
+        if attribute_names is not None:
+            names = normalize_names(attribute_names)
+            if names:
+                placeholders = ", ".join("?" for _ in names)
+                conditions.append(f"attr.name IN ({placeholders})")
+                params.extend(names)
+
+        where_clause = " AND ".join(conditions)
+        query = f"""
+            SELECT
+                obj.name AS name,
+                attr.name AS attribute,
+                data.value,
+                data.state
+            FROM t_attribute_data AS data
+            JOIN t_object AS obj ON obj.object_id = data.object_id
+            JOIN t_attribute AS attr ON attr.attribute_id = data.attribute_id
+            WHERE {where_clause}
+            ORDER BY attr.name
+        """
+        return self._db.fetchall_dict(query, tuple(params))
 
     def get_category_id(self, class_enum: ClassEnum, /, name: str) -> int:
         """Return the ID for a given category.
@@ -3044,7 +3310,7 @@ class PlexosDB:
         Parameters
         ----------
         class_enum : ClassEnum
-            Class enumeration to list categories for
+            Class enumeration to list attributes
 
         Returns
         -------

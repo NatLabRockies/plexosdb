@@ -107,3 +107,81 @@ def test_copy_object_with_memberships(db_base: PlexosDB):
     new_child_membership = db.get_membership_id(new_object_name, child_object_name, collection)
     assert membership_id_child in membership_mapping
     assert membership_mapping[membership_id_child] == new_child_membership
+
+
+def test_copy_object_copies_attributes(db_base: PlexosDB):
+    from plexosdb import ClassEnum
+
+    db = db_base
+    object_class = ClassEnum.Generator
+
+    original_object_name = "TestGenWithAttribute"
+    new_object_name = "TestGenWithAttributeCopy"
+
+    original_object_id = db.add_object(object_class, original_object_name)
+
+    db.add_attributes_from_records(
+        [
+            {"name": original_object_name, "attribute": "Latitude", "value": 42.0},
+            {"name": original_object_name, "attribute": "Longitude", "value": -105.0},
+        ],
+        object_class=object_class,
+    )
+
+    new_object_id = db.copy_object(object_class, original_object_name, new_object_name)
+
+    old_rows = db._db.fetchall(
+        """
+        SELECT attr.name, data.value, data.state
+        FROM t_attribute_data AS data
+        JOIN t_attribute AS attr ON attr.attribute_id = data.attribute_id
+        WHERE data.object_id = ?
+        ORDER BY attr.name
+        """,
+        (original_object_id,),
+    )
+
+    new_rows = db._db.fetchall(
+        """
+        SELECT attr.name, data.value, data.state
+        FROM t_attribute_data AS data
+        JOIN t_attribute AS attr ON attr.attribute_id = data.attribute_id
+        WHERE data.object_id = ?
+        ORDER BY attr.name
+        """,
+        (new_object_id,),
+    )
+
+    assert old_rows == [
+        ("Latitude", 42.0, None),
+        ("Longitude", -105.0, None),
+    ]
+    assert new_rows == old_rows
+
+
+def test_copy_object_without_attributes(db_base: PlexosDB):
+    from plexosdb import ClassEnum
+
+    db = db_base
+    object_class = ClassEnum.Generator
+
+    original_object_name = "TestGenNoAttr"
+    new_object_name = "TestGenNoAttrCopy"
+
+    original_object_id = db.add_object(object_class, original_object_name)
+    new_object_id = db.copy_object(object_class, original_object_name, new_object_name)
+
+    assert (
+        db._db.fetchall(
+            "SELECT * FROM t_attribute_data WHERE object_id = ?",
+            (original_object_id,),
+        )
+        == []
+    )
+    assert (
+        db._db.fetchall(
+            "SELECT * FROM t_attribute_data WHERE object_id = ?",
+            (new_object_id,),
+        )
+        == []
+    )
