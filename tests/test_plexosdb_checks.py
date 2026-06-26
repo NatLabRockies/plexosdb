@@ -514,14 +514,14 @@ def test_check_instance_methods_delegate_to_standalone_functions(db_base):
 
 @pytest.mark.checks
 def test_check_attribute_exists_instance_method_raises_not_implemented(db_base):
-    """db.check_attribute_exists() delegates to check_attribute_exists() which
-    is not yet implemented; the NotImplementedError propagates.
+    """db.check_attribute_exists() delegates to the standalone function and
+    returns False when the attribute does not exist.
     """
     from plexosdb.enums import ClassEnum
 
-    with pytest.raises(NotImplementedError):
-        db_base.check_attribute_exists(
-            "some_attr",
-            object_name="System",
-            object_class=ClassEnum.Generator,
-        )
+    result = db_base.check_attribute_exists(
+        "some_attr",
+        object_name="System",
+        object_class=ClassEnum.Generator,
+    )
+    assert result is False
