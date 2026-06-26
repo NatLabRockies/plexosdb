@@ -13,6 +13,7 @@ This section contains practical guides for common tasks with PlexosDB.
 create_db
 add_objects
 add_properties
+add_attributes
 delete_objects
 query_database
 work_with_scenarios
