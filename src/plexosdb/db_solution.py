@@ -10,10 +10,10 @@ from typing import Any
 import duckdb
 
 from .db_solution_helpers import (
-    open_solution_connection,
     get_solution_result_table,
     list_solution_objects_by_class,
     list_solution_result_tables,
+    open_solution_connection,
     query_dict_rows,
     query_rows,
     read_solution_result,
@@ -28,13 +28,11 @@ from .db_solution_models import (
     DuckDBSchema,
     DuckDBSolutionInfo,
     IfExists,
-    ResultPeriod,
-    ResultPhase,
     ResultSchema,
     ResultTable,
     TableInfo,
 )
-from .enums import ClassEnum, CollectionEnum
+from .enums import ClassEnum, CollectionEnum, PeriodEnum, PhaseEnum
 
 _FACTORY_TOKEN = object()
 
@@ -203,8 +201,8 @@ class PlexosSolution:
         self,
         *,
         schema: ResultSchema = "report",
-        phase: ResultPhase | str | None = None,
-        period: ResultPeriod | str | None = None,
+        phase: PhaseEnum | str | None = None,
+        period: PeriodEnum | str | None = None,
         class_enum: ClassEnum | str | None = None,
         collection: CollectionEnum | str | None = None,
         property_name: str | None = None,
@@ -224,8 +222,8 @@ class PlexosSolution:
         self,
         *,
         schema: ResultSchema = "report",
-        phase: ResultPhase | str = ResultPhase.ST,
-        period: ResultPeriod | str = ResultPeriod.INTERVAL,
+        phase: PhaseEnum | str = PhaseEnum.ST,
+        period: PeriodEnum | str = PeriodEnum.INTERVAL,
         class_enum: ClassEnum | str | None = None,
         collection: CollectionEnum | str | None = None,
         property_name: str,
@@ -241,9 +239,9 @@ class PlexosSolution:
             property_name=property_name,
         )
 
-    def read_result(
+    def get_result(
         self,
-        table: ResultTable | str,
+        table_name: ResultTable | str,
         /,
         *,
         object_names: str | Iterable[str] | None = None,
@@ -257,7 +255,7 @@ class PlexosSolution:
         """Build a lazy relation for filtered rows from a result table."""
         return read_solution_result(
             self.connection,
-            table,
+            table_name,
             object_names=object_names,
             category=category,
             sample_names=sample_names,

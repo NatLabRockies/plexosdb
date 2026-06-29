@@ -3,43 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, Literal
 
-from .enums import ClassEnum, CollectionEnum
+from .enums import ClassEnum, CollectionEnum, PeriodEnum, PhaseEnum, TableTypeEnum
 
 DuckDBSchema = Literal["raw", "processed", "data", "report"]
 IfExists = Literal["fail", "reuse", "replace"]
 ResultSchema = Literal["data", "report"]
-
-
-class ResultPhase(StrEnum):
-    """PLEXOS solve phases used in result table names."""
-
-    LT = "LT"
-    PASA = "PASA"
-    MT = "MT"
-    ST = "ST"
-
-
-class ResultPeriod(StrEnum):
-    """PLEXOS result periods used in result table names."""
-
-    INTERVAL = "INTERVAL"
-    DAY = "DAY"
-    WEEK = "WEEK"
-    MONTH = "MONTH"
-    YEAR = "YEAR"
-    HOUR = "HOUR"
-    QUARTER = "QUARTER"
-
-
-class TableType(StrEnum):
-    """DuckDB information_schema table types used by solution results."""
-
-    BASE_TABLE = "BASE TABLE"
-    VIEW = "VIEW"
 
 
 @dataclass(frozen=True)
@@ -114,10 +85,10 @@ class ResultTable:
     schema: Annotated[ResultSchema, "DuckDB schema containing the result."] = field(
         metadata={"description": "DuckDB schema containing the result."}
     )
-    phase: Annotated[ResultPhase, "PLEXOS solve phase."] = field(
+    phase: Annotated[PhaseEnum, "PLEXOS solve phase."] = field(
         metadata={"description": "PLEXOS solve phase."}
     )
-    period: Annotated[ResultPeriod, "PLEXOS result period."] = field(
+    period: Annotated[PeriodEnum, "PLEXOS result period."] = field(
         metadata={"description": "PLEXOS result period."}
     )
     class_enum: Annotated[ClassEnum | None, "Object class associated with the result collection."] = field(
@@ -129,7 +100,7 @@ class ResultTable:
     property_name: Annotated[str, "PLEXOS property represented by the result."] = field(
         metadata={"description": "PLEXOS property represented by the result."}
     )
-    table_type: Annotated[TableType, "DuckDB information_schema table type."] = field(
+    table_type: Annotated[TableTypeEnum, "DuckDB information_schema table type."] = field(
         metadata={"description": "DuckDB information_schema table type."}
     )
     value_column: Annotated[str, "Column containing the result values."] = field(

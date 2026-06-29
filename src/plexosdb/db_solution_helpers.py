@@ -13,15 +13,15 @@ from plexos2duckdb import PLEXOS2DuckDB
 from .db_solution_models import (
     DuckDBSchema,
     IfExists,
-    ResultPeriod,
-    ResultPhase,
     ResultSchema,
     ResultTable,
-    TableType,
 )
 from .enums import (
     ClassEnum,
     CollectionEnum,
+    PeriodEnum,
+    PhaseEnum,
+    TableTypeEnum,
     get_default_collection,
     parse_class_enum,
     parse_collection_enum,
@@ -210,8 +210,8 @@ def list_solution_result_tables(
     connection: duckdb.DuckDBPyConnection,
     *,
     schema: ResultSchema = "report",
-    phase: ResultPhase | str | None = None,
-    period: ResultPeriod | str | None = None,
+    phase: PhaseEnum | str | None = None,
+    period: PeriodEnum | str | None = None,
     class_enum: ClassEnum | str | None = None,
     collection: CollectionEnum | str | None = None,
     property_name: str | None = None,
@@ -265,8 +265,8 @@ def get_solution_result_table(
     connection: duckdb.DuckDBPyConnection,
     *,
     schema: ResultSchema = "report",
-    phase: ResultPhase | str = ResultPhase.ST,
-    period: ResultPeriod | str = ResultPeriod.INTERVAL,
+    phase: PhaseEnum | str = PhaseEnum.ST,
+    period: PeriodEnum | str = PeriodEnum.INTERVAL,
     class_enum: ClassEnum | str | None = None,
     collection: CollectionEnum | str | None = None,
     property_name: str,
@@ -570,45 +570,45 @@ def class_for_collection(collection: CollectionEnum) -> ClassEnum | None:
     return None
 
 
-def normalize_result_phase(value: ResultPhase | str) -> ResultPhase:
-    """Normalize a public result phase argument to ResultPhase."""
-    if isinstance(value, ResultPhase):
+def normalize_result_phase(value: PhaseEnum | str) -> PhaseEnum:
+    """Normalize a public result phase argument to PhaseEnum."""
+    if isinstance(value, PhaseEnum):
         return value
     parsed = parse_result_phase(value)
     if parsed is None:
-        raise ValueError(f"{value!r} is not a valid ResultPhase")
+        raise ValueError(f"{value!r} is not a valid PhaseEnum")
     return parsed
 
 
-def normalize_result_period(value: ResultPeriod | str) -> ResultPeriod:
-    """Normalize a public result period argument to ResultPeriod."""
-    if isinstance(value, ResultPeriod):
+def normalize_result_period(value: PeriodEnum | str) -> PeriodEnum:
+    """Normalize a public result period argument to PeriodEnum."""
+    if isinstance(value, PeriodEnum):
         return value
     parsed = parse_result_period(value)
     if parsed is None:
-        raise ValueError(f"{value!r} is not a valid ResultPeriod")
+        raise ValueError(f"{value!r} is not a valid PeriodEnum")
     return parsed
 
 
-def parse_result_phase(value: str) -> ResultPhase | None:
+def parse_result_phase(value: str) -> PhaseEnum | None:
     """Parse a result phase after runtime validation."""
     try:
-        return ResultPhase(value.upper())
+        return PhaseEnum(value.upper())
     except ValueError:
         return None
 
 
-def parse_result_period(value: str) -> ResultPeriod | None:
+def parse_result_period(value: str) -> PeriodEnum | None:
     """Parse a result period after runtime validation."""
     try:
-        return ResultPeriod(value.upper())
+        return PeriodEnum(value.upper())
     except ValueError:
         return None
 
 
-def parse_table_type(value: str) -> TableType | None:
+def parse_table_type(value: str) -> TableTypeEnum | None:
     """Parse a DuckDB information_schema table type after runtime validation."""
     try:
-        return TableType(value.upper())
+        return TableTypeEnum(value.upper())
     except ValueError:
         return None

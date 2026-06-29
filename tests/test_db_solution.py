@@ -5,8 +5,9 @@ from pathlib import Path
 
 import pytest
 
+from plexosdb import DuckDBResult
+from plexosdb import DuckDBSolutionInfo as ExportedDuckDBSolutionInfo
 from plexosdb import PlexosSolution as ExportedPlexosSolution
-from plexosdb import DuckDBResult, DuckDBSolutionInfo as ExportedDuckDBSolutionInfo
 from plexosdb import ResultTable as ExportedResultTable
 from plexosdb.db_solution import PlexosSolution
 from plexosdb.db_solution_models import DuckDBSolutionInfo, ResultTable
@@ -91,7 +92,7 @@ def test_read_result_returns_filtered_duckdb_relation(solution_duckdb: PlexosSol
         class_enum=ClassEnum.Generator,
         property_name="Generation",
     )
-    relation = solution_duckdb.read_result(
+    relation = solution_duckdb.get_result(
         table,
         object_names="Coal_Gen",
         columns=["name", "timestamp", "Generation"],
@@ -100,7 +101,7 @@ def test_read_result_returns_filtered_duckdb_relation(solution_duckdb: PlexosSol
     assert len(rows) == 8760
     assert rows[0][0] == "Coal_Gen"
 
-    one_day = solution_duckdb.read_result(
+    one_day = solution_duckdb.get_result(
         "ST__Interval__Generators__Generation",
         object_names=["Coal_Gen"],
         start="2017-01-01",
@@ -116,4 +117,4 @@ def test_read_result_rejects_missing_filter_columns(solution_duckdb: PlexosSolut
         property_name="Generation",
     )
     with pytest.raises(ValueError, match="object_names"):
-        solution_duckdb.read_result(data_table, object_names="Coal_Gen")
+        solution_duckdb.get_result(data_table, object_names="Coal_Gen")

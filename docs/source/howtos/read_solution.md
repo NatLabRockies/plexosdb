@@ -63,11 +63,11 @@ To select one table, use the existing PLEXOS enums and the result-table property
 name:
 
 ```python
-from plexosdb.db_solution_models import ResultPeriod, ResultPhase
+from plexosdb.db_solution_models import PeriodEnum, PhaseEnum
 
 generation = sol.result_table(
-    phase=ResultPhase.ST,
-    period=ResultPeriod.INTERVAL,
+    phase=PhaseEnum.ST,
+    period=PeriodEnum.INTERVAL,
     class_enum=ClassEnum.Generator,
     property_name="Generation",
 )

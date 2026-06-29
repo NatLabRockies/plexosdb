@@ -12,14 +12,11 @@ from .db_solution_models import (
     DuckDBSchema,
     DuckDBSolutionInfo,
     IfExists,
-    ResultPeriod,
-    ResultPhase,
     ResultSchema,
     ResultTable,
     TableInfo,
-    TableType,
 )
-from .enums import ClassEnum, CollectionEnum
+from .enums import ClassEnum, CollectionEnum, PeriodEnum, PhaseEnum, TableTypeEnum
 from .xml_handler import XMLHandler
 
 __version__ = version("plexosdb")
@@ -33,14 +30,14 @@ __all__ = (
     "DuckDBSchema",
     "DuckDBSolutionInfo",
     "IfExists",
+    "PeriodEnum",
+    "PhaseEnum",
     "PlexosDB",
     "PlexosSolution",
     "PropertyRecord",
-    "ResultPeriod",
-    "ResultPhase",
     "ResultSchema",
     "ResultTable",
     "TableInfo",
-    "TableType",
+    "TableTypeEnum",
     "XMLHandler",
 )
