@@ -6,9 +6,20 @@ from loguru import logger
 
 from .db import PlexosDB, PropertyRecord
 from .db_manager import SQLiteManager
+from .db_solution import PlexosSolution
+from .db_solution_models import (
+    DuckDBResult,
+    DuckDBSchema,
+    DuckDBSolutionInfo,
+    IfExists,
+    ResultPeriod,
+    ResultPhase,
+    ResultSchema,
+    ResultTable,
+    TableInfo,
+    TableType,
+)
 from .enums import ClassEnum, CollectionEnum
-from .solution_reader import PlexosSolution, show_db_tables
-from .solution_reader import MaterializeResult, SolutionInfo, SQLiteResult, TableInfo
 from .xml_handler import XMLHandler
 
 __version__ = version("plexosdb")
@@ -18,13 +29,18 @@ logger.disable("r2x_core")
 __all__ = (
     "ClassEnum",
     "CollectionEnum",
-    "MaterializeResult",
+    "DuckDBResult",
+    "DuckDBSchema",
+    "DuckDBSolutionInfo",
+    "IfExists",
     "PlexosDB",
     "PlexosSolution",
     "PropertyRecord",
-    "SQLiteResult",
-    "SolutionInfo",
+    "ResultPeriod",
+    "ResultPhase",
+    "ResultSchema",
+    "ResultTable",
     "TableInfo",
+    "TableType",
     "XMLHandler",
-    "show_db_tables",
 )

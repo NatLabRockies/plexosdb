@@ -72,7 +72,7 @@ def solution_sqlite(tmp_path_factory):
     which attaches fresh ephemeral *data* and *report* schemas per call, so
     materialize operations across tests do not conflict.
     """
-    from plexosdb import PlexosSolution
+    from plexosdb.solution_reader import PlexosSolution
 
     db_path = tmp_path_factory.mktemp("ror_session") / "run_of_river.sqlite"
     sol = PlexosSolution.from_zip(_SOLUTION_ZIP_PATH)

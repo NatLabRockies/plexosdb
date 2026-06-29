@@ -7,8 +7,8 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 import pytest
 
-from plexosdb import PlexosSolution
 import plexosdb.solution_reader as sr
+from plexosdb.solution_reader import PlexosSolution
 from plexosdb.solution_reader import (
     _build_phase_sets,
     _build_property_map,
