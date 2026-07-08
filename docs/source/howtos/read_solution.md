@@ -63,7 +63,7 @@ To select one table, use the existing PLEXOS enums and the result-table property
 name:
 
 ```python
-from plexosdb.db_solution_models import PeriodEnum, PhaseEnum
+from plexosdb.enums import PeriodEnum, PhaseEnum
 
 generation = sol.result_table(
     phase=PhaseEnum.ST,
@@ -77,11 +77,11 @@ print(generation.name)
 
 ## Reading filtered result rows
 
-Use `read_result()` to build a lazy DuckDB relation. Convert to pandas only when
+Use `get_result()` to build a lazy DuckDB relation. Convert to pandas only when
 you need a DataFrame:
 
 ```python
-relation = sol.read_result(
+relation = sol.get_result(
     generation,
     object_names="Coal_Gen",
     start="2017-01-01",
@@ -96,7 +96,7 @@ You can also pass a result table name directly. String table names use the
 `report` schema:
 
 ```python
-one_day = sol.read_result(
+one_day = sol.get_result(
     "ST__Interval__Generators__Generation",
     object_names=["Coal_Gen"],
     start="2017-01-01",

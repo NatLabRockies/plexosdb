@@ -288,4 +288,5 @@ class PlexosSolution:
         exc: BaseException | None,
         traceback: TracebackType | None,
     ) -> None:
+        """Close the active DuckDB connection on context exit."""
         self.close()
