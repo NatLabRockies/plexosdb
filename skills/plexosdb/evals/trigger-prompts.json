@@ -1,0 +1,83 @@
+[
+  {
+    "id": "pos-1",
+    "query": "Load `model.xml` with plexosdb and list every generator together with its `Max Capacity` property.",
+    "should_trigger": true,
+    "expected_references": ["references/reference.md", "references/properties.md"]
+  },
+  {
+    "id": "pos-2",
+    "query": "I have a PLEXOS XML. Rename all generators in category `Thermal` and re-export to `model_v2.xml`.",
+    "should_trigger": true,
+    "expected_references": ["references/reference.md", "references/serialization.md"]
+  },
+  {
+    "id": "pos-3",
+    "query": "Bulk-insert 10,000 property rows for generators using `add_properties_from_records` and verify round-trip with `from_xml`/`to_xml`.",
+    "should_trigger": true,
+    "expected_references": ["references/properties.md", "references/serialization.md"]
+  },
+  {
+    "id": "pos-4",
+    "query": "Create a scenario `Low_Demand`, attach scaled `Max Capacity` overrides for a subset of generators, and wire the scenario into the `BaseModel` model.",
+    "should_trigger": true,
+    "expected_references": ["references/scenarios.md", "references/properties.md", "references/memberships.md"]
+  },
+  {
+    "id": "pos-5",
+    "query": "Copy object `GEN01` into `GEN02` including memberships and properties, then diff the two objects' property tables.",
+    "should_trigger": true,
+    "expected_references": ["references/reference.md", "references/memberships.md", "references/properties.md"]
+  },
+  {
+    "id": "pos-6",
+    "query": "Bootstrap an empty PLEXOS model with `create_schema(seed_defaults=True)`, add two regions, two nodes, and wire generators to nodes.",
+    "should_trigger": true,
+    "expected_references": ["references/serialization.md", "references/memberships.md"]
+  },
+  {
+    "id": "pos-7",
+    "query": "Diagnose why `add_property` silently drops rows — probably missing memberships; use `list_object_memberships` to confirm.",
+    "should_trigger": true,
+    "expected_references": ["references/properties.md", "references/memberships.md"]
+  },
+  {
+    "id": "neg-1",
+    "query": "My task is generic SQLite performance tuning with no PLEXOS involvement.",
+    "should_trigger": false
+  },
+  {
+    "id": "neg-2",
+    "query": "Help me integrate infrasys `System` components with a web UI.",
+    "should_trigger": false,
+    "expected_skill": "infrasys"
+  },
+  {
+    "id": "neg-3",
+    "query": "Summarize PLEXOS solver behavior during UC runs.",
+    "should_trigger": false
+  },
+  {
+    "id": "neg-4",
+    "query": "Generic XML schema advice with no PLEXOS data model.",
+    "should_trigger": false
+  },
+  {
+    "id": "borderline-1",
+    "query": "Round-trip my XML and make sure scenario-tagged property overrides survive.",
+    "should_trigger": true,
+    "expected_references": ["references/serialization.md", "references/scenarios.md"]
+  },
+  {
+    "id": "borderline-2",
+    "query": "Build an MCP tool that attaches datafile tags to region load properties.",
+    "should_trigger": true,
+    "expected_references": ["references/properties.md", "references/scenarios.md"]
+  },
+  {
+    "id": "borderline-3",
+    "query": "Replicate every membership of `GEN01` onto a new `GEN01_copy` object without cloning properties.",
+    "should_trigger": true,
+    "expected_references": ["references/memberships.md"]
+  }
+]
