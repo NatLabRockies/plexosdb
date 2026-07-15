@@ -4,7 +4,7 @@ import sqlite3
 import uuid
 from collections.abc import Iterable, Iterator
 from datetime import datetime
-from importlib.resources import files
+from importlib.resources import as_file, files
 from pathlib import Path
 from string import Template
 from typing import Any, Literal, TypedDict, cast
@@ -48,6 +48,12 @@ SQLITE_BACKEND_KWARGS = {"in_memory"}
 CHECK_QUERY = "SELECT 1 FROM ${schema} ${where_clause}"
 PLEXOS_DEFAULT_SCHEMA = fpath = files("plexosdb").joinpath("schema.sql").read_text(encoding="utf-8-sig")
 PROPERTY_QUERY = files("plexosdb.sql").joinpath("object_properties.sql").read_text(encoding="utf-8-sig")
+MASTER_TEMPLATE_FILES: dict[int, str] = {
+    9: "master_9.2R6_btu.xml",
+    10: "master_10.0R2_btu.xml",
+    11: "master_11.0R4_btu.xml",
+    12: "master_12.0R3_btu.xml",
+}
 
 
 class PropertyRecord(TypedDict, total=False):
@@ -143,6 +149,72 @@ class PlexosDB:
             return None
         return tuple(map(int, result[0].split(".")))
 
+    @staticmethod
+    def _parse_schema_version(version: int | str | tuple[int, ...]) -> int:
+        """Normalize schema template version to its major version number."""
+        if isinstance(version, int):
+            major = version
+        elif isinstance(version, tuple):
+            if not version:
+                raise ValueError("Version tuple cannot be empty.")
+            major = version[0]
+        else:
+            version_str = version.strip().lower()
+            if version_str.startswith("v"):
+                version_str = version_str[1:]
+
+            numeric_chars: list[str] = []
+            for char in version_str:
+                if char.isdigit() or char == ".":
+                    numeric_chars.append(char)
+                else:
+                    break
+
+            if not numeric_chars:
+                raise ValueError(f"Invalid schema version: {version}")
+            major = int("".join(numeric_chars).split(".")[0])
+
+        if major not in MASTER_TEMPLATE_FILES:
+            supported = ", ".join(map(str, sorted(MASTER_TEMPLATE_FILES)))
+            raise ValueError(f"Unsupported schema version '{version}'. Supported versions: {supported}")
+        return major
+
+    def _import_xml_records(self, xml_path: str | Path) -> None:
+        """Import XML records into an existing schema."""
+        xml_handler = XMLHandler.parse(fpath=xml_path)
+        xml_tags = {element.tag for element in xml_handler.root}
+
+        with self._db.transaction():
+            for tag in xml_tags:
+                # Only parse valid schemas that we maintain.
+                # NOTE: If there are some missing tables, we need to add them to the Enums.
+                schema_enum = str2enum(tag)
+                if not schema_enum:
+                    continue
+
+                record_dict = xml_handler.get_records(schema_enum)
+                if not record_dict:  # Skip if no records
+                    continue
+
+                # Group records by column structure to avoid mismatches
+                column_groups: dict[frozenset[str], list[dict[str, Any]]] = {}
+                for record in record_dict:
+                    # Create a hashable key from the record's column names
+                    column_key = frozenset(record.keys())
+                    if column_key not in column_groups:
+                        column_groups[column_key] = []
+                    column_groups[column_key].append(record)
+
+                # Process each group of consistently structured records separately
+                for columns, records in column_groups.items():
+                    column_names = list(columns)
+                    placeholders = ", ".join([f":{s}" for s in column_names])
+                    columns_sql = ", ".join([f"`{key}`" for key in column_names])
+                    query = f"INSERT INTO {tag} ({columns_sql}) values({placeholders})"
+                    logger.trace("{}", query)
+
+                    self._db.executemany(query, records)
+
     @classmethod
     def from_xml(
         cls,
@@ -212,43 +284,12 @@ class PlexosDB:
 
         # Temporarily disable foreign key constraints for bulk XML import
         instance._db.execute("PRAGMA foreign_keys = OFF")
+        try:
+            instance._import_xml_records(xml_path)
+        finally:
+            # Re-enable foreign key constraints after import
+            instance._db.execute("PRAGMA foreign_keys = ON")
 
-        xml_handler = XMLHandler.parse(fpath=xml_path)
-        xml_tags = set([e.tag for e in xml_handler.root])  # Extract set of valid tags from xml
-        for tag in xml_tags:
-            # Only parse valid schemas that we maintain.
-            # NOTE: If there are some missing tables, we need to add them to the Enums.
-            schema_enum = str2enum(tag)
-            if not schema_enum:
-                continue
-
-            record_dict = xml_handler.get_records(schema_enum)
-            if not record_dict:  # Skip if no records
-                continue
-
-            # Group records by column structure to avoid mismatches
-            column_groups: dict[frozenset[str], list[dict[str, Any]]] = {}
-            for record in record_dict:
-                # Create a hashable key from the record's column names
-                column_key = frozenset(record.keys())
-                if column_key not in column_groups:
-                    column_groups[column_key] = []
-                column_groups[column_key].append(record)
-
-            # Process each group of consistently structured records separately
-            for columns, records in column_groups.items():
-                column_names = list(columns)
-                placeholders = ", ".join([f":{s}" for s in column_names])
-                columns_sql = ", ".join([f"`{key}`" for key in column_names])
-                query = f"INSERT INTO {tag} ({columns_sql}) values({placeholders})"
-                logger.trace("{}", query)
-
-                insert_result = instance._db.executemany(query, records)
-                if not insert_result:
-                    logger.warning(f"No rows inserted for {tag} with columns {column_names}")
-
-        # Re-enable foreign key constraints after import
-        instance._db.execute("PRAGMA foreign_keys = ON")
         instance._db.execute("UPDATE t_config SET value = ? WHERE element = ?", ("1", "Dynamic"))
 
         return instance
@@ -1772,17 +1813,72 @@ class PlexosDB:
                 (1, "System", system_class_id, 1, str(uuid.uuid4())),
             )
 
+    def _ensure_schema_created(self, schema: str | None) -> tuple[bool, bool]:
+        """Ensure base schema tables exist and return (has_schema, ok)."""
+        existing_tables = set(self._db.tables)
+        has_schema = "t_class" in existing_tables
+
+        if has_schema:
+            logger.debug("Schema already exists. Skipping schema creation script.")
+            return True, True
+
+        schema_sql = schema or PLEXOS_DEFAULT_SCHEMA
+        if not schema:
+            logger.debug("Using default schema")
+
+        creation_status = self._db.executescript(schema_sql)
+        return False, bool(creation_status)
+
+    def _import_master_template(self, major_version: int, *, has_schema: bool) -> None:
+        """Import versioned master template after compatibility and safety checks."""
+        existing_version = self._get_plexos_version()
+        if existing_version:
+            if existing_version[0] != major_version:
+                msg = (
+                    f"Database is already initialized with version {existing_version[0]}. "
+                    f"Requested version {major_version}. Create a new PlexosDB instance "
+                    "to initialize a different master template version."
+                )
+                raise ValueError(msg)
+            logger.debug("Master template version {} already loaded. Skipping import.", existing_version[0])
+            return
+
+        if has_schema:
+            class_count = self._db.fetchone("SELECT COUNT(*) FROM t_class")
+            if class_count and class_count[0] > 0:
+                msg = (
+                    "Schema already contains class metadata but no version entry was found in t_config. "
+                    "Cannot safely import a master template into a partially initialized schema. "
+                    "Create a new PlexosDB instance and call create_schema(version=...)."
+                )
+                raise ValueError(msg)
+
+        template_fname = MASTER_TEMPLATE_FILES[major_version]
+        template_resource = files("plexosdb").joinpath("config", template_fname)
+        logger.debug("Loading master template for schema version {}: {}", major_version, template_fname)
+
+        self._db.execute("PRAGMA foreign_keys = OFF")
+        try:
+            with as_file(template_resource) as template_path:
+                self._import_xml_records(template_path)
+        finally:
+            self._db.execute("PRAGMA foreign_keys = ON")
+
+        # Invalidate version cache after template import.
+        self._version = None
+
     def create_schema(
         self,
         schema: str | None = None,
         *,
         seed_defaults: bool = False,
-        version: str | None = "9.2",
+        version: int | str | tuple[int, ...] | None = None,
     ) -> bool:
         """Create database schema from SQL script.
 
         Initializes the database schema by executing SQL statements, either from
-        the default schema or from a provided schema string.
+        the default schema or from a provided schema string. Optionally, this can
+        preload a versioned master template into the new schema.
 
         Parameters
         ----------
@@ -1790,16 +1886,21 @@ class PlexosDB:
             Direct SQL schema content to execute. If None, uses the default schema,
             by default None
         seed_defaults : bool, optional
-            If True, seed minimal classes/collections/System object after schema creation
-            so workflows like add_object work without loading XML, by default False
-        version : str | None, optional
-            Version value to apply to ``t_config`` under ``Version``. Defaults to
-            ``"9.2"``. Pass ``None`` to skip version updates.
+            If True, seed minimal classes/collections/System object after schema
+            creation so workflows like ``add_object`` work immediately on a fresh
+            database without loading XML. Mutually exclusive with ``version``;
+            passing both raises ``ValueError``, by default False
+        version : int | str | tuple[int, ...] | None, optional
+            PLEXOS major version used to preload the matching master template
+            from ``plexosdb/config``. Supported versions are 9, 10, 11, and 12.
+            All forms are equivalent: ``9``, ``"9.2"``, ``"v9.2R6"``, and
+            ``(9, 2, 6)`` all load the v9 master template.
+            If None, no master template is loaded.
 
         Returns
         -------
         bool
-            True if the creation succeeded, False if it failed
+            True if initialization succeeded, False if it failed
 
         See Also
         --------
@@ -1840,27 +1941,28 @@ class PlexosDB:
         >>> db.create_schema(schema=custom_schema)
         True
         """
-        if not schema:
-            logger.debug("Using default schema")
-            status = self._db.executescript(PLEXOS_DEFAULT_SCHEMA)
-        else:
-            status = self._db.executescript(schema)
+        has_schema, creation_ok = self._ensure_schema_created(schema)
+        if not creation_ok:
+            return False
 
-        if status:
-            # Best-effort config updates; if t_config does not exist in a custom schema, skip.
-            has_config = bool(
-                self._db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='t_config'")
+        if seed_defaults and version is not None:
+            raise ValueError(
+                "seed_defaults=True and version=... cannot be used together. "
+                "seed_defaults inserts minimal stub rows, while version loads a full master template; "
+                "combining them risks duplicate-row collisions. "
+                "Use version=... alone to load a master template, or seed_defaults=True alone "
+                "for a lightweight schema without a template."
             )
-            if has_config:
-                self._db.execute("UPDATE t_config SET value = ? WHERE element = ?", ("1", "Dynamic"))
-                if version is not None:
-                    self._db.execute(
-                        "UPDATE t_config SET value = ? WHERE element = ?",
-                        (version, "Version"),
-                    )
-            if seed_defaults:
-                self._seed_default_model_data()
-        return status
+
+        if seed_defaults:
+            self._seed_default_model_data()
+
+        if version is None:
+            return True
+
+        major_version = self._parse_schema_version(version)
+        self._import_master_template(major_version, has_schema=has_schema)
+        return True
 
     def delete_attribute(
         self,
