@@ -227,3 +227,24 @@ your model:
 
 This approach can dramatically improve performance when creating large, complex
 models.
+
+## Bulk Inserting Attributes
+
+For efficiently adding multiple attribute values, use
+`add_attributes_from_records`.
+
+### Basic Usage (Wide Format)
+
+```python
+from plexosdb.enums import ClassEnum
+
+records = [
+    {"name": "Horizon1", "Step Type": 4.0, "Chrono Step Count": 366.0},
+    {"name": "Horizon2", "Step Type": 4.0, "Chrono Step Count": 365.0},
+]
+
+db.add_attributes_from_records(
+    records,
+    object_class=ClassEnum.Horizon,
+)
+```

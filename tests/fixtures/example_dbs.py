@@ -1,7 +1,7 @@
 from collections.abc import Generator
 from datetime import date
 from pathlib import Path
-from zipfile import ZipFile
+import re
 
 import pytest
 
@@ -11,22 +11,17 @@ from .profiles import NORMALIZED_SOLAR_PROFILE, NORMALIZED_WIND_PROFILE
 
 
 @pytest.fixture(scope="session")
-def master_xml_files(data_folder, tmp_path_factory) -> dict[str, Path]:  # type: ignore
-    zip_path = data_folder / "master_files.zip"
-    extract_dir = tmp_path_factory.getbasetemp() / "master_xml_cache"
-    extract_dir.mkdir(exist_ok=True)
+def master_xml_files(pytestconfig) -> dict[str, Path]:  # type: ignore
+    config_dir = pytestconfig.rootpath.joinpath("src", "plexosdb", "config")
+    xml_files: dict[str, Path] = {}
 
-    xml_files = {}
-    with ZipFile(zip_path, "r") as zip_ref:
-        for file_info in zip_ref.filelist:
-            if file_info.filename.endswith(".xml"):
-                stem = Path(file_info.filename).stem
-                extracted_path = extract_dir / file_info.filename
-                if not extracted_path.exists():
-                    zip_ref.extract(file_info, extract_dir)
-                xml_files[stem] = extracted_path
+    for xml_path in config_dir.glob("master_*.xml"):
+        match = re.match(r"master_(\d+\.\d+R\d+)_btu\.xml", xml_path.name)
+        if not match:
+            continue
+        xml_files[f"v{match.group(1)}"] = xml_path
 
-    yield xml_files
+    return xml_files
 
 
 @pytest.fixture(scope="session")

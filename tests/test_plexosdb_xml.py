@@ -6,7 +6,7 @@ import pytest
 from plexosdb.enums import Schema
 from plexosdb.xml_handler import XMLHandler, xml_query
 
-XML_FPATH = Path("tests").joinpath("data/plexosdb.xml")
+XML_FPATH = Path("tests").joinpath("data/run_of_river_case/TestSystem.xml")
 NAMESPACE = "http://tempuri.org/MasterDataSet.xsd"
 
 
