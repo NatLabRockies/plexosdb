@@ -137,6 +137,34 @@ class CollectionEnum(StrEnum):
     Purchasers = "Purchasers"
 
 
+class PhaseEnum(StrEnum):
+    """PLEXOS solve phases used in result table names."""
+
+    LT = "LT"
+    PASA = "PASA"
+    MT = "MT"
+    ST = "ST"
+
+
+class PeriodEnum(StrEnum):
+    """PLEXOS result periods used in result table names."""
+
+    INTERVAL = "INTERVAL"
+    DAY = "DAY"
+    WEEK = "WEEK"
+    MONTH = "MONTH"
+    YEAR = "YEAR"
+    HOUR = "HOUR"
+    QUARTER = "QUARTER"
+
+
+class TableTypeEnum(StrEnum):
+    """DuckDB information_schema table types used by solution results."""
+
+    BASE_TABLE = "BASE TABLE"
+    VIEW = "VIEW"
+
+
 def str2enum(string: str, schema_enum: type[Enum] = Schema) -> Schema | None:
     """Convert string to enum."""
     for e in schema_enum:

@@ -4,7 +4,7 @@ import sqlite3
 import uuid
 from collections.abc import Iterable, Iterator
 from datetime import datetime
-from importlib.resources import files
+from importlib.resources import as_file, files
 from pathlib import Path
 from string import Template
 from typing import Any, Literal, TypedDict, cast
@@ -40,6 +40,7 @@ from .utils import (
     normalize_names,
     plan_property_inserts,
     resolve_membership_id,
+    _normalize_attribute_records,
 )
 from .xml_handler import XMLHandler
 
@@ -47,6 +48,12 @@ SQLITE_BACKEND_KWARGS = {"in_memory"}
 CHECK_QUERY = "SELECT 1 FROM ${schema} ${where_clause}"
 PLEXOS_DEFAULT_SCHEMA = fpath = files("plexosdb").joinpath("schema.sql").read_text(encoding="utf-8-sig")
 PROPERTY_QUERY = files("plexosdb.sql").joinpath("object_properties.sql").read_text(encoding="utf-8-sig")
+MASTER_TEMPLATE_FILES: dict[int, str] = {
+    9: "master_9.2R6_btu.xml",
+    10: "master_10.0R2_btu.xml",
+    11: "master_11.0R4_btu.xml",
+    12: "master_12.0R3_btu.xml",
+}
 
 
 class PropertyRecord(TypedDict, total=False):
@@ -142,6 +149,72 @@ class PlexosDB:
             return None
         return tuple(map(int, result[0].split(".")))
 
+    @staticmethod
+    def _parse_schema_version(version: int | str | tuple[int, ...]) -> int:
+        """Normalize schema template version to its major version number."""
+        if isinstance(version, int):
+            major = version
+        elif isinstance(version, tuple):
+            if not version:
+                raise ValueError("Version tuple cannot be empty.")
+            major = version[0]
+        else:
+            version_str = version.strip().lower()
+            if version_str.startswith("v"):
+                version_str = version_str[1:]
+
+            numeric_chars: list[str] = []
+            for char in version_str:
+                if char.isdigit() or char == ".":
+                    numeric_chars.append(char)
+                else:
+                    break
+
+            if not numeric_chars:
+                raise ValueError(f"Invalid schema version: {version}")
+            major = int("".join(numeric_chars).split(".")[0])
+
+        if major not in MASTER_TEMPLATE_FILES:
+            supported = ", ".join(map(str, sorted(MASTER_TEMPLATE_FILES)))
+            raise ValueError(f"Unsupported schema version '{version}'. Supported versions: {supported}")
+        return major
+
+    def _import_xml_records(self, xml_path: str | Path) -> None:
+        """Import XML records into an existing schema."""
+        xml_handler = XMLHandler.parse(fpath=xml_path)
+        xml_tags = {element.tag for element in xml_handler.root}
+
+        with self._db.transaction():
+            for tag in xml_tags:
+                # Only parse valid schemas that we maintain.
+                # NOTE: If there are some missing tables, we need to add them to the Enums.
+                schema_enum = str2enum(tag)
+                if not schema_enum:
+                    continue
+
+                record_dict = xml_handler.get_records(schema_enum)
+                if not record_dict:  # Skip if no records
+                    continue
+
+                # Group records by column structure to avoid mismatches
+                column_groups: dict[frozenset[str], list[dict[str, Any]]] = {}
+                for record in record_dict:
+                    # Create a hashable key from the record's column names
+                    column_key = frozenset(record.keys())
+                    if column_key not in column_groups:
+                        column_groups[column_key] = []
+                    column_groups[column_key].append(record)
+
+                # Process each group of consistently structured records separately
+                for columns, records in column_groups.items():
+                    column_names = list(columns)
+                    placeholders = ", ".join([f":{s}" for s in column_names])
+                    columns_sql = ", ".join([f"`{key}`" for key in column_names])
+                    query = f"INSERT INTO {tag} ({columns_sql}) values({placeholders})"
+                    logger.trace("{}", query)
+
+                    self._db.executemany(query, records)
+
     @classmethod
     def from_xml(
         cls,
@@ -211,43 +284,12 @@ class PlexosDB:
 
         # Temporarily disable foreign key constraints for bulk XML import
         instance._db.execute("PRAGMA foreign_keys = OFF")
+        try:
+            instance._import_xml_records(xml_path)
+        finally:
+            # Re-enable foreign key constraints after import
+            instance._db.execute("PRAGMA foreign_keys = ON")
 
-        xml_handler = XMLHandler.parse(fpath=xml_path)
-        xml_tags = set([e.tag for e in xml_handler.root])  # Extract set of valid tags from xml
-        for tag in xml_tags:
-            # Only parse valid schemas that we maintain.
-            # NOTE: If there are some missing tables, we need to add them to the Enums.
-            schema_enum = str2enum(tag)
-            if not schema_enum:
-                continue
-
-            record_dict = xml_handler.get_records(schema_enum)
-            if not record_dict:  # Skip if no records
-                continue
-
-            # Group records by column structure to avoid mismatches
-            column_groups: dict[frozenset[str], list[dict[str, Any]]] = {}
-            for record in record_dict:
-                # Create a hashable key from the record's column names
-                column_key = frozenset(record.keys())
-                if column_key not in column_groups:
-                    column_groups[column_key] = []
-                column_groups[column_key].append(record)
-
-            # Process each group of consistently structured records separately
-            for columns, records in column_groups.items():
-                column_names = list(columns)
-                placeholders = ", ".join([f":{s}" for s in column_names])
-                columns_sql = ", ".join([f"`{key}`" for key in column_names])
-                query = f"INSERT INTO {tag} ({columns_sql}) values({placeholders})"
-                logger.trace("{}", query)
-
-                insert_result = instance._db.executemany(query, records)
-                if not insert_result:
-                    logger.warning(f"No rows inserted for {tag} with columns {column_names}")
-
-        # Re-enable foreign key constraints after import
-        instance._db.execute("PRAGMA foreign_keys = ON")
         instance._db.execute("UPDATE t_config SET value = ? WHERE element = ?", ("1", "Dynamic"))
 
         return instance
@@ -281,10 +323,6 @@ class PlexosDB:
         -------
         int
             attribute_id
-
-        Notes
-        -----
-        By default, we add all objects to the system membership.
         """
         object_id = self.get_object_id(object_class, name=object_name)
         attribute_id = self.get_attribute_id(object_class, name=attribute_name)
@@ -293,7 +331,8 @@ class PlexosDB:
         query = (
             f"INSERT INTO {Schema.AttributeData.name}(object_id, attribute_id, value) VALUES({placeholders})"
         )
-        attribute_id = self._db.execute(query, params)
+        result = self._db.execute(query, params)
+        assert result, f"Failed to add attribute '{attribute_name}' to object '{object_name}'."
         return attribute_id
 
     def add_band(
@@ -961,6 +1000,140 @@ class PlexosDB:
         logger.debug(f"Successfully processed {len(records)} property and text records in batches")
         return
 
+    def add_attributes_from_records(
+        self,
+        records: list[dict[str, Any]],
+        /,
+        *,
+        object_class: ClassEnum,
+        chunksize: int = 10_000,
+    ) -> None:
+        """Bulk insert attribute values for objects.
+
+        Efficiently adds multiple object-level attribute values in batches.
+        This method is much more efficient than calling `add_attribute` repeatedly.
+
+        Each record should contain:
+            - 'name': object name
+            - 'attribute': attribute name
+            - 'value': attribute value
+
+        Alternatively, records may be provided in the following format:
+            - {'name': ..., 'Attr1': val1, 'Attr2': val2}
+
+        Optional:
+            - 'state'
+
+        Parameters
+        ----------
+        records : list[dict[str, Any]]
+            List of attribute records in explicit or wide format.
+        object_class : ClassEnum
+            Class of the objects.
+        chunksize : int, optional
+            Batch size for inserts, by default 10_000.
+
+        Returns
+        -------
+        None
+
+        See Also
+        --------
+        add_attribute
+        add_properties_from_records
+        add_memberships_from_records
+
+        Examples
+        --------
+        >>> records = [
+        ...     {"name": "2020", "Step Type": 4.0, "Chrono Step Count": 366.0},
+        ... ]
+
+        >>> db.add_attributes_from_records(records, object_class=ClassEnum.Horizon)
+        """
+        if not records:
+            logger.warning("No records provided for bulk attribute insertion")
+            return
+
+        records = _normalize_attribute_records(records)
+
+        if chunksize < 1:
+            msg = f"chunksize must be >= 1, received {chunksize}"
+            raise ValueError(msg)
+
+        class_id = self.get_class_id(object_class)
+
+        object_names = tuple({record["name"] for record in records})
+        name_to_object_id: dict[str, int] = {}
+
+        CHUNK = 900  # noqa: N806
+        for i in range(0, len(object_names), CHUNK):
+            chunk = object_names[i : i + CHUNK]
+            object_placeholders = ", ".join("?" for _ in chunk)
+
+            object_rows = self._db.query(
+                f"""
+                SELECT object_id, name
+                FROM t_object
+                WHERE class_id = ?
+                AND name IN ({object_placeholders})
+                """,
+                (class_id, *chunk),
+            )
+            name_to_object_id.update({name: object_id for object_id, name in object_rows})
+
+        attribute_rows = self._db.query(
+            """
+            SELECT attribute_id, name
+            FROM t_attribute
+            WHERE class_id = ?
+            """,
+            (class_id,),
+        )
+        name_to_attribute_id = {name: attribute_id for attribute_id, name in attribute_rows}
+
+        params: list[tuple[int, int, Any, Any]] = []
+        seen: set[tuple[int, int]] = set()
+
+        for record in records:
+            try:
+                object_id = name_to_object_id[record["name"]]
+                attribute_id = name_to_attribute_id[record["attribute"]]
+            except KeyError as exc:
+                raise KeyError(f"Invalid attribute record: {record}") from exc
+
+            key = (object_id, attribute_id)
+            if key in seen:
+                raise ValueError(
+                    f"Duplicate attribute record for object={record['name']!r}, "
+                    f"attribute={record['attribute']!r}"
+                )
+            seen.add(key)
+
+            params.append(
+                (
+                    object_id,
+                    attribute_id,
+                    record["value"],
+                    record.get("state"),
+                )
+            )
+
+        query = f"""
+            INSERT INTO {Schema.AttributeData.name}
+                (object_id, attribute_id, value, state)
+            VALUES (?, ?, ?, ?)
+        """
+
+        with self._db.transaction():
+            for batch in batched(params, chunksize):
+                result = self._db.executemany(query, list(batch))
+                if not result:
+                    msg = f"Failed to add attribute values for {object_class}."
+                    raise RuntimeError(msg)
+
+        logger.debug("Added {} attribute values.", len(params))
+
     def _handle_dates(
         self,
         data_id: int,
@@ -1365,14 +1538,25 @@ class PlexosDB:
         original_object_name: str,
         new_object_name: str,
         copy_properties: bool = True,
+        copy_attributes: bool = True,
     ) -> int:
-        """Copy an object and its properties, tags, and texts."""
+        """Copy an object and its memberships, attributes, properties, tags and texts."""
         object_id = self.get_object_id(object_class, name=original_object_name)
         category_id = self.query("SELECT category_id from t_object WHERE object_id = ?", (object_id,))
         category = self.query("SELECT name from t_category WHERE category_id = ?", (category_id[0][0],))
+
         new_object_id = self.add_object(object_class, new_object_name, category=category[0][0])
+
+        if copy_attributes:
+            self._copy_object_attributes(
+                old_object_id=object_id,
+                new_object_id=new_object_id,
+            )
+
         membership_mapping = self.copy_object_memberships(
-            object_class=object_class, original_name=original_object_name, new_name=new_object_name
+            object_class=object_class,
+            original_name=original_object_name,
+            new_name=new_object_name,
         )
 
         system_collection = get_default_collection(object_class)
@@ -1550,6 +1734,16 @@ class PlexosDB:
             self._db.execute("DROP TABLE IF EXISTS temp_data_mapping")
         return True
 
+    def _copy_object_attributes(self, old_object_id: int, new_object_id: int) -> bool:
+        """Copy attribute values from original object to new object."""
+        query = """
+            INSERT INTO t_attribute_data (object_id, attribute_id, value, state)
+            SELECT ?, attribute_id, value, state
+            FROM t_attribute_data
+            WHERE object_id = ?
+        """
+        return self._db.execute(query, (new_object_id, old_object_id))
+
     def create_object_scenario(
         self,
         object_name: str,
@@ -1619,17 +1813,72 @@ class PlexosDB:
                 (1, "System", system_class_id, 1, str(uuid.uuid4())),
             )
 
+    def _ensure_schema_created(self, schema: str | None) -> tuple[bool, bool]:
+        """Ensure base schema tables exist and return (has_schema, ok)."""
+        existing_tables = set(self._db.tables)
+        has_schema = "t_class" in existing_tables
+
+        if has_schema:
+            logger.debug("Schema already exists. Skipping schema creation script.")
+            return True, True
+
+        schema_sql = schema or PLEXOS_DEFAULT_SCHEMA
+        if not schema:
+            logger.debug("Using default schema")
+
+        creation_status = self._db.executescript(schema_sql)
+        return False, bool(creation_status)
+
+    def _import_master_template(self, major_version: int, *, has_schema: bool) -> None:
+        """Import versioned master template after compatibility and safety checks."""
+        existing_version = self._get_plexos_version()
+        if existing_version:
+            if existing_version[0] != major_version:
+                msg = (
+                    f"Database is already initialized with version {existing_version[0]}. "
+                    f"Requested version {major_version}. Create a new PlexosDB instance "
+                    "to initialize a different master template version."
+                )
+                raise ValueError(msg)
+            logger.debug("Master template version {} already loaded. Skipping import.", existing_version[0])
+            return
+
+        if has_schema:
+            class_count = self._db.fetchone("SELECT COUNT(*) FROM t_class")
+            if class_count and class_count[0] > 0:
+                msg = (
+                    "Schema already contains class metadata but no version entry was found in t_config. "
+                    "Cannot safely import a master template into a partially initialized schema. "
+                    "Create a new PlexosDB instance and call create_schema(version=...)."
+                )
+                raise ValueError(msg)
+
+        template_fname = MASTER_TEMPLATE_FILES[major_version]
+        template_resource = files("plexosdb").joinpath("config", template_fname)
+        logger.debug("Loading master template for schema version {}: {}", major_version, template_fname)
+
+        self._db.execute("PRAGMA foreign_keys = OFF")
+        try:
+            with as_file(template_resource) as template_path:
+                self._import_xml_records(template_path)
+        finally:
+            self._db.execute("PRAGMA foreign_keys = ON")
+
+        # Invalidate version cache after template import.
+        self._version = None
+
     def create_schema(
         self,
         schema: str | None = None,
         *,
         seed_defaults: bool = False,
-        version: str | None = "9.2",
+        version: int | str | tuple[int, ...] | None = None,
     ) -> bool:
         """Create database schema from SQL script.
 
         Initializes the database schema by executing SQL statements, either from
-        the default schema or from a provided schema string.
+        the default schema or from a provided schema string. Optionally, this can
+        preload a versioned master template into the new schema.
 
         Parameters
         ----------
@@ -1637,16 +1886,21 @@ class PlexosDB:
             Direct SQL schema content to execute. If None, uses the default schema,
             by default None
         seed_defaults : bool, optional
-            If True, seed minimal classes/collections/System object after schema creation
-            so workflows like add_object work without loading XML, by default False
-        version : str | None, optional
-            Version value to apply to ``t_config`` under ``Version``. Defaults to
-            ``"9.2"``. Pass ``None`` to skip version updates.
+            If True, seed minimal classes/collections/System object after schema
+            creation so workflows like ``add_object`` work immediately on a fresh
+            database without loading XML. Mutually exclusive with ``version``;
+            passing both raises ``ValueError``, by default False
+        version : int | str | tuple[int, ...] | None, optional
+            PLEXOS major version used to preload the matching master template
+            from ``plexosdb/config``. Supported versions are 9, 10, 11, and 12.
+            All forms are equivalent: ``9``, ``"9.2"``, ``"v9.2R6"``, and
+            ``(9, 2, 6)`` all load the v9 master template.
+            If None, no master template is loaded.
 
         Returns
         -------
         bool
-            True if the creation succeeded, False if it failed
+            True if initialization succeeded, False if it failed
 
         See Also
         --------
@@ -1687,27 +1941,28 @@ class PlexosDB:
         >>> db.create_schema(schema=custom_schema)
         True
         """
-        if not schema:
-            logger.debug("Using default schema")
-            status = self._db.executescript(PLEXOS_DEFAULT_SCHEMA)
-        else:
-            status = self._db.executescript(schema)
+        has_schema, creation_ok = self._ensure_schema_created(schema)
+        if not creation_ok:
+            return False
 
-        if status:
-            # Best-effort config updates; if t_config does not exist in a custom schema, skip.
-            has_config = bool(
-                self._db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='t_config'")
+        if seed_defaults and version is not None:
+            raise ValueError(
+                "seed_defaults=True and version=... cannot be used together. "
+                "seed_defaults inserts minimal stub rows, while version loads a full master template; "
+                "combining them risks duplicate-row collisions. "
+                "Use version=... alone to load a master template, or seed_defaults=True alone "
+                "for a lightweight schema without a template."
             )
-            if has_config:
-                self._db.execute("UPDATE t_config SET value = ? WHERE element = ?", ("1", "Dynamic"))
-                if version is not None:
-                    self._db.execute(
-                        "UPDATE t_config SET value = ? WHERE element = ?",
-                        (version, "Version"),
-                    )
-            if seed_defaults:
-                self._seed_default_model_data()
-        return status
+
+        if seed_defaults:
+            self._seed_default_model_data()
+
+        if version is None:
+            return True
+
+        major_version = self._parse_schema_version(version)
+        self._import_master_template(major_version, has_schema=has_schema)
+        return True
 
     def delete_attribute(
         self,
@@ -1717,8 +1972,62 @@ class PlexosDB:
         object_name: str,
         object_class: ClassEnum,
     ) -> None:
-        """Delete an attribute from an object."""
-        raise NotImplementedError  # pragma: no cover
+        """Delete an attribute value from an object.
+
+        Removes an object-level attribute value from the database.
+
+        Parameters
+        ----------
+        attribute_name : str
+            Name of the attribute to delete.
+        object_name : str
+            Name of the object the attribute belongs to.
+        object_class : ClassEnum
+            Class enumeration of the object.
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        NotFoundError
+            If the object does not exist, the attribute is not defined for the
+            object's class or the attribute value is not assigned to the object.
+
+        Examples
+        --------
+        >>> db.delete_attribute(
+        ...     "Enabled",
+        ...     object_name="Base_Model",
+        ...     object_class=ClassEnum.Model,
+        ... )
+        """
+        if not checks_module.check_object_exists(self, object_class, object_name):
+            msg = f"Object = `{object_name}` does not exist for class `{object_class}`."
+            raise NotFoundError(msg)
+
+        object_id = self.get_object_id(object_class, name=object_name)
+        attribute_id = self.get_attribute_id(object_class, name=attribute_name)
+
+        find_query = """
+        SELECT 1
+        FROM t_attribute_data
+        WHERE object_id = ? AND attribute_id = ?
+        """
+        result = self._db.fetchone(find_query, (object_id, attribute_id))
+
+        if not result:
+            msg = f"Attribute '{attribute_name}' not found for object '{object_name}'."
+            raise NotFoundError(msg)
+
+        delete_query = """
+        DELETE FROM t_attribute_data
+        WHERE object_id = ? AND attribute_id = ?
+        """
+
+        with self._db.transaction():
+            self._db.execute(delete_query, (object_id, attribute_id))
 
     def delete_category(self, category: str, /, *, class_name: ClassEnum) -> None:
         """Delete a category from the database."""
@@ -1924,7 +2233,7 @@ class PlexosDB:
         object_name: str,
         attribute_name: str,
     ) -> Any:
-        """Get attribute details for a specific object."""
+        """Get an assigned attribute value for a specific object."""
         query = """
         SELECT
             t_attribute_data.value
@@ -1956,12 +2265,12 @@ class PlexosDB:
         Returns
         -------
         int
-            ID of the category
+            ID of the attribute
 
         Raises
         ------
-        AssertionError
-            If the category does not exist
+        NotFoundError
+            If the attribute does not exist for the specified class.
         """
         query = """
         SELECT
@@ -1975,7 +2284,9 @@ class PlexosDB:
         AND t_class.name = ?
         """
         result = self._db.fetchone(query, (name, class_enum))
-        assert result
+        if not result:
+            msg = f"Attribute '{name}' not found for class '{class_enum}'."
+            raise NotFoundError(msg)
         return cast(int, result[0])
 
     def get_attributes(
@@ -1984,10 +2295,67 @@ class PlexosDB:
         /,
         *,
         object_class: ClassEnum,
-        attribute_names: list[str] | None = None,
+        attribute_names: str | Iterable[str] | None = None,
     ) -> list[dict[str, Any]]:
-        """Get all attributes for a specific object."""
-        raise NotImplementedError  # pragma: no cover
+        """Retrieve assigned attribute values for a specific object.
+
+        Parameters
+        ----------
+        object_name : str
+            Name of the object.
+        object_class : ClassEnum
+            Class of the object.
+        attribute_names : str | Iterable[str] | None, optional
+            Attribute name or names to retrieve. If omitted, retrieves all
+            assigned attribute values.
+
+        Returns
+        -------
+        list[dict[str, Any]]
+            Attribute-value records with ``name``, ``attribute``, ``value``,
+            and ``state`` keys. Returns an empty list when the object has no
+            assigned attribute values.
+
+        Raises
+        ------
+        NotFoundError
+            If the object does not exist for the requested class.
+        """
+        if not checks_module.check_object_exists(self, object_class, object_name):
+            msg = f"Object = `{object_name}` does not exist in class = {object_class}. "
+            msg += "See available objects with list_objects_by_class"
+            raise NotFoundError(msg)
+
+        object_id = self.get_object_id(object_class, object_name)
+        class_id = self.get_class_id(object_class)
+
+        conditions = [
+            "data.object_id = ?",
+            "attr.class_id = ?",
+        ]
+        params: list[Any] = [object_id, class_id]
+
+        if attribute_names is not None:
+            names = normalize_names(attribute_names)
+            if names:
+                placeholders = ", ".join("?" for _ in names)
+                conditions.append(f"attr.name IN ({placeholders})")
+                params.extend(names)
+
+        where_clause = " AND ".join(conditions)
+        query = f"""
+            SELECT
+                obj.name AS name,
+                attr.name AS attribute,
+                data.value,
+                data.state
+            FROM t_attribute_data AS data
+            JOIN t_object AS obj ON obj.object_id = data.object_id
+            JOIN t_attribute AS attr ON attr.attribute_id = data.attribute_id
+            WHERE {where_clause}
+            ORDER BY attr.name
+        """
+        return self._db.fetchall_dict(query, tuple(params))
 
     def get_category_id(self, class_enum: ClassEnum, /, name: str) -> int:
         """Return the ID for a given category.
@@ -2165,7 +2533,7 @@ class PlexosDB:
         --------
         >>> db = PlexosDB()
         >>> db.create_schema()
-        >>> db.get_collection_id(CollectionEnum.SystemGenerators, ClassEnum.System, ClassEnum.Generator)
+        >>> db.get_collection_id(CollectionEnum.Generators, ClassEnum.System, ClassEnum.Generator)
         25  # Example ID
         """
         query = """
@@ -2233,9 +2601,9 @@ class PlexosDB:
         >>> db.add_object(ClassEnum.System, "System")
         >>> db.add_object(ClassEnum.Generator, "Generator1")
         >>> db.add_membership(
-        ...     "System", "Generator1", ClassEnum.System, ClassEnum.Generator, CollectionEnum.SystemGenerators
+        ...     "System", "Generator1", ClassEnum.System, ClassEnum.Generator, CollectionEnum.Generators
         ... )
-        >>> db.get_membership_id("System", "Generator1", CollectionEnum.SystemGenerators)
+        >>> db.get_membership_id("System", "Generator1", CollectionEnum.Generators)
         1
         """
         query = f"""
@@ -3044,7 +3412,7 @@ class PlexosDB:
         Parameters
         ----------
         class_enum : ClassEnum
-            Class enumeration to list categories for
+            Class enumeration to list attributes
 
         Returns
         -------

@@ -32,8 +32,27 @@ from plexosdb import PlexosDB
 # Create a new in-memory database
 db = PlexosDB()
 
-# Initialize schema + minimal defaults for object workflows
-db.create_schema(seed_defaults=True)
+# Initialize with the built-in default schema
+ok = db.create_schema()
+assert ok
+
+# Option A: initialize schema + minimal defaults for object workflows
+db_seeded = PlexosDB()
+db_seeded.create_schema(seed_defaults=True)
+
+# Option B: initialize using your own SQL schema text
+custom_schema = """
+CREATE TABLE IF NOT EXISTS my_table (
+    id INTEGER PRIMARY KEY,
+    name TEXT
+);
+"""
+db_custom = PlexosDB()
+db_custom.create_schema(schema=custom_schema)
+
+# Option C: initialize and seed from a versioned master template
+db_versioned = PlexosDB()
+db_versioned.create_schema(version=10)
 ```
 
 This creates an in-memory database with the PLEXOS schema and minimal lookup
@@ -48,24 +67,25 @@ structure is created. For `add_object(...)` and related workflows, use
 `create_schema` supports two useful parameters:
 
 - `seed_defaults=True`: seeds minimal classes/collections/System object so
-  methods like `add_object` work immediately on a fresh database.
+  methods like `add_object` work immediately on a fresh database. Mutually
+  exclusive with `version`; use one or the other.
 - `schema="..."`: execute custom SQL schema content directly from a string.
-- `version="..."`: updates `t_config.Version` (default `"9.2"`) when that row
-  exists in schema data. Use `version=None` when schema setup is followed by XML
-  import that provides its own version.
+- `version=...`: loads the matching versioned master template (e.g.
+  `version=11`, `"11.0"`, or `"v11.0R4"`). Cannot be combined with
+  `seed_defaults=True`.
 
 ```python
 from plexosdb import PlexosDB
 from plexosdb.enums import ClassEnum
 
+# Option 1: minimal seed — no master template, add_object works immediately
 db = PlexosDB()
 db.create_schema(seed_defaults=True)
-
-# Works immediately because defaults were seeded
 db.add_object(ClassEnum.Generator, "Generator1")
 
-# Set a specific DB version when creating from schema
-db.create_schema(seed_defaults=True, version="11.0")
+# Option 2: full master template — use version, not seed_defaults
+db2 = PlexosDB()
+db2.create_schema(version="11.0")
 ```
 
 Custom schema string example (copy/paste):
@@ -120,6 +140,18 @@ db.create_schema(schema=schema)
 
 # The schema string can be as small or as complete as your workflow requires.
 ```
+
+If you want to preload a PLEXOS master template while creating the schema, pass
+the major version (supported: 9, 10, 11, 12):
+
+```python
+db_base = PlexosDB()
+db = db_base.create_schema(version=10)
+```
+
+You can also pass string or tuple formats such as `"v10.0R2"` or `(11, 0, 4)`.
+`create_schema(...)` returns a boolean status; it does not return a new database
+instance.
 
 ## Working with Objects
 

@@ -56,10 +56,55 @@ db.add_membership(
 db.to_xml("modified_model.xml")
 ```
 
+## Versioned Schema Initialization
+
+When creating a brand-new database (not importing XML), you can preload the
+matching PLEXOS master template by version:
+
+```python
+from plexosdb import PlexosDB
+
+db = PlexosDB()
+db.create_schema(version=10)
+```
+
+Supported versions: 9, 10, 11, 12.
+
+Accepted inputs include integers, strings, and tuples. For example:
+
+```python
+db.create_schema(version="v11.0R4")
+db.create_schema(version=(12, 0, 3))
+```
+
+## Read PLEXOS Solution ZIP Tables with pandas
+
+```python
+from plexosdb import PlexosSolution
+import pandas as pd
+
+PLEXOS_SOLUTION = "/path/to/solution.zip"
+
+sol = PlexosSolution.from_zip(PLEXOS_SOLUTION)
+sol.to_sqlite("output.sqlite", if_exists="replace")
+
+table = "ST__Interval__Regions__Fixed_Load"
+sol.materialize_table(table, schema="report")
+df_table = pd.read_sql_query(f'SELECT * FROM report."{table}"', sol.connection)
+```
+
+This pattern is useful when you only need a few report/data tables from a large
+solution ZIP, because it materializes tables on demand.
+
 ## Documentation
 
 Full documentation is available at
 [natlabrockies.github.io/plexosdb](https://natlabrockies.github.io/plexosdb/).
+
+## Related Work
+
+For related previous/current work on querying PLEXOS outputs with DuckDB, see
+[plexos2duckdb](https://github.com/NatLabRockies/plexos2duckdb).
 
 ## Developer Setup
 
