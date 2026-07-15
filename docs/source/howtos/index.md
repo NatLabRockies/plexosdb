@@ -13,6 +13,7 @@ This section contains practical guides for common tasks with PlexosDB.
 create_db
 add_objects
 add_properties
+add_attributes
 delete_objects
 query_database
 work_with_scenarios
@@ -21,4 +22,7 @@ manage_relationships
 copy_objects
 bulk_operations
 remove_non_ascii
+inspect_solution
+read_solution
+mcp_server
 ```
