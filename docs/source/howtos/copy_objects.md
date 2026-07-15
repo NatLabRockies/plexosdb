@@ -1,11 +1,11 @@
 # Copying Objects
 
 PlexosDB allows you to create copies of existing objects along with their
-properties, memberships, and related property records.
+properties, memberships, attributes and related property records.
 
 ## Basic Object Copying
 
-Copy an object and all its properties:
+Copy an object and all its memberships, properties and attributes:
 
 ```python
 from plexosdb import PlexosDB
@@ -32,20 +32,26 @@ db.add_property(
     scenario="Base Case"
 )
 
-# Copy a generator with all its properties
+# Copy a generator with its memberships, properties and attributes
 new_object_id = db.copy_object(
     object_class=ClassEnum.Generator,
     original_object_name="Generator1",
     new_object_name="Generator1_Copy",
-    copy_properties=True  # Default is True
+    copy_properties=True,  # Default is True
+    copy_attributes=True  # Default is True
 )
 
 print(f"Created new object with ID: {new_object_id}")
 ```
 
+```{note}
+Object-level attributes (stored in `t_attribute_data`) are also copied when using `copy_object`.
+```
+
 ## Copying Objects Without Properties
 
-You can also copy the object and its memberships without copying properties:
+You can also copy only the object and its memberships by disabling property and
+attribute copying:
 
 ```python
 # Add Generator object
@@ -65,7 +71,8 @@ new_object_id = db.copy_object(
     object_class=ClassEnum.Generator,
     original_object_name="Generator1",
     new_object_name="Generator1_Skeleton",
-    copy_properties=False
+    copy_properties=False,
+    copy_attributes=False
 )
 ```
 
@@ -93,7 +100,8 @@ new_object_id = db.copy_object(
     object_class=ClassEnum.Node,
     original_object_name="Node1",
     new_object_name="Node1_Copy",
-    copy_properties=False
+    copy_properties=False,
+    copy_attributes=False
 )
 
 # Check the memberships of the new object

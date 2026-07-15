@@ -13,7 +13,6 @@
 *.sdf
 *.tax2010
 *.vcf
-*.xml
 
 ### Database ###
 *.accdb
@@ -315,6 +314,7 @@ Sessionx.vim
 [._]*.un~
 
 ### VisualStudioCode ###
+.vscode
 .vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json
