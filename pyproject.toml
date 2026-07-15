@@ -1,6 +1,6 @@
 [project]
 name = "plexosdb"
-version = "1.4.1"
+version = "1.5.0"
 readme = "README.md"
 license = {file = "LICENSE.txt"}
 keywords = ["PLEXOS", "Database", "SQLite"]
@@ -35,6 +35,8 @@ classifiers = [
 ]
 dependencies = [
     "loguru",
+    "plexos2duckdb>=0.1.0b11",
+    "pre-commit>=4.6.0",
 ]
 
 [project.urls]
@@ -70,15 +72,6 @@ dev = [
     "pytest-coverage>=0.0",
     "ruff>=0.11.5",
 ]
-
-[tool.setuptools]
-include-package-data = true
-
-[tool.setuptools.package-data]
-"*" = ["*.json", "*.csv", "*.xml", ".sql"]
-
-[tool.setuptools.packages.find]
-where = ["src"]
 
 [tool.ty.src]
 include = ["src/plexosdb"]

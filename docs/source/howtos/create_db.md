@@ -12,6 +12,67 @@ from plexosdb import PlexosDB
 db = PlexosDB.from_xml("/path/to/model.xml")
 ```
 
+When using `from_xml(...)`, the schema is created automatically from the XML
+content and metadata in that file.
+
+## Create a New Empty Database with a Versioned Master Template
+
+When starting from an empty database (instead of an existing XML), you can now
+preload the versioned master template during schema creation.
+
+```python
+from plexosdb import PlexosDB
+
+db_base = PlexosDB()
+
+# Load default SQL schema + master template for PLEXOS v10
+ok = db_base.create_schema(version=10)
+assert ok
+```
+
+`create_schema(...)` returns a boolean status. It does not return a new
+`PlexosDB` instance.
+
+You can also pass custom SQL with `schema=...`:
+
+```python
+custom_schema = """
+CREATE TABLE IF NOT EXISTS my_table (
+	id INTEGER PRIMARY KEY,
+	name TEXT
+);
+"""
+
+db_custom = PlexosDB()
+db_custom.create_schema(schema=custom_schema)
+```
+
+Supported template versions are:
+
+- 9
+- 10
+- 11
+- 12
+
+Accepted version input formats include:
+
+- `10`
+- `"10.0"`
+- `"v10.0R2"`
+- `(10, 0, 2)`
+
+```python
+# Equivalent examples
+db_base.create_schema(version="v11.0R4")
+db_base.create_schema(version=(12, 0, 3))
+```
+
+If `version` is omitted, only the SQL schema is created (no master template is
+imported).
+
+Call `create_schema(...)` once per database instance. If the schema already
+exists, re-running schema SQL is skipped.
+
 ## Create empty schema (tables only)
 
 `create_schema()` by itself creates the table structure and config rows, but it
@@ -28,18 +89,6 @@ from plexosdb import PlexosDB
 
 db = PlexosDB()
 db.create_schema()
-```
-
-## Set schema version explicitly
-
-Use `version="..."` when your schema includes a `t_config` row for `Version` and
-you want to update that value during schema creation.
-
-```python
-from plexosdb import PlexosDB
-
-db = PlexosDB()
-db.create_schema(version="11.0")
 ```
 
 ## Create empty schema and seed defaults
@@ -102,7 +151,4 @@ VALUES (1, 'System', 1, 1, '00000000-0000-0000-0000-000000000001', 'Default syst
 
 db = PlexosDB()
 db.create_schema(schema=schema)
-
-# If your custom schema does not provide Version, you can still set it here:
-# db.create_schema(schema=schema, version="10.0")
 ```
