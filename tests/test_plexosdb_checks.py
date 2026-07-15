@@ -445,3 +445,83 @@ def test_check_category_exists_returns_true_for_default_category_in_workflow(
     from plexosdb.enums import ClassEnum
 
     assert checks_module.check_category_exists(db_base, ClassEnum.Generator, "-")
+
+
+# ---------------------------------------------------------------------------
+# Instance method delegation: db.check_*() must delegate to check_*() stubs
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.checks
+def test_check_instance_methods_delegate_to_standalone_functions(db_base):
+    """Verify that every db.check_*() instance method calls through to the
+    underlying standalone check_*() function.  Exercises the _check_*_method
+    wrapper at lines 498-587 of checks.py.
+    """
+    from plexosdb.enums import ClassEnum, CollectionEnum
+
+    db = db_base
+    db.add_object(ClassEnum.Generator, "Gen1")
+
+    # check_class_exists
+    assert db.check_class_exists(ClassEnum.Generator) is True
+    assert db.check_class_exists("Nonexistent") is False  # type: ignore[arg-type]
+
+    # check_category_exists
+    assert db.check_category_exists(ClassEnum.Generator, "-") is True
+
+    # check_object_exists (with and without category)
+    assert db.check_object_exists(ClassEnum.Generator, "Gen1") is True
+    assert db.check_object_exists(ClassEnum.Generator, "Ghost") is False
+    assert db.check_object_exists(ClassEnum.Generator, "Gen1", category="-") is True
+
+    # check_collection_exists
+    assert db.check_collection_exists(CollectionEnum.Generators) is True
+
+    # check_data_id_exist / check_tag_exists — no data rows, so both False
+    assert db.check_data_id_exist(99999) is False
+    assert db.check_tag_exists(99999, 99999) is False
+
+    # check_scenario_exists
+    assert db.check_scenario_exists("No Such Scenario") is False
+    db.add_object(ClassEnum.Scenario, "My Scenario")
+    assert db.check_scenario_exists("My Scenario") is True
+
+    # check_membership_exists (via instance method)
+    db.add_object(ClassEnum.Node, "Node1")
+    db.add_membership(ClassEnum.Generator, ClassEnum.Node, "Gen1", "Node1", CollectionEnum.Nodes)
+    assert (
+        db.check_membership_exists(
+            "Gen1",
+            "Node1",
+            parent_class=ClassEnum.Generator,
+            child_class=ClassEnum.Node,
+            collection=CollectionEnum.Nodes,
+        )
+        is True
+    )
+
+    # check_property_exists (via instance method)
+    assert (
+        db.check_property_exists(
+            CollectionEnum.Generators,
+            ClassEnum.Generator,
+            "Max Capacity",
+        )
+        is True
+    )
+
+
+@pytest.mark.checks
+def test_check_attribute_exists_instance_method_raises_not_implemented(db_base):
+    """db.check_attribute_exists() delegates to the standalone function and
+    returns False when the attribute does not exist.
+    """
+    from plexosdb.enums import ClassEnum
+
+    result = db_base.check_attribute_exists(
+        "some_attr",
+        object_name="System",
+        object_class=ClassEnum.Generator,
+    )
+    assert result is False
