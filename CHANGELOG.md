@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.0](https://github.com/NatLabRockies/plexosdb/compare/v1.5.0...v1.6.0) (2026-07-17)
+
+
+### 🚀 Features
+
+* add agentic skills guide for llms interactions ([#125](https://github.com/NatLabRockies/plexosdb/issues/125)) ([f8d6430](https://github.com/NatLabRockies/plexosdb/commit/f8d6430ac17345b421440e3da5d4e16096b51506))
+* implement PLEXOS solution reader and setup master files for 9-12 versions ([#141](https://github.com/NatLabRockies/plexosdb/issues/141)) ([903cdcc](https://github.com/NatLabRockies/plexosdb/commit/903cdcca9cca9a98e6b8ac9c7473bfc4008b923d))
+* MCP server integration ([#124](https://github.com/NatLabRockies/plexosdb/issues/124)) ([db1e77e](https://github.com/NatLabRockies/plexosdb/commit/db1e77e835e392d9e59c435248bc9d6c03fc3f9f))
+
+
+### 📦 Build
+
+* **deps-dev:** bump pytest from 9.0.2 to 9.0.3 ([#150](https://github.com/NatLabRockies/plexosdb/issues/150)) ([8e0b42f](https://github.com/NatLabRockies/plexosdb/commit/8e0b42f3300ac0d12aa85cd5acb71d3234739bf5))
+* **deps-dev:** bump sphinx-autobuild from 2024.10.3 to 2025.8.25 ([#151](https://github.com/NatLabRockies/plexosdb/issues/151)) ([1502ee1](https://github.com/NatLabRockies/plexosdb/commit/1502ee11a26338e4fd1a59713037d7c74dc970ed))
+* **deps:** bump actions/cache from 5.0.4 to 5.0.5 ([#147](https://github.com/NatLabRockies/plexosdb/issues/147)) ([82bef37](https://github.com/NatLabRockies/plexosdb/commit/82bef3718a167f1122d525934c58daec6f794ed8))
+* **deps:** bump actions/labeler from 6.0.1 to 6.1.0 ([#146](https://github.com/NatLabRockies/plexosdb/issues/146)) ([60ffbdb](https://github.com/NatLabRockies/plexosdb/commit/60ffbdb6b4f53028701504bb339de5c338614be1))
+* **deps:** bump benchmark-action/github-action-benchmark from 1.22.0 to 1.22.1 ([#149](https://github.com/NatLabRockies/plexosdb/issues/149)) ([4bb7b74](https://github.com/NatLabRockies/plexosdb/commit/4bb7b744dc193266aaa341b151e270c7f2cbb6b9))
+* **deps:** bump googleapis/release-please-action from 4.4.1 to 5.0.0 ([#148](https://github.com/NatLabRockies/plexosdb/issues/148)) ([d5df7d1](https://github.com/NatLabRockies/plexosdb/commit/d5df7d166008f47e52424354c318e223ca88f6a4))
+* **deps:** bump peaceiris/actions-gh-pages from 4.0.0 to 4.1.0 ([#145](https://github.com/NatLabRockies/plexosdb/issues/145)) ([a5d2b26](https://github.com/NatLabRockies/plexosdb/commit/a5d2b26f64ea1d5ee050f594b8a82bdbb1e2c562))
+
 ## [1.5.0](https://github.com/NatLabRockies/plexosdb/compare/v1.4.1...v1.5.0) (2026-06-25)
 
 
