@@ -247,9 +247,9 @@ def _build_phase_sets(con: sqlite3.Connection, table_names: set[str]) -> dict[st
                     phase_ids[pname].add(int(v))
                 except (TypeError, ValueError):
                     continue
-        else:
-            # No phase_id column: period_id/interval_id are sequential period
-            # numbers, not phase types.  Use the table number as the phase type.
+        elif "period_id" in phase_cols or "interval_id" in phase_cols:
+            # No phase_id column but has period/interval columns: sequential
+            # period numbers, not phase types.  Use the table number instead.
             table_number = int(table.rsplit("_", 1)[-1])
             phase_ids[pname].add(table_number)
     return phase_ids
