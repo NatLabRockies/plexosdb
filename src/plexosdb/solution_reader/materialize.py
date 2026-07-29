@@ -217,7 +217,16 @@ def _build_property_map(con: sqlite3.Connection, *, has_summary_name: bool) -> d
 
 
 def _build_phase_sets(con: sqlite3.Connection, table_names: set[str]) -> dict[str, set[int]]:
-    """Collect phase ids grouped by phase label from available phase tables."""
+    """Collect phase ids grouped by phase label from available phase tables.
+
+    ``t_key.phase_id`` encodes the PLEXOS phase type directly (1=LT, 2=PASA,
+    3=MT, 4=ST).  When a phase table has a ``phase_id`` column we read its
+    values (some solution formats store the type id there explicitly).  When
+    the table only has period/interval columns — which are sequential period
+    identifiers, not phase types — we fall back to the table number itself
+    (e.g. ``t_phase_4`` → type ``4``).  Mixing ``period_id`` into the lookup
+    set would cause false matches against ``t_key.phase_id``.
+    """
     phase_ids: dict[str, set[int]] = {"LT": set(), "PASA": set(), "MT": set(), "ST": set()}
     phase_table_to_name = {
         "t_phase_1": "LT",
@@ -229,16 +238,20 @@ def _build_phase_sets(con: sqlite3.Connection, table_names: set[str]) -> dict[st
         if table not in table_names:
             continue
         phase_cols = _table_columns(con, table)
-        id_col = next((c for c in ("phase_id", "period_id", "interval_id") if c in phase_cols), None)
-        if id_col is None:
-            continue
-        for (v,) in con.execute(f"SELECT {id_col} FROM {table}").fetchall():
-            if v is None:
-                continue
-            try:
-                phase_ids[pname].add(int(v))
-            except (TypeError, ValueError):
-                continue
+        if "phase_id" in phase_cols:
+            # Explicit phase_id column — read actual values.
+            for (v,) in con.execute(f"SELECT phase_id FROM {table}").fetchall():
+                if v is None:
+                    continue
+                try:
+                    phase_ids[pname].add(int(v))
+                except (TypeError, ValueError):
+                    continue
+        else:
+            # No phase_id column: period_id/interval_id are sequential period
+            # numbers, not phase types.  Use the table number as the phase type.
+            table_number = int(table.rsplit("_", 1)[-1])
+            phase_ids[pname].add(table_number)
     return phase_ids
 
 

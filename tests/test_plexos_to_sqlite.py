@@ -296,7 +296,36 @@ def test_phase_name_covers_all_mappings_and_default():
     assert _phase_name(999, phase_ids) == "ST"
 
 
-def test_build_key_period_map_uses_key_index_and_keeps_first_value():
+def test_build_phase_sets_falls_back_to_table_number_when_no_phase_id_column():
+    """When phase tables only have interval_id/period_id columns (not phase_id),
+    _build_phase_sets must use the table number as the phase type, not period_id
+    values — otherwise sequential period IDs collide with t_key.phase_id.
+    """
+    con = sqlite3.connect(":memory:")
+    try:
+        # Mirrors the format seen in some PLEXOS versions: interval_id and
+        # period_id are sequential period numbers, not phase type IDs.
+        con.execute("CREATE TABLE t_phase_3 (interval_id TEXT, period_id TEXT)")
+        con.execute("CREATE TABLE t_phase_4 (interval_id TEXT, period_id TEXT)")
+        con.executemany("INSERT INTO t_phase_3 VALUES (?,?)", [("1", "4"), ("2", "4"), ("3", "4")])
+        con.executemany("INSERT INTO t_phase_4 VALUES (?,?)", [("25", "25"), ("26", "26")])
+
+        table_names = {"t_phase_3", "t_phase_4"}
+        result = _build_phase_sets(con, table_names)
+
+        # t_phase_3 → MT with type id 3; t_phase_4 → ST with type id 4.
+        # period_id values (4, 25, 26) must NOT appear in any set.
+        assert result["MT"] == {3}
+        assert result["ST"] == {4}
+        assert result["LT"] == set()
+        assert result["PASA"] == set()
+
+        # A t_key with phase_id=4 (ST) must resolve correctly.
+        assert _phase_name(4, result) == "ST"
+        assert _phase_name(3, result) == "MT"
+    finally:
+        con.close()
+
     con = sqlite3.connect(":memory:")
     try:
         con.execute("CREATE TABLE t_key_index (key_id TEXT, period_type_id TEXT)")
