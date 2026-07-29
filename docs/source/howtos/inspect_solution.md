@@ -10,7 +10,7 @@ Use `PlexosSolution` to import the ZIP into SQLite. Pass
 only needs the XML metadata tables and is then fast even for large solutions:
 
 ```python
-from plexosdb import PlexosSolution, show_db_tables
+from plexosdb.solution_reader import PlexosSolution, show_db_tables
 
 sol = PlexosSolution.from_zip("my_solution.zip")
 sol.to_sqlite("output.sqlite", if_exists="replace", decode_bin_values=False)
