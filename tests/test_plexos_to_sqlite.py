@@ -432,6 +432,80 @@ def test_build_derived_table_map_infers_summary_from_key_period_and_keeps_ampers
         con.close()
 
 
+def test_build_phase_sets_ignores_period_id_column_uses_table_number():
+    """Regression: phase tables with only interval_id/period_id columns must not
+    pollute the phase-id sets with sequential period numbers.
+
+    In some PLEXOS solution versions t_phase_3 has period_id rows containing
+    the value 4.  The old code read period_id as a fallback and placed 4 into
+    phase_ids["MT"], causing keys with t_key.phase_id=4 (ST) to be wrongly
+    labelled MT.  The fix ignores period_id/interval_id columns and instead
+    seeds each bucket with the table number itself.
+    """
+    con = sqlite3.connect(":memory:")
+    try:
+        # Replicate the schema seen in the failing solution:
+        #   t_phase_2  (interval_id, period_id) — period_id all 1
+        #   t_phase_3  (interval_id, period_id) — period_id all 4  ← was falsely "MT=4"
+        #   t_phase_4  (interval_id, period_id) — period_id 25,26,...
+        con.execute("CREATE TABLE t_phase_2 (interval_id TEXT, period_id TEXT)")
+        con.execute("CREATE TABLE t_phase_3 (interval_id TEXT, period_id TEXT)")
+        con.execute("CREATE TABLE t_phase_4 (interval_id TEXT, period_id TEXT)")
+        con.executemany("INSERT INTO t_phase_2 VALUES (?, '1')", [(str(i),) for i in range(1, 6)])
+        con.executemany("INSERT INTO t_phase_3 VALUES (?, '4')", [(str(i),) for i in range(1, 6)])
+        con.executemany("INSERT INTO t_phase_4 VALUES (?, ?)", [(str(i), str(i)) for i in range(25, 30)])
+
+        table_names = {"t_phase_2", "t_phase_3", "t_phase_4"}
+        phase_ids = _build_phase_sets(con, table_names)
+
+        # Table numbers drive the buckets; period_id values must NOT appear.
+        assert 2 in phase_ids["PASA"] and 4 not in phase_ids["PASA"]
+        assert 3 in phase_ids["MT"] and 4 not in phase_ids["MT"]
+        assert 4 in phase_ids["ST"]
+
+        # A key with phase_id=4 must resolve to ST, not MT.
+        assert _phase_name(4, phase_ids) == "ST"
+    finally:
+        con.close()
+
+
+def test_build_derived_table_map_st_phase_with_period_id_only_phase_tables():
+    """Regression: ST keys (phase_id=4) are named ST__ even when t_phase_3
+    has period_id rows equal to 4 (which previously caused MT mislabelling).
+    """
+    con = sqlite3.connect(":memory:")
+    try:
+        con.execute(
+            "CREATE TABLE t_key "
+            "(key_id TEXT, phase_id TEXT, membership_id TEXT, property_id TEXT, period_type_id TEXT)"
+        )
+        con.execute("CREATE TABLE t_key_index (key_id TEXT, period_type_id TEXT, length TEXT, position TEXT)")
+        con.execute("CREATE TABLE t_property (property_id TEXT, name TEXT, summary_name TEXT)")
+        con.execute("CREATE TABLE t_membership (membership_id TEXT, collection_id TEXT)")
+        con.execute("CREATE TABLE t_collection (collection_id TEXT, name TEXT)")
+        # Phase tables have interval_id/period_id columns only (no phase_id).
+        con.execute("CREATE TABLE t_phase_2 (interval_id TEXT, period_id TEXT)")
+        con.execute("CREATE TABLE t_phase_3 (interval_id TEXT, period_id TEXT)")
+        con.execute("CREATE TABLE t_phase_4 (interval_id TEXT, period_id TEXT)")
+        con.executemany("INSERT INTO t_phase_2 VALUES (?, '1')", [(str(i),) for i in range(1, 4)])
+        # period_id=4 in t_phase_3 used to cause t_key.phase_id=4 → "MT"
+        con.executemany("INSERT INTO t_phase_3 VALUES (?, '4')", [(str(i),) for i in range(1, 4)])
+        con.executemany("INSERT INTO t_phase_4 VALUES (?, ?)", [(str(i), str(i)) for i in range(25, 28)])
+
+        # ST key: phase_id=4, interval-level period (period_type_id=0 → Interval)
+        con.execute("INSERT INTO t_key VALUES ('1', '4', '10', '100', '0')")
+        con.execute("INSERT INTO t_key_index VALUES ('1', '0', '1', '0')")
+        con.execute("INSERT INTO t_property VALUES ('100', 'Generation', '')")
+        con.execute("INSERT INTO t_membership VALUES ('10', '20')")
+        con.execute("INSERT INTO t_collection VALUES ('20', 'Generators')")
+
+        groups = _build_derived_table_map(con)
+        assert ("data", "ST__Interval__Generators__Generation") in groups
+        assert all(name.startswith("ST__") for _, name in groups)
+    finally:
+        con.close()
+
+
 def test_decode_bin_values_returns_early_without_key_index(tmp_path):
     zip_path = tmp_path / "nobin.zip"
     with ZipFile(zip_path, "w", compression=ZIP_DEFLATED) as zf:
