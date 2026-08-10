@@ -673,7 +673,7 @@ docs = [
 [package.metadata]
 requires-dist = [
     { name = "loguru" },
-    { name = "plexos2duckdb", specifier = ">=0.1.0b11" },
+    { name = "plexos2duckdb", specifier = ">=0.1.0b11,!=0.1.0" },
     { name = "pre-commit", specifier = ">=4.6.0" },
 ]
 
