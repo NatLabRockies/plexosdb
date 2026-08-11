@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.1](https://github.com/NatLabRockies/plexosdb/compare/v1.6.0...v1.6.1) (2026-08-11)
+
+
+### 🐛 Bug Fixes
+
+* updates on documentation and improvements ([#168](https://github.com/NatLabRockies/plexosdb/issues/168)) ([b1ecf1b](https://github.com/NatLabRockies/plexosdb/commit/b1ecf1b8fcf4d3f902160adf514c73c58a0e323b))
+
+
+### 📦 Build
+
+* **deps-dev:** bump pytest from 9.0.3 to 9.1.1 ([#167](https://github.com/NatLabRockies/plexosdb/issues/167)) ([e7d3a2f](https://github.com/NatLabRockies/plexosdb/commit/e7d3a2f5df0fd9c8798f437bb514487ff613c7d3))
+* **deps-dev:** bump sphinx-book-theme from 1.1.4 to 1.4.0 ([#165](https://github.com/NatLabRockies/plexosdb/issues/165)) ([9f86a54](https://github.com/NatLabRockies/plexosdb/commit/9f86a5499c5c57abcf6c8ed19d2d76dcff053c50))
+* **deps:** bump actions/cache from 5.0.5 to 6.1.0 ([#164](https://github.com/NatLabRockies/plexosdb/issues/164)) ([c71be7e](https://github.com/NatLabRockies/plexosdb/commit/c71be7e76001358c01e6806a592163d3857249d8))
+* **deps:** bump actions/checkout from 6.0.2 to 7.0.1 ([#162](https://github.com/NatLabRockies/plexosdb/issues/162)) ([fab6d4f](https://github.com/NatLabRockies/plexosdb/commit/fab6d4f2848be2bfbc4b7c81bc91f716432c5d17))
+* **deps:** bump actions/labeler from 6.1.0 to 6.2.0 ([#166](https://github.com/NatLabRockies/plexosdb/issues/166)) ([4b21ca5](https://github.com/NatLabRockies/plexosdb/commit/4b21ca59806a2e20e2a5d3585f01be438e988846))
+* **deps:** bump actions/setup-python from 6.2.0 to 7.0.0 ([#163](https://github.com/NatLabRockies/plexosdb/issues/163)) ([7d9fbf5](https://github.com/NatLabRockies/plexosdb/commit/7d9fbf5f9be567145eeb5da168549230a706b7c8))
+* **deps:** bump astral-sh/setup-uv from 8.1.0 to 9.0.0 ([#161](https://github.com/NatLabRockies/plexosdb/issues/161)) ([e908746](https://github.com/NatLabRockies/plexosdb/commit/e908746c5c987f6b35af2ec2e57bbc6394b5e744))
+
 ## [1.6.0](https://github.com/NatLabRockies/plexosdb/compare/v1.5.0...v1.6.0) (2026-07-17)
 
 
