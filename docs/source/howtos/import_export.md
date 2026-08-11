@@ -24,7 +24,7 @@ Use `PlexosSolution` when you want to analyze PLEXOS solution ZIP outputs. With
 the default `materialize="none"`, you can materialize only the table you need.
 
 ```python
-from plexosdb import PlexosSolution
+from plexosdb.solution_reader import PlexosSolution
 import pandas as pd
 
 PLEXOS_SOLUTION = "/path/to/solution.zip"

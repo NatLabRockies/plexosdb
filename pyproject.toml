@@ -35,7 +35,7 @@ classifiers = [
 ]
 dependencies = [
     "loguru",
-    "plexos2duckdb>=0.1.0b11",
+    "plexos2duckdb>=0.1.0b11,!=0.1.0",
     "pre-commit>=4.6.0",
 ]
 
