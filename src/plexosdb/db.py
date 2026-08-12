@@ -4334,7 +4334,18 @@ class PlexosDB:
 
     def update_properties(self, updates: list[dict[str, Any]]) -> None:
         """Update multiple properties in a single transaction."""
-        raise NotImplementedError  # pragma: no cover
+        with self._db.transaction():
+            for update in updates:
+                self._update_property_value(
+                    update["object_name"],
+                    update["property_name"],
+                    update["new_value"],
+                    object_class=update["object_class"],
+                    scenario=update.get("scenario"),
+                    band=update.get("band"),
+                    collection=update.get("collection"),
+                    parent_class=update.get("parent_class"),
+                )
 
     def update_property(
         self,
@@ -4350,7 +4361,111 @@ class PlexosDB:
         parent_class: ClassEnum | None = None,
     ) -> None:
         """Update a property value for a given object."""
-        raise NotImplementedError  # pragma: no cover
+        self.update_properties(
+            [
+                {
+                    "object_name": object_name,
+                    "property_name": property_name,
+                    "new_value": new_value,
+                    "object_class": object_class,
+                    "scenario": scenario,
+                    "band": band,
+                    "collection": collection,
+                    "parent_class": parent_class,
+                }
+            ]
+        )
+
+    def _update_property_value(
+        self,
+        object_name: str,
+        property_name: str,
+        new_value: str | None,
+        /,
+        *,
+        object_class: ClassEnum,
+        scenario: str | None,
+        band: str | int | None,
+        collection: CollectionEnum | None,
+        parent_class: ClassEnum | None,
+    ) -> None:
+        """Update matching property rows inside an active transaction."""
+        if not checks_module.check_object_exists(self, object_class, object_name):
+            raise NotFoundError(f"Object = `{object_name}` does not exist for class `{object_class}`.")
+
+        collection = collection or get_default_collection(object_class)
+        parent_class = parent_class or ClassEnum.System
+        valid_properties = self.list_valid_properties(
+            collection,
+            parent_class_enum=parent_class,
+            child_class_enum=object_class,
+        )
+        if property_name not in valid_properties:
+            raise NameError(f"Property {property_name} does not exist for collection: {collection}.")
+
+        membership_id = resolve_membership_id(
+            self,
+            object_name,
+            object_class=object_class,
+            collection=collection,
+            parent_class=parent_class,
+        )
+        property_id = self.get_property_id(
+            property_name,
+            collection_enum=collection,
+            child_class_enum=object_class,
+            parent_class_enum=parent_class,
+        )
+
+        conditions = ["d.membership_id = ?", "d.property_id = ?"]
+        params: list[Any] = [membership_id, property_id]
+
+        scenario_class_id = self.get_class_id(ClassEnum.Scenario)
+        if scenario is None:
+            conditions.append(
+                "NOT EXISTS ("
+                "SELECT 1 FROM t_tag scenario_tag "
+                "JOIN t_object scenario_object ON scenario_object.object_id = scenario_tag.object_id "
+                "WHERE scenario_tag.data_id = d.data_id "
+                "AND scenario_object.class_id = ?"
+                ")"
+            )
+            params.append(scenario_class_id)
+        else:
+            scenario_id = self.get_scenario_id(scenario)
+            conditions.append(
+                "EXISTS (SELECT 1 FROM t_tag scenario_tag "
+                "WHERE scenario_tag.data_id = d.data_id "
+                "AND scenario_tag.object_id = ?)"
+            )
+            params.append(scenario_id)
+
+        if band is not None:
+            try:
+                band_id = int(band)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"Band must be an integer, got {band!r}.") from exc
+            conditions.append(
+                "EXISTS (SELECT 1 FROM t_band property_band "
+                "WHERE property_band.data_id = d.data_id AND property_band.band_id = ?)"
+            )
+            params.append(band_id)
+
+        where_clause = " AND ".join(conditions)
+        data_ids = self._db.fetchall(f"SELECT d.data_id FROM t_data d WHERE {where_clause}", tuple(params))
+        if not data_ids:
+            scenario_detail = f" for scenario `{scenario}`" if scenario is not None else ""
+            band_detail = f" and band `{band}`" if band is not None else ""
+            raise NotFoundError(
+                f"Property `{property_name}` was not found for object `{object_name}`"
+                f"{scenario_detail}{band_detail}."
+            )
+
+        placeholders = ", ".join("?" for _ in data_ids)
+        self._db.execute(
+            f"UPDATE t_data SET value = ? WHERE data_id IN ({placeholders})",
+            (new_value, *(row[0] for row in data_ids)),
+        )
 
     def update_scenario(
         self,
