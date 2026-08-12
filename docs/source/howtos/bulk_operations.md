@@ -70,6 +70,40 @@ Key performance features:
 - Direct SQL execution with prepared statements
 - Automatic property enablement (sets `is_dynamic` and `is_enabled` flags)
 
+## Bulk Updating Properties
+
+Use `update_properties` to update several existing property values in one
+transaction. Each update record uses the same selectors as `update_property`:
+`object_name`, `property_name`, `new_value`, and `object_class`. The optional
+`scenario`, `band`, `collection`, and `parent_class` fields narrow the matching
+property row.
+
+```python
+updates = [
+    {
+        "object_name": "Generator1",
+        "property_name": "Max Capacity",
+        "new_value": 125.0,
+        "object_class": ClassEnum.Generator,
+    },
+    {
+        "object_name": "Generator2",
+        "property_name": "Heat Rate",
+        "new_value": 9.8,
+        "object_class": ClassEnum.Generator,
+        "band": 2,
+        "scenario": "High Demand",
+    },
+]
+
+db.update_properties(updates)
+```
+
+All updates are committed together. If an update cannot find its object,
+property, scenario, or requested band, the transaction fails and earlier updates
+in the batch are rolled back. When `scenario` is omitted, the update targets the
+base property rather than a scenario-tagged row.
+
 ### Handling Different Object Classes
 
 You can process different types of objects separately:
