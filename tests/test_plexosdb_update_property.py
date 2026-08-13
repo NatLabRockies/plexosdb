@@ -17,19 +17,8 @@ def run_of_river_db():
 
 
 def _property_rows(db: PlexosDB, object_name: str, property_name: str) -> list[tuple]:
-    return db.query(
-        """
-        SELECT d.value, COALESCE(b.band_id, 1)
-        FROM t_data AS d
-        JOIN t_membership AS m ON m.membership_id = d.membership_id
-        JOIN t_object AS o ON o.object_id = m.child_object_id
-        JOIN t_property AS p ON p.property_id = d.property_id
-        LEFT JOIN t_band AS b ON b.data_id = d.data_id
-        WHERE o.name = ? AND p.name = ?
-        ORDER BY COALESCE(b.band_id, 1)
-        """,
-        (object_name, property_name),
-    )
+    properties = db.get_object_properties(ClassEnum.Generator, object_name, property_names=property_name)
+    return sorted((property["value"], property.get("band") or 1) for property in properties)
 
 
 def test_update_property_updates_xml_fixture_value(run_of_river_db: PlexosDB) -> None:
@@ -143,18 +132,14 @@ def test_update_property_uses_explicit_parent_membership(db_with_reserve_collect
         parent_object_name="TestReserve2",
     )
 
-    rows = db.query(
-        """
-        SELECT parent_object.name, d.value
-        FROM t_data AS d
-        JOIN t_membership AS m ON m.membership_id = d.membership_id
-        JOIN t_object AS parent_object ON parent_object.object_id = m.parent_object_id
-        JOIN t_property AS p ON p.property_id = d.property_id
-        WHERE p.name = 'Load Risk'
-        ORDER BY parent_object.name
-        """
+    rows = db.get_object_properties(
+        ClassEnum.Region,
+        "region-01",
+        property_names="Load Risk",
+        parent_class_enum=ClassEnum.Reserve,
+        collection_enum=CollectionEnum.Regions,
     )
-    assert rows == [("TestReserve", 6.0), ("TestReserve2", 8.0)]
+    assert sorted(property["value"] for property in rows) == [6.0, 8.0]
 
 
 def test_update_property_raises_for_missing_fixture_property(run_of_river_db: PlexosDB) -> None:
