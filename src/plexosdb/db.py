@@ -4328,6 +4328,7 @@ class PlexosDB:
             self._db.executemany("UPDATE t_data SET value = ? WHERE data_id = ?", prepared_updates)
 
     def _prepare_property_updates(self, updates: list[dict[str, Any]]) -> list[tuple[Any, int]]:
+        """Resolve bulk property updates into value/data-ID parameter pairs."""
         grouped_updates: dict[tuple[ClassEnum, CollectionEnum, ClassEnum], list[dict[str, Any]]] = {}
         for update in updates:
             object_class = update["object_class"]
@@ -4361,6 +4362,7 @@ class PlexosDB:
         parent_class: ClassEnum,
         scenario_class_id: int,
     ) -> list[tuple[Any, int]]:
+        """Validate one update group and resolve its matching data rows."""
         object_names = tuple({update["object_name"] for update in group})
         object_class_id = self.get_class_id(object_class)
         object_placeholders = ", ".join("?" for _ in object_names)
@@ -4431,6 +4433,7 @@ class PlexosDB:
         return prepared_updates
 
     def _resolve_scenario_ids(self, group: list[dict[str, Any]], scenario_class_id: int) -> dict[str, int]:
+        """Resolve scenario names in an update group to object IDs."""
         scenario_names = tuple({update["scenario"] for update in group if update.get("scenario") is not None})
         if not scenario_names:
             return {}
@@ -4453,6 +4456,7 @@ class PlexosDB:
         object_class: ClassEnum,
         parent_class: ClassEnum,
     ) -> list[tuple[int, int, int, int | None, int | None]]:
+        """Validate update selectors and resolve their membership and property IDs."""
         selectors: list[tuple[int, int, int, int | None, int | None]] = []
         for index, update in enumerate(group):
             property_name = update["property_name"]
@@ -4496,6 +4500,7 @@ class PlexosDB:
         selectors: list[tuple[int, int, int, int | None, int | None]],
         scenario_class_id: int,
     ) -> dict[int, list[int]]:
+        """Find data IDs matching selectors in bounded SQL batches."""
         data_ids_by_index: dict[int, list[int]] = {}
         for selector_batch in batched(selectors, 180):
             values_sql = ", ".join("(?, ?, ?, ?, ?)" for _ in selector_batch)
