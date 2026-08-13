@@ -4390,12 +4390,17 @@ class PlexosDB:
             (collection_id,),
         )
         property_ids = {name: property_id for name, property_id in property_rows}
-        membership_map = _resolve_membership_map(
-            self,
-            [{"name": update["object_name"]} for update in group],
-            object_class=object_class,
-            parent_class=parent_class,
-            collection=collection,
+        implicit_parent_updates = [update for update in group if update.get("parent_object_name") is None]
+        membership_map = (
+            _resolve_membership_map(
+                self,
+                [{"name": update["object_name"]} for update in implicit_parent_updates],
+                object_class=object_class,
+                parent_class=parent_class,
+                collection=collection,
+            )
+            if implicit_parent_updates
+            else {}
         )
         scenario_ids = self._resolve_scenario_ids(group, scenario_class_id)
         selectors = self._prepare_property_update_selectors(
@@ -4405,6 +4410,8 @@ class PlexosDB:
             membership_map=membership_map,
             scenario_ids=scenario_ids,
             collection=collection,
+            object_class=object_class,
+            parent_class=parent_class,
         )
         data_ids_by_index = self._find_property_data_ids(selectors, scenario_class_id)
 
@@ -4443,6 +4450,8 @@ class PlexosDB:
         membership_map: dict[str, int],
         scenario_ids: dict[str, int],
         collection: CollectionEnum,
+        object_class: ClassEnum,
+        parent_class: ClassEnum,
     ) -> list[tuple[int, int, int, int | None, int | None]]:
         selectors: list[tuple[int, int, int, int | None, int | None]] = []
         for index, update in enumerate(group):
@@ -4458,10 +4467,23 @@ class PlexosDB:
                 band_id = int(band) if band is not None else None
             except (TypeError, ValueError) as exc:
                 raise ValueError(f"Band must be an integer, got {band!r}.") from exc
+            parent_object_name = update.get("parent_object_name")
+            membership_id = (
+                resolve_membership_id(
+                    self,
+                    update["object_name"],
+                    object_class=object_class,
+                    collection=collection,
+                    parent_class=parent_class,
+                    parent_object_name=parent_object_name,
+                )
+                if parent_object_name is not None
+                else membership_map[update["object_name"]]
+            )
             selectors.append(
                 (
                     index,
-                    membership_map[update["object_name"]],
+                    membership_id,
                     property_ids[property_name],
                     scenario_id,
                     band_id,
@@ -4523,6 +4545,7 @@ class PlexosDB:
         band: str | None = None,
         collection: CollectionEnum | None = None,
         parent_class: ClassEnum | None = None,
+        parent_object_name: str | None = None,
     ) -> None:
         """Update a property value for a given object."""
         self.update_properties(
@@ -4536,6 +4559,7 @@ class PlexosDB:
                     "band": band,
                     "collection": collection,
                     "parent_class": parent_class,
+                    "parent_object_name": parent_object_name,
                 }
             ]
         )
@@ -4552,6 +4576,7 @@ class PlexosDB:
         band: str | int | None,
         collection: CollectionEnum | None,
         parent_class: ClassEnum | None,
+        parent_object_name: str | None,
     ) -> None:
         """Update matching property rows inside an active transaction."""
         collection, parent_class, property_id, membership_id = self._resolve_property_context(
@@ -4560,6 +4585,7 @@ class PlexosDB:
             object_class=object_class,
             collection=collection,
             parent_class=parent_class,
+            parent_object_name=parent_object_name,
         )
 
         conditions = ["d.membership_id = ?", "d.property_id = ?"]

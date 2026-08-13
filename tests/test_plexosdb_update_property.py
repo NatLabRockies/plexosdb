@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from plexosdb import ClassEnum, PlexosDB
+from plexosdb import ClassEnum, CollectionEnum, PlexosDB
 from plexosdb.exceptions import NameError, NotFoundError
 
 
@@ -111,6 +111,50 @@ def test_update_properties_rolls_back_domain_validation_failure_and_reuses_conne
         object_class=ClassEnum.Generator,
     )
     assert _property_rows(run_of_river_db, "Coal_Gen", "Max Capacity") == [(625.0, 1)]
+
+
+def test_update_property_uses_explicit_parent_membership(db_with_reserve_collection_property) -> None:
+    db = db_with_reserve_collection_property
+    db.add_object(ClassEnum.Reserve, "TestReserve2")
+    db.add_membership(
+        parent_class_enum=ClassEnum.Reserve,
+        child_class_enum=ClassEnum.Region,
+        parent_object_name="TestReserve2",
+        child_object_name="region-01",
+        collection_enum=CollectionEnum.Regions,
+    )
+    db.add_property(
+        ClassEnum.Region,
+        "region-01",
+        "Load Risk",
+        7.0,
+        collection_enum=CollectionEnum.Regions,
+        parent_class_enum=ClassEnum.Reserve,
+        parent_object_name="TestReserve2",
+    )
+
+    db.update_property(
+        "region-01",
+        "Load Risk",
+        8.0,
+        object_class=ClassEnum.Region,
+        collection=CollectionEnum.Regions,
+        parent_class=ClassEnum.Reserve,
+        parent_object_name="TestReserve2",
+    )
+
+    rows = db.query(
+        """
+        SELECT parent_object.name, d.value
+        FROM t_data AS d
+        JOIN t_membership AS m ON m.membership_id = d.membership_id
+        JOIN t_object AS parent_object ON parent_object.object_id = m.parent_object_id
+        JOIN t_property AS p ON p.property_id = d.property_id
+        WHERE p.name = 'Load Risk'
+        ORDER BY parent_object.name
+        """
+    )
+    assert rows == [("TestReserve", 6.0), ("TestReserve2", 8.0)]
 
 
 def test_update_property_raises_for_missing_fixture_property(run_of_river_db: PlexosDB) -> None:
