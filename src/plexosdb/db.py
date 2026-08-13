@@ -1193,13 +1193,12 @@ class PlexosDB:
 
         collection = collection or get_default_collection(object_class)
         parent_class = parent_class or ClassEnum.System
-        valid_properties = self.list_valid_properties(
+        property_name = self._validate_properties(
+            property_name,
             collection,
-            parent_class_enum=parent_class,
-            child_class_enum=object_class,
-        )
-        if property_name not in valid_properties:
-            raise NameError(f"Property '{property_name}' does not exist for collection: {collection}.")
+            object_class,
+            parent_class=parent_class,
+        )[0]
 
         property_id = self.get_property_id(
             property_name,
@@ -4671,8 +4670,11 @@ class PlexosDB:
             props,
             parent_class=parent_class,
         ):
+            property_detail = (
+                f"Property '{props[0]}' does not exist" if len(props) == 1 else f"Invalid properties {props}"
+            )
             msg = (
-                f"Invalid property {props} for collection={collection}. "
+                f"{property_detail} for collection: {collection}. "
                 "Use `list_valid_properties()` to check valid properties."
             )
             raise NameError(msg)
