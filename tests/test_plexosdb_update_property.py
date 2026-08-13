@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from plexosdb import ClassEnum, PlexosDB
-from plexosdb.exceptions import NotFoundError
+from plexosdb.exceptions import NameError, NotFoundError
 
 
 XML_PATH = Path(__file__).parent / "data" / "run_of_river_case" / "TestSystem.xml"
@@ -54,10 +54,7 @@ def test_update_property_only_updates_requested_band(run_of_river_db: PlexosDB) 
     )
 
     rows = _property_rows(run_of_river_db, "Gas_Gen2", "Load Point")
-    assert rows == [
-        (95.0 if band == 2 else 50.0 + 20.0 * band, band)
-        for band in range(1, 11)
-    ]
+    assert rows == [(95.0 if band == 2 else 50.0 + 20.0 * band, band) for band in range(1, 11)]
 
 
 def test_update_properties_updates_multiple_xml_fixture_values(run_of_river_db: PlexosDB) -> None:
@@ -80,6 +77,40 @@ def test_update_properties_updates_multiple_xml_fixture_values(run_of_river_db: 
 
     assert _property_rows(run_of_river_db, "Coal_Gen", "Max Capacity") == [(625.0, 1)]
     assert _property_rows(run_of_river_db, "Gas_Gen1", "Max Capacity") == [(325.0, 1)]
+
+
+def test_update_properties_rolls_back_domain_validation_failure_and_reuses_connection(
+    run_of_river_db: PlexosDB,
+) -> None:
+    original_rows = _property_rows(run_of_river_db, "Coal_Gen", "Max Capacity")
+
+    with pytest.raises(NameError):
+        run_of_river_db.update_properties(
+            [
+                {
+                    "object_name": "Coal_Gen",
+                    "property_name": "Max Capacity",
+                    "new_value": 625.0,
+                    "object_class": ClassEnum.Generator,
+                },
+                {
+                    "object_name": "Coal_Gen",
+                    "property_name": "Not a property",
+                    "new_value": 1.0,
+                    "object_class": ClassEnum.Generator,
+                },
+            ]
+        )
+
+    assert _property_rows(run_of_river_db, "Coal_Gen", "Max Capacity") == original_rows
+
+    run_of_river_db.update_property(
+        "Coal_Gen",
+        "Max Capacity",
+        625.0,
+        object_class=ClassEnum.Generator,
+    )
+    assert _property_rows(run_of_river_db, "Coal_Gen", "Max Capacity") == [(625.0, 1)]
 
 
 def test_update_property_raises_for_missing_fixture_property(run_of_river_db: PlexosDB) -> None:

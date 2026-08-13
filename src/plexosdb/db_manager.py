@@ -818,13 +818,13 @@ class SQLiteManager:
 
         Raises
         ------
-        sqlite3.Error
-            If a database error occurs during transaction
+        Exception
+            Re-raises any exception from the transaction after rolling back
         """
         try:
             self.connection.execute("BEGIN")
             yield self
-        except sqlite3.Error:
+        except Exception:
             self.connection.rollback()
             raise
         else:
