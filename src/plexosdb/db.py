@@ -1176,6 +1176,47 @@ class PlexosDB:
                 (data_id, date_to.isoformat()),
             )
 
+    def _resolve_property_context(
+        self,
+        object_name: str,
+        property_name: str,
+        /,
+        *,
+        object_class: ClassEnum,
+        collection: CollectionEnum | None = None,
+        parent_class: ClassEnum | None = None,
+        parent_object_name: str | None = None,
+    ) -> tuple[CollectionEnum, ClassEnum, int, int]:
+        """Resolve the shared object, property, and membership context."""
+        if not checks_module.check_object_exists(self, object_class, object_name):
+            raise NotFoundError(f"Object = `{object_name}` does not exist for class `{object_class}`.")
+
+        collection = collection or get_default_collection(object_class)
+        parent_class = parent_class or ClassEnum.System
+        valid_properties = self.list_valid_properties(
+            collection,
+            parent_class_enum=parent_class,
+            child_class_enum=object_class,
+        )
+        if property_name not in valid_properties:
+            raise NameError(f"Property '{property_name}' does not exist for collection: {collection}.")
+
+        property_id = self.get_property_id(
+            property_name,
+            collection_enum=collection,
+            child_class_enum=object_class,
+            parent_class_enum=parent_class,
+        )
+        membership_id = resolve_membership_id(
+            self,
+            object_name,
+            object_class=object_class,
+            collection=collection,
+            parent_class=parent_class,
+            parent_object_name=parent_object_name,
+        )
+        return collection, parent_class, property_id, membership_id
+
     def add_property(
         self,
         object_class_enum: ClassEnum,
@@ -1267,37 +1308,9 @@ class PlexosDB:
         >>> db.add_property(ClassEnum.Generator, "Generator1", "Max Capacity", 100.0)
         1
         """
-        # Ensure object exist
-        if not checks_module.check_object_exists(self, object_class_enum, object_name):
-            msg = f"Object = `{object_name}` does not exist on the system. "
-            f"Check available objects for class `{object_class_enum}` using `list_objects_by_class`"
-            raise NotFoundError(msg)
-        _ = self.get_object_id(object_class_enum, object_name)
-
-        if not collection_enum:
-            collection_enum = get_default_collection(object_class_enum)
-
-        parent_class_enum = parent_class_enum or ClassEnum.System
-
-        valid_properties = self.list_valid_properties(
-            collection_enum, child_class_enum=object_class_enum, parent_class_enum=parent_class_enum
-        )
-        if name not in valid_properties:
-            msg = (
-                f"Property {name} does not exist for collection: {collection_enum}. "
-                f"Run `self.list_valid_properties({collection_enum}) to verify valid properties."
-            )
-            raise NameError(msg)
-
-        property_id = self.get_property_id(
-            name,
-            parent_class_enum=parent_class_enum,
-            child_class_enum=object_class_enum,
-            collection_enum=collection_enum,
-        )
-        membership_id = resolve_membership_id(
-            self,
+        collection_enum, parent_class_enum, property_id, membership_id = self._resolve_property_context(
             object_name,
+            name,
             object_class=object_class_enum,
             collection=collection_enum,
             parent_class=parent_class_enum,
@@ -2130,37 +2143,9 @@ class PlexosDB:
         >>> db.add_property(ClassEnum.Generator, "Generator1", "Max Capacity", 100.0)
         >>> db.delete_property(ClassEnum.Generator, "Generator1", property_name="Max Capacity")
         """
-        # Ensure object exists
-        if not checks_module.check_object_exists(self, object_class, object_name):
-            msg = f"Object = `{object_name}` does not exist for class `{object_class}`."
-            raise NotFoundError(msg)
-
-        # Set defaults
-        collection = collection or get_default_collection(object_class)
-        parent_class = parent_class or ClassEnum.System
-
-        # Validate property exists for this collection
-        valid_properties = self.list_valid_properties(
-            collection, child_class_enum=object_class, parent_class_enum=parent_class
-        )
-        if property_name not in valid_properties:
-            msg = (
-                f"Property '{property_name}' does not exist for collection: {collection}. "
-                f"Run `self.list_valid_properties({collection})` to verify valid properties."
-            )
-            raise NameError(msg)
-
-        # Get IDs for the property lookup
-        property_id = self.get_property_id(
-            property_name,
-            parent_class_enum=parent_class,
-            child_class_enum=object_class,
-            collection_enum=collection,
-        )
-
-        membership_id = resolve_membership_id(
-            self,
+        collection, parent_class, property_id, membership_id = self._resolve_property_context(
             object_name,
+            property_name,
             object_class=object_class,
             collection=collection,
             parent_class=parent_class,
@@ -4570,31 +4555,12 @@ class PlexosDB:
         parent_class: ClassEnum | None,
     ) -> None:
         """Update matching property rows inside an active transaction."""
-        if not checks_module.check_object_exists(self, object_class, object_name):
-            raise NotFoundError(f"Object = `{object_name}` does not exist for class `{object_class}`.")
-
-        collection = collection or get_default_collection(object_class)
-        parent_class = parent_class or ClassEnum.System
-        valid_properties = self.list_valid_properties(
-            collection,
-            parent_class_enum=parent_class,
-            child_class_enum=object_class,
-        )
-        if property_name not in valid_properties:
-            raise NameError(f"Property {property_name} does not exist for collection: {collection}.")
-
-        membership_id = resolve_membership_id(
-            self,
+        collection, parent_class, property_id, membership_id = self._resolve_property_context(
             object_name,
+            property_name,
             object_class=object_class,
             collection=collection,
             parent_class=parent_class,
-        )
-        property_id = self.get_property_id(
-            property_name,
-            collection_enum=collection,
-            child_class_enum=object_class,
-            parent_class_enum=parent_class,
         )
 
         conditions = ["d.membership_id = ?", "d.property_id = ?"]
