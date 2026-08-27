@@ -1376,15 +1376,17 @@ class PlexosDB:
         report_samples: bool | None = None,
         write_flat_files: bool = False,
     ) -> None:
-        """Add a report configuration to the database.
+        """Add an output property configuration to an existing report.
 
-        Creates a new report in the database with the specified properties and output options.
-        Reports define what data will be available for post-processing after simulation runs.
+        Adds a property and its output options to the specified ``Report`` object.
+        The report object must already exist; call :meth:`add_object` first only when
+        creating a new report object. Reports define what data will be available for
+        post-processing after simulation runs.
 
         Parameters
         ----------
         object_name : str
-            Name of the report object to add the configuration to
+            Name of the existing report object to add the configuration to
         property : str
             Name of the property to report on
         collection : CollectionEnum
