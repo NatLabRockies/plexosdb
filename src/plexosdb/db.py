@@ -1396,7 +1396,8 @@ class PlexosDB:
         child_class : ClassEnum
             Child class enumeration for the collection
         phase_id : int, optional
-            Phase ID for the report (1=ST, 2=MT, 3=PASA, 4=LT), by default 4 (Long Term)
+            Phase ID for the report (1=LT Plan, 2=PASA, 3=MT Schedule, 4=ST Schedule),
+            by default 4 (ST Schedule)
         report_period : bool | None, optional
             Whether to report period data, by default None
         report_summary : bool | None, optional

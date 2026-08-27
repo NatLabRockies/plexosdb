@@ -83,3 +83,29 @@ def test_add_report_property_to_existing_report(db_base: PlexosDB):
     )
 
     assert [row[0] for row in configured_properties] == sorted((first_property, second_property))
+
+
+def test_add_report_preserves_phase_ids(db_base: PlexosDB):
+    from plexosdb import ClassEnum, CollectionEnum
+
+    db: PlexosDB = db_base
+    report_object = "phase_report"
+    db.add_object(ClassEnum.Report, name=report_object)
+
+    for phase_id in (1, 2, 3, 4):
+        db.add_report(
+            object_name=report_object,
+            property="Units",
+            collection=CollectionEnum.Generators,
+            parent_class=ClassEnum.System,
+            child_class=ClassEnum.Generator,
+            phase_id=phase_id,
+        )
+
+    report_id = db.get_object_id(ClassEnum.Report, name=report_object)
+    configured_phase_ids = db.query(
+        "SELECT phase_id FROM t_report WHERE object_id = ? ORDER BY phase_id",
+        (report_id,),
+    )
+
+    assert [row[0] for row in configured_phase_ids] == [1, 2, 3, 4]
