@@ -62,7 +62,7 @@ class FakeDB:
         *,
         description: str | None = None,
         category: str | None = None,
-        collection_enum: CollectionEnum | None | bool = None,
+        collection_enum: CollectionEnum | bool | None = None,
     ) -> int:
         """Capture add_object inputs and return a stable object id."""
         self.last_add_object = {

@@ -698,7 +698,7 @@ class PlexosDB:
         *,
         description: str | None = None,
         category: str | None = None,
-        collection_enum: CollectionEnum | None | Literal[False] = None,
+        collection_enum: CollectionEnum | Literal[False] | None = None,
     ) -> int:
         """Add an object to the database and append a system membership.
 

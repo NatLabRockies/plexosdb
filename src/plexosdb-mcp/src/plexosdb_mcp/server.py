@@ -234,7 +234,7 @@ def _register_object_tools(mcp: Any, server_state: MCPServerState) -> None:
         db = server_state.get_db(session_id)
         class_enum = _parse_class_name(class_name)
 
-        collection_enum: CollectionEnum | None | bool = None
+        collection_enum: CollectionEnum | bool | None = None
         try:
             _ = get_default_collection(class_enum)
         except KeyError:
