@@ -1,0 +1,34 @@
+(api)=
+
+# API Reference
+
+This section provides comprehensive reference documentation for all PlexosDB
+classes, methods, and modules. Use this section when you need detailed
+information about specific functions, their parameters, return values, and
+behavior.
+
+## Core Components
+
+```{toctree}
+:maxdepth: 2
+
+plexosdb
+checks
+db_solution
+solution_reader
+model_attributes
+production_attributes
+performance_attributes
+transmission_attributes
+pasa_attributes
+diagnostic_attributes
+horizon_attributes
+mt_schedule_attributes
+st_schedule_attributes
+lt_plan_attributes
+enums
+exceptions
+utils
+xml_handler
+sqlite_manager
+```
