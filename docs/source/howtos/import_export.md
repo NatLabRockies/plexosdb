@@ -76,7 +76,7 @@ export for supported file-based workflows.
 ```python
 # Create an empty database
 db = PlexosDB()
-db.create_schema()
+db.create_schema(version=10)
 
 ```
 

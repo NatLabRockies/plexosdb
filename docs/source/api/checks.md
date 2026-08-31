@@ -12,5 +12,5 @@ database.
 ```
 
 The helpers accept a `PlexosDB` instance as their first argument. The same
-checks are also available as convenience methods on `PlexosDB` where the
-class exposes them.
+checks are also available as convenience methods on `PlexosDB` where the class
+exposes them.

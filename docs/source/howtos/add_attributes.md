@@ -38,7 +38,7 @@ from plexosdb.enums import ClassEnum, CollectionEnum
 
 # Initialize database
 db = PlexosDB()
-db.create_schema()
+db.create_schema(version=10)
 
 # Create a generator object if it doesn't exist
 if not db.check_object_exists(ClassEnum.Generator, "Generator1"):

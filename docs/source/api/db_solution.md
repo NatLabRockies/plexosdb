@@ -1,8 +1,8 @@
 # DuckDB Solution Reader
 
-The DuckDB solution reader converts a PLEXOS solution ZIP with
-`plexos2duckdb` and exposes lazy DuckDB relations for analysis. Import it
-explicitly to distinguish it from the SQLite-backed solution reader:
+The DuckDB solution reader converts a PLEXOS solution ZIP with `plexos2duckdb`
+and exposes lazy DuckDB relations for analysis. Import it explicitly to
+distinguish it from the SQLite-backed solution reader:
 
 ```python
 from plexosdb.db_solution import PlexosSolution

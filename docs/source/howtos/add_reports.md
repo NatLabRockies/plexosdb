@@ -15,7 +15,7 @@ from plexosdb.enums import ClassEnum, CollectionEnum
 
 # Create or open a database
 db = PlexosDB()
-db.create_schema()
+db.create_schema(version=10)
 
 # First, create a Report object
 db.add_object(ClassEnum.Report, "Generator Outputs")

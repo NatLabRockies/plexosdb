@@ -33,5 +33,5 @@ from plexosdb.solution_reader import PlexosSolution
     :show-inheritance:
 ```
 
-See [Inspecting a PLEXOS Solution](../howtos/inspect_solution.md) for a
-complete ZIP-to-SQLite workflow.
+See [Inspecting a PLEXOS Solution](../howtos/inspect_solution.md) for a complete
+ZIP-to-SQLite workflow.
