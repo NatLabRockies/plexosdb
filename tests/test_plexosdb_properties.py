@@ -1,6 +1,28 @@
 import pytest
 
-from plexosdb import ClassEnum
+from plexosdb import ClassEnum, CollectionEnum
+
+
+def test_resolve_property_context_uses_defaults_and_shared_ids(db_with_topology):
+    collection, parent_class, property_id, membership_id = db_with_topology._resolve_property_context(
+        "thermal-01",
+        "Max Capacity",
+        object_class=ClassEnum.Generator,
+    )
+
+    assert collection == CollectionEnum.Generators
+    assert parent_class == ClassEnum.System
+    assert property_id == db_with_topology.get_property_id(
+        "Max Capacity",
+        collection_enum=CollectionEnum.Generators,
+        child_class_enum=ClassEnum.Generator,
+        parent_class_enum=ClassEnum.System,
+    )
+    assert membership_id == db_with_topology.get_membership_id(
+        "System",
+        "thermal-01",
+        CollectionEnum.Generators,
+    )
 
 
 def test_add_property_to_object_succeeds(db_with_topology):

@@ -125,6 +125,53 @@ is added. When omitted, the default collection is selected, the parent class
 defaults to `ClassEnum.System`, and the membership is resolved from the object
 and collection.
 
+## Updating Properties
+
+Use `update_property` to change the value of an existing property without
+removing its scenario, band, date, or text metadata:
+
+```python
+db.update_property(
+    "Generator1",
+    "Max Capacity",
+    125.0,
+    object_class=ClassEnum.Generator,
+)
+```
+
+When a property has multiple bands, pass `band` to update only the matching
+band. Pass `scenario` to update a scenario-specific value. If `scenario` is
+omitted, only the base, non-scenario property is updated.
+
+```python
+db.update_property(
+    "Generator1",
+    "Heat Rate",
+    9.8,
+    object_class=ClassEnum.Generator,
+    band=2,
+    scenario="High Demand",
+)
+```
+
+The `collection` and `parent_class` arguments can be supplied when the property
+belongs to a non-default collection or membership:
+
+```python
+db.update_property(
+    "Generator1",
+    "Max Capacity",
+    130.0,
+    object_class=ClassEnum.Generator,
+    collection=CollectionEnum.Generators,
+    parent_class=ClassEnum.System,
+)
+```
+
+The method raises `NotFoundError` when the object or matching property row does
+not exist, and `NameError` when the property is invalid for the selected
+collection.
+
 ## Bulk Adding Properties
 
 For efficiency when adding many properties at once, use flat records. Each flat

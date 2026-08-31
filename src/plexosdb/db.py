@@ -39,6 +39,7 @@ from .utils import (
     no_space,
     normalize_names,
     plan_property_inserts,
+    _resolve_membership_map,
     resolve_membership_id,
     _normalize_attribute_records,
 )
@@ -1175,6 +1176,46 @@ class PlexosDB:
                 (data_id, date_to.isoformat()),
             )
 
+    def _resolve_property_context(
+        self,
+        object_name: str,
+        property_name: str,
+        /,
+        *,
+        object_class: ClassEnum,
+        collection: CollectionEnum | None = None,
+        parent_class: ClassEnum | None = None,
+        parent_object_name: str | None = None,
+    ) -> tuple[CollectionEnum, ClassEnum, int, int]:
+        """Resolve the shared object, property, and membership context."""
+        if not checks_module.check_object_exists(self, object_class, object_name):
+            raise NotFoundError(f"Object = `{object_name}` does not exist for class `{object_class}`.")
+
+        collection = collection or get_default_collection(object_class)
+        parent_class = parent_class or ClassEnum.System
+        property_name = self._validate_properties(
+            property_name,
+            collection,
+            object_class,
+            parent_class=parent_class,
+        )[0]
+
+        property_id = self.get_property_id(
+            property_name,
+            collection_enum=collection,
+            child_class_enum=object_class,
+            parent_class_enum=parent_class,
+        )
+        membership_id = resolve_membership_id(
+            self,
+            object_name,
+            object_class=object_class,
+            collection=collection,
+            parent_class=parent_class,
+            parent_object_name=parent_object_name,
+        )
+        return collection, parent_class, property_id, membership_id
+
     def add_property(
         self,
         object_class_enum: ClassEnum,
@@ -1266,37 +1307,9 @@ class PlexosDB:
         >>> db.add_property(ClassEnum.Generator, "Generator1", "Max Capacity", 100.0)
         1
         """
-        # Ensure object exist
-        if not checks_module.check_object_exists(self, object_class_enum, object_name):
-            msg = f"Object = `{object_name}` does not exist on the system. "
-            f"Check available objects for class `{object_class_enum}` using `list_objects_by_class`"
-            raise NotFoundError(msg)
-        _ = self.get_object_id(object_class_enum, object_name)
-
-        if not collection_enum:
-            collection_enum = get_default_collection(object_class_enum)
-
-        parent_class_enum = parent_class_enum or ClassEnum.System
-
-        valid_properties = self.list_valid_properties(
-            collection_enum, child_class_enum=object_class_enum, parent_class_enum=parent_class_enum
-        )
-        if name not in valid_properties:
-            msg = (
-                f"Property {name} does not exist for collection: {collection_enum}. "
-                f"Run `self.list_valid_properties({collection_enum}) to verify valid properties."
-            )
-            raise NameError(msg)
-
-        property_id = self.get_property_id(
-            name,
-            parent_class_enum=parent_class_enum,
-            child_class_enum=object_class_enum,
-            collection_enum=collection_enum,
-        )
-        membership_id = resolve_membership_id(
-            self,
+        collection_enum, parent_class_enum, property_id, membership_id = self._resolve_property_context(
             object_name,
+            name,
             object_class=object_class_enum,
             collection=collection_enum,
             parent_class=parent_class_enum,
@@ -2132,37 +2145,9 @@ class PlexosDB:
         >>> db.add_property(ClassEnum.Generator, "Generator1", "Max Capacity", 100.0)
         >>> db.delete_property(ClassEnum.Generator, "Generator1", property_name="Max Capacity")
         """
-        # Ensure object exists
-        if not checks_module.check_object_exists(self, object_class, object_name):
-            msg = f"Object = `{object_name}` does not exist for class `{object_class}`."
-            raise NotFoundError(msg)
-
-        # Set defaults
-        collection = collection or get_default_collection(object_class)
-        parent_class = parent_class or ClassEnum.System
-
-        # Validate property exists for this collection
-        valid_properties = self.list_valid_properties(
-            collection, child_class_enum=object_class, parent_class_enum=parent_class
-        )
-        if property_name not in valid_properties:
-            msg = (
-                f"Property '{property_name}' does not exist for collection: {collection}. "
-                f"Run `self.list_valid_properties({collection})` to verify valid properties."
-            )
-            raise NameError(msg)
-
-        # Get IDs for the property lookup
-        property_id = self.get_property_id(
-            property_name,
-            parent_class_enum=parent_class,
-            child_class_enum=object_class,
-            collection_enum=collection,
-        )
-
-        membership_id = resolve_membership_id(
-            self,
+        collection, parent_class, property_id, membership_id = self._resolve_property_context(
             object_name,
+            property_name,
             object_class=object_class,
             collection=collection,
             parent_class=parent_class,
@@ -4336,8 +4321,310 @@ class PlexosDB:
         return True
 
     def update_properties(self, updates: list[dict[str, Any]]) -> None:
-        """Update multiple properties in a single transaction."""
-        raise NotImplementedError  # pragma: no cover
+        """Update multiple matching property data records in one transaction.
+
+        Each update mapping uses the selectors accepted by :meth:`update_property`.
+        Unlike :meth:`update_property`, a bulk selector may match multiple data
+        records; every matching record is updated. In particular, omitting
+        ``band`` updates all bands for the selected object, property, scenario,
+        and membership. Include ``band`` when only one band should be changed.
+        """
+        if not updates:
+            return
+
+        prepared_updates = self._prepare_property_updates(updates)
+
+        with self._db.transaction():
+            self._db.executemany("UPDATE t_data SET value = ? WHERE data_id = ?", prepared_updates)
+
+    def _prepare_property_updates(self, updates: list[dict[str, Any]]) -> list[tuple[Any, int]]:
+        """Resolve bulk property updates into value/data-ID parameter pairs."""
+        grouped_updates: dict[tuple[ClassEnum, CollectionEnum, ClassEnum], list[dict[str, Any]]] = {}
+        for update in updates:
+            object_class = update["object_class"]
+            key = (
+                object_class,
+                update.get("collection") or get_default_collection(object_class),
+                update.get("parent_class") or ClassEnum.System,
+            )
+            grouped_updates.setdefault(key, []).append(update)
+
+        scenario_class_id = self.get_class_id(ClassEnum.Scenario)
+        prepared_updates: list[tuple[Any, int]] = []
+        for (object_class, collection, parent_class), group in grouped_updates.items():
+            prepared_updates.extend(
+                self._prepare_property_update_group(
+                    group,
+                    object_class=object_class,
+                    collection=collection,
+                    parent_class=parent_class,
+                    scenario_class_id=scenario_class_id,
+                )
+            )
+        return prepared_updates
+
+    def _prepare_property_update_group(
+        self,
+        group: list[dict[str, Any]],
+        *,
+        object_class: ClassEnum,
+        collection: CollectionEnum,
+        parent_class: ClassEnum,
+        scenario_class_id: int,
+    ) -> list[tuple[Any, int]]:
+        """Validate one update group and resolve its matching data rows."""
+        object_names = tuple({update["object_name"] for update in group})
+        object_class_id = self.get_class_id(object_class)
+        existing_object_names: set[str] = set()
+        for object_batch in batched(object_names, 900):
+            object_placeholders = ", ".join("?" for _ in object_batch)
+            object_rows = self._db.fetchall(
+                f"SELECT name FROM t_object WHERE class_id = ? AND name IN ({object_placeholders})",
+                (object_class_id, *object_batch),
+            )
+            existing_object_names.update(row[0] for row in object_rows)
+        missing_object_names = [name for name in object_names if name not in existing_object_names]
+        if missing_object_names:
+            raise NotFoundError(
+                f"Object = `{missing_object_names[0]}` does not exist for class `{object_class}`."
+            )
+
+        property_names = tuple({update["property_name"] for update in group})
+        valid_properties = self._validate_properties(
+            property_names,
+            collection,
+            object_class,
+            parent_class=parent_class,
+        )
+        collection_id = self.get_collection_id(
+            collection,
+            parent_class_enum=parent_class,
+            child_class_enum=object_class,
+        )
+        property_rows = self._db.fetchall(
+            "SELECT name, property_id FROM t_property WHERE collection_id = ?",
+            (collection_id,),
+        )
+        property_ids = {name: property_id for name, property_id in property_rows}
+        implicit_parent_updates = [update for update in group if update.get("parent_object_name") is None]
+        membership_map = (
+            _resolve_membership_map(
+                self,
+                [{"name": update["object_name"]} for update in implicit_parent_updates],
+                object_class=object_class,
+                parent_class=parent_class,
+                collection=collection,
+            )
+            if implicit_parent_updates
+            else {}
+        )
+        explicit_membership_map = self._resolve_explicit_membership_map(
+            group,
+            object_class=object_class,
+            parent_class=parent_class,
+            collection=collection,
+        )
+        scenario_ids = self._resolve_scenario_ids(group, scenario_class_id)
+        selectors = self._prepare_property_update_selectors(
+            group,
+            valid_properties=valid_properties,
+            property_ids=property_ids,
+            membership_map=membership_map,
+            explicit_membership_map=explicit_membership_map,
+            scenario_ids=scenario_ids,
+            collection=collection,
+            object_class=object_class,
+            parent_class=parent_class,
+        )
+        data_ids_by_index = self._find_property_data_ids(selectors, scenario_class_id)
+
+        prepared_updates: list[tuple[Any, int]] = []
+        for index, update in enumerate(group):
+            data_ids = data_ids_by_index.get(index, [])
+            if not data_ids:
+                scenario = update.get("scenario")
+                band = update.get("band")
+                scenario_detail = f" for scenario `{scenario}`" if scenario is not None else ""
+                band_detail = f" and band `{band}`" if band is not None else ""
+                raise NotFoundError(
+                    f"Property `{update['property_name']}` was not found for object `"
+                    f"{update['object_name']}`{scenario_detail}{band_detail}."
+                )
+            prepared_updates.extend((update["new_value"], data_id) for data_id in data_ids)
+        return prepared_updates
+
+    def _resolve_explicit_membership_map(
+        self,
+        group: list[dict[str, Any]],
+        *,
+        object_class: ClassEnum,
+        parent_class: ClassEnum,
+        collection: CollectionEnum,
+    ) -> dict[tuple[str, str], int]:
+        """Resolve explicit parent memberships for an update group in one query."""
+        explicit_updates = [update for update in group if update.get("parent_object_name") is not None]
+        if not explicit_updates:
+            return {}
+
+        parent_class_id = self.get_class_id(parent_class)
+        child_class_id = self.get_class_id(object_class)
+        collection_id = self.get_collection_id(
+            collection,
+            parent_class_enum=parent_class,
+            child_class_enum=object_class,
+        )
+        membership_map: dict[tuple[str, str], int] = {}
+        # Keep the two name lists together below SQLite's 999-variable limit.
+        for update_batch in batched(explicit_updates, 450):
+            parent_names = tuple({update["parent_object_name"] for update in update_batch})
+            child_names = tuple({update["object_name"] for update in update_batch})
+            parent_placeholders = ", ".join("?" for _ in parent_names)
+            child_placeholders = ", ".join("?" for _ in child_names)
+            rows = self._db.fetchall(
+                f"""
+                SELECT membership.membership_id, parent_object.name, child_object.name
+                FROM t_membership AS membership
+                JOIN t_object AS parent_object ON parent_object.object_id = membership.parent_object_id
+                JOIN t_object AS child_object ON child_object.object_id = membership.child_object_id
+                WHERE membership.parent_class_id = ?
+                  AND membership.child_class_id = ?
+                  AND membership.collection_id = ?
+                  AND parent_object.name IN ({parent_placeholders})
+                  AND child_object.name IN ({child_placeholders})
+                """,
+                (
+                    parent_class_id,
+                    child_class_id,
+                    collection_id,
+                    *parent_names,
+                    *child_names,
+                ),
+            )
+            membership_map.update(
+                {(parent_name, child_name): membership_id for membership_id, parent_name, child_name in rows}
+            )
+        return membership_map
+
+    def _resolve_scenario_ids(self, group: list[dict[str, Any]], scenario_class_id: int) -> dict[str, int]:
+        """Resolve scenario names in an update group to object IDs."""
+        scenario_names = tuple({update["scenario"] for update in group if update.get("scenario") is not None})
+        if not scenario_names:
+            return {}
+        scenario_ids: dict[str, int] = {}
+        for scenario_batch in batched(scenario_names, 900):
+            placeholders = ", ".join("?" for _ in scenario_batch)
+            rows = self._db.fetchall(
+                f"SELECT object_id, name FROM t_object WHERE class_id = ? AND name IN ({placeholders})",
+                (scenario_class_id, *scenario_batch),
+            )
+            scenario_ids.update({name: scenario_id for scenario_id, name in rows})
+        missing_scenarios = [name for name in scenario_names if name not in scenario_ids]
+        if missing_scenarios:
+            raise NotFoundError(f"Scenario {missing_scenarios[0]!r} does not exist.")
+        return scenario_ids
+
+    def _prepare_property_update_selectors(
+        self,
+        group: list[dict[str, Any]],
+        *,
+        valid_properties: list[str],
+        property_ids: dict[str, int],
+        membership_map: dict[str, int],
+        explicit_membership_map: dict[tuple[str, str], int],
+        scenario_ids: dict[str, int],
+        collection: CollectionEnum,
+        object_class: ClassEnum,
+        parent_class: ClassEnum,
+    ) -> list[tuple[int, int, int, int | None, int | None]]:
+        """Validate update selectors and resolve their membership and property IDs."""
+        selectors: list[tuple[int, int, int, int | None, int | None]] = []
+        for index, update in enumerate(group):
+            property_name = update["property_name"]
+            if property_name not in valid_properties:
+                raise NameError(f"Property {property_name} does not exist for collection: {collection}.")
+            scenario = update.get("scenario")
+            scenario_id = scenario_ids.get(scenario) if scenario is not None else None
+            if scenario is not None and scenario_id is None:
+                raise NotFoundError(f"Scenario {scenario!r} does not exist.")
+            band = update.get("band")
+            try:
+                band_id = int(band) if band is not None else None
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"Band must be an integer, got {band!r}.") from exc
+            parent_object_name = update.get("parent_object_name")
+            if parent_object_name is not None:
+                membership_id = explicit_membership_map.get((parent_object_name, update["object_name"]))
+                if membership_id is None:
+                    raise NotFoundError(
+                        f"No membership found for '{update['object_name']}' under parent "
+                        f"'{parent_object_name}' in collection '{collection.value}'."
+                    )
+            else:
+                membership_id = membership_map[update["object_name"]]
+            selectors.append(
+                (
+                    index,
+                    membership_id,
+                    property_ids[property_name],
+                    scenario_id,
+                    band_id,
+                )
+            )
+        return selectors
+
+    def _find_property_data_ids(
+        self,
+        selectors: list[tuple[int, int, int, int | None, int | None]],
+        scenario_class_id: int,
+    ) -> dict[int, list[int]]:
+        """Find data IDs matching selectors in bounded SQL batches."""
+        data_ids_by_index: dict[int, list[int]] = {}
+        for selector_batch in batched(selectors, 180):
+            values_sql = ", ".join("(?, ?, ?, ?, ?)" for _ in selector_batch)
+            selector_params = [value for selector in selector_batch for value in selector]
+            data_rows = self._db.fetchall(
+                f"""
+                WITH update_rows(update_index, membership_id, property_id, scenario_id, band_id) AS (
+                    VALUES {values_sql}
+                )
+                SELECT update_rows.update_index, d.data_id
+                FROM update_rows
+                JOIN t_data AS d
+                  ON d.membership_id = update_rows.membership_id
+                 AND d.property_id = update_rows.property_id
+                WHERE (
+                    (update_rows.scenario_id IS NULL AND NOT EXISTS (
+                        SELECT 1 FROM t_tag AS scenario_tag
+                        JOIN t_object AS scenario_object ON scenario_object.object_id = scenario_tag.object_id
+                        WHERE scenario_tag.data_id = d.data_id AND scenario_object.class_id = ?
+                    ))
+                    OR (update_rows.scenario_id IS NOT NULL AND EXISTS (
+                        SELECT 1 FROM t_tag AS scenario_tag
+                                                WHERE scenario_tag.data_id = d.data_id
+                                                    AND scenario_tag.object_id = update_rows.scenario_id
+                    ))
+                )
+                AND (
+                    update_rows.band_id IS NULL
+                    OR EXISTS (
+                        SELECT 1 FROM t_band AS property_band
+                        WHERE property_band.data_id = d.data_id
+                          AND property_band.band_id = update_rows.band_id
+                    )
+                    OR (
+                        update_rows.band_id = 1
+                        AND NOT EXISTS (
+                            SELECT 1 FROM t_band AS property_band
+                            WHERE property_band.data_id = d.data_id
+                        )
+                    )
+                )
+                """,
+                (*selector_params, scenario_class_id),
+            )
+            for index, data_id in data_rows:
+                data_ids_by_index.setdefault(index, []).append(data_id)
+        return data_ids_by_index
 
     def update_property(
         self,
@@ -4348,12 +4635,146 @@ class PlexosDB:
         *,
         object_class: ClassEnum,
         scenario: str | None = None,
-        band: str | None = None,
+        band: str | int | None = None,
         collection: CollectionEnum | None = None,
         parent_class: ClassEnum | None = None,
+        parent_object_name: str | None = None,
     ) -> None:
-        """Update a property value for a given object."""
-        raise NotImplementedError  # pragma: no cover
+        """Update exactly one existing property data record.
+
+        Parameters
+        ----------
+        object_name : str
+            Name of the object whose property is updated.
+        property_name : str
+            Name of the property to update.
+        new_value : str | None
+            New value to store in the property data record.
+        object_class : ClassEnum
+            Class of the object.
+        scenario : str | None, optional
+            Scenario used to select the property data record. If omitted, only
+            an unscoped property record is considered.
+        band : str | int | None, optional
+            Band number used to select the property data record. Strings and
+            integers are accepted. If omitted, the selector must match exactly
+            one data record or ``ValueError`` is raised.
+        collection : CollectionEnum | None, optional
+            Property collection. Defaults to the collection for ``object_class``.
+        parent_class : ClassEnum | None, optional
+            Parent class for the membership. Defaults to ``ClassEnum.System``.
+        parent_object_name : str | None, optional
+            Explicit parent object used to disambiguate memberships.
+
+        Raises
+        ------
+        NotFoundError
+            If the object, membership, or selected property data record does not exist.
+        NameError
+            If ``property_name`` is invalid for the selected collection and classes.
+        ValueError
+            If more than one property data record matches the selectors or if
+            ``band`` is not an integer.
+
+        Notes
+        -----
+        The update changes only ``t_data.value``. Existing scenario tags, bands,
+        dates, and text metadata are preserved.
+        """
+        with self._db.transaction():
+            self._update_property_value(
+                object_name,
+                property_name,
+                new_value,
+                object_class=object_class,
+                scenario=scenario,
+                band=band,
+                collection=collection,
+                parent_class=parent_class,
+                parent_object_name=parent_object_name,
+            )
+
+    def _update_property_value(
+        self,
+        object_name: str,
+        property_name: str,
+        new_value: str | None,
+        /,
+        *,
+        object_class: ClassEnum,
+        scenario: str | None,
+        band: str | int | None,
+        collection: CollectionEnum | None,
+        parent_class: ClassEnum | None,
+        parent_object_name: str | None,
+    ) -> None:
+        """Update matching property rows inside an active transaction."""
+        collection, parent_class, property_id, membership_id = self._resolve_property_context(
+            object_name,
+            property_name,
+            object_class=object_class,
+            collection=collection,
+            parent_class=parent_class,
+            parent_object_name=parent_object_name,
+        )
+
+        conditions = ["d.membership_id = ?", "d.property_id = ?"]
+        params: list[Any] = [membership_id, property_id]
+
+        scenario_class_id = self.get_class_id(ClassEnum.Scenario)
+        if scenario is None:
+            conditions.append(
+                "NOT EXISTS ("
+                "SELECT 1 FROM t_tag scenario_tag "
+                "JOIN t_object scenario_object ON scenario_object.object_id = scenario_tag.object_id "
+                "WHERE scenario_tag.data_id = d.data_id "
+                "AND scenario_object.class_id = ?"
+                ")"
+            )
+            params.append(scenario_class_id)
+        else:
+            scenario_id = self.get_scenario_id(scenario)
+            conditions.append(
+                "EXISTS (SELECT 1 FROM t_tag scenario_tag "
+                "WHERE scenario_tag.data_id = d.data_id "
+                "AND scenario_tag.object_id = ?)"
+            )
+            params.append(scenario_id)
+
+        if band is not None:
+            try:
+                band_id = int(band)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"Band must be an integer, got {band!r}.") from exc
+            conditions.append(
+                "(EXISTS (SELECT 1 FROM t_band property_band "
+                "WHERE property_band.data_id = d.data_id AND property_band.band_id = ?) "
+                "OR (? = 1 AND NOT EXISTS (SELECT 1 FROM t_band property_band "
+                "WHERE property_band.data_id = d.data_id)))"
+            )
+            params.extend((band_id, band_id))
+
+        where_clause = " AND ".join(conditions)
+        data_ids = self._db.fetchall(f"SELECT d.data_id FROM t_data d WHERE {where_clause}", tuple(params))
+        if not data_ids:
+            scenario_detail = f" for scenario `{scenario}`" if scenario is not None else ""
+            band_detail = f" and band `{band}`" if band is not None else ""
+            raise NotFoundError(
+                f"Property `{property_name}` was not found for object `{object_name}`"
+                f"{scenario_detail}{band_detail}."
+            )
+        if len(data_ids) > 1:
+            scenario_detail = f" for scenario `{scenario}`" if scenario is not None else ""
+            band_detail = f" and band `{band}`" if band is not None else ""
+            raise ValueError(
+                f"Property `{property_name}` matched multiple data records for object `{object_name}`"
+                f"{scenario_detail}{band_detail}; specify a band or narrower selector."
+            )
+
+        self._db.execute(
+            "UPDATE t_data SET value = ? WHERE data_id = ?",
+            (new_value, data_ids[0][0]),
+        )
 
     def update_scenario(
         self,
@@ -4413,8 +4834,11 @@ class PlexosDB:
             props,
             parent_class=parent_class,
         ):
+            property_detail = (
+                f"Property '{props[0]}' does not exist" if len(props) == 1 else f"Invalid properties {props}"
+            )
             msg = (
-                f"Invalid property {props} for collection={collection}. "
+                f"{property_detail} for collection: {collection}. "
                 "Use `list_valid_properties()` to check valid properties."
             )
             raise NameError(msg)
