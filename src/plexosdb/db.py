@@ -4368,12 +4368,14 @@ class PlexosDB:
         """Validate one update group and resolve its matching data rows."""
         object_names = tuple({update["object_name"] for update in group})
         object_class_id = self.get_class_id(object_class)
-        object_placeholders = ", ".join("?" for _ in object_names)
-        object_rows = self._db.fetchall(
-            f"SELECT name FROM t_object WHERE class_id = ? AND name IN ({object_placeholders})",
-            (object_class_id, *object_names),
-        )
-        existing_object_names = {row[0] for row in object_rows}
+        existing_object_names: set[str] = set()
+        for object_batch in batched(object_names, 900):
+            object_placeholders = ", ".join("?" for _ in object_batch)
+            object_rows = self._db.fetchall(
+                f"SELECT name FROM t_object WHERE class_id = ? AND name IN ({object_placeholders})",
+                (object_class_id, *object_batch),
+            )
+            existing_object_names.update(row[0] for row in object_rows)
         missing_object_names = [name for name in object_names if name not in existing_object_names]
         if missing_object_names:
             raise NotFoundError(

@@ -68,6 +68,32 @@ def test_update_properties_updates_multiple_xml_fixture_values(run_of_river_db: 
     assert _property_rows(run_of_river_db, "Gas_Gen1", "Max Capacity") == [(325.0, 1)]
 
 
+def test_update_properties_chunks_large_object_validation(db_base: PlexosDB) -> None:
+    object_names = [f"Generator{i}" for i in range(1000)]
+    db_base.add_objects(ClassEnum.Generator, *object_names)
+    db_base.add_properties_from_records(
+        [{"name": name, "property": "Max Capacity", "value": 100.0} for name in object_names],
+        object_class=ClassEnum.Generator,
+        collection=CollectionEnum.Generators,
+        scenario="Base Case",
+    )
+
+    db_base.update_properties(
+        [
+            {
+                "object_name": name,
+                "property_name": "Max Capacity",
+                "new_value": 200.0,
+                "object_class": ClassEnum.Generator,
+                "scenario": "Base Case",
+            }
+            for name in object_names
+        ]
+    )
+
+    assert _property_rows(db_base, "Generator999", "Max Capacity") == [(200.0, 1)]
+
+
 def test_update_properties_rolls_back_domain_validation_failure_and_reuses_connection(
     run_of_river_db: PlexosDB,
 ) -> None:
@@ -140,6 +166,48 @@ def test_update_property_uses_explicit_parent_membership(db_with_reserve_collect
         collection_enum=CollectionEnum.Regions,
     )
     assert sorted(property["value"] for property in rows) == [6.0, 8.0]
+
+
+def test_update_property_explicit_parent_class_constrains_membership(
+    db_with_reserve_collection_property,
+) -> None:
+    db = db_with_reserve_collection_property
+    db.add_object(ClassEnum.Region, "TestReserve")
+    db.add_membership(
+        parent_class_enum=ClassEnum.Region,
+        child_class_enum=ClassEnum.Region,
+        parent_object_name="TestReserve",
+        child_object_name="region-01",
+        collection_enum=CollectionEnum.Regions,
+    )
+    db.add_property(
+        ClassEnum.Region,
+        "region-01",
+        "Wheeling Charge",
+        9.0,
+        collection_enum=CollectionEnum.Regions,
+        parent_class_enum=ClassEnum.Region,
+        parent_object_name="TestReserve",
+    )
+
+    db.update_property(
+        "region-01",
+        "Wheeling Charge",
+        10.0,
+        object_class=ClassEnum.Region,
+        collection=CollectionEnum.Regions,
+        parent_class=ClassEnum.Region,
+        parent_object_name="TestReserve",
+    )
+
+    region_rows = db.get_object_properties(
+        ClassEnum.Region,
+        "region-01",
+        property_names="Wheeling Charge",
+        parent_class_enum=ClassEnum.Region,
+        collection_enum=CollectionEnum.Regions,
+    )
+    assert [property["value"] for property in region_rows] == [10.0]
 
 
 def test_update_property_raises_for_missing_fixture_property(run_of_river_db: PlexosDB) -> None:
