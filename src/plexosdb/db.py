@@ -4380,10 +4380,12 @@ class PlexosDB:
                 f"Object = `{missing_object_names[0]}` does not exist for class `{object_class}`."
             )
 
-        valid_properties = self.list_valid_properties(
+        property_names = tuple({update["property_name"] for update in group})
+        valid_properties = self._validate_properties(
+            property_names,
             collection,
-            parent_class_enum=parent_class,
-            child_class_enum=object_class,
+            object_class,
+            parent_class=parent_class,
         )
         collection_id = self.get_collection_id(
             collection,
@@ -4555,22 +4557,57 @@ class PlexosDB:
         parent_class: ClassEnum | None = None,
         parent_object_name: str | None = None,
     ) -> None:
-        """Update a property value for a given object."""
-        self.update_properties(
-            [
-                {
-                    "object_name": object_name,
-                    "property_name": property_name,
-                    "new_value": new_value,
-                    "object_class": object_class,
-                    "scenario": scenario,
-                    "band": band,
-                    "collection": collection,
-                    "parent_class": parent_class,
-                    "parent_object_name": parent_object_name,
-                }
-            ]
-        )
+        """Update exactly one existing property data record.
+
+        Parameters
+        ----------
+        object_name : str
+            Name of the object whose property is updated.
+        property_name : str
+            Name of the property to update.
+        new_value : str | None
+            New value to store in the property data record.
+        object_class : ClassEnum
+            Class of the object.
+        scenario : str | None, optional
+            Scenario used to select the property data record. If omitted, only
+            an unscoped property record is considered.
+        band : str | None, optional
+            Band used to select the property data record.
+        collection : CollectionEnum | None, optional
+            Property collection. Defaults to the collection for ``object_class``.
+        parent_class : ClassEnum | None, optional
+            Parent class for the membership. Defaults to ``ClassEnum.System``.
+        parent_object_name : str | None, optional
+            Explicit parent object used to disambiguate memberships.
+
+        Raises
+        ------
+        NotFoundError
+            If the object, membership, or selected property data record does not exist.
+        NameError
+            If ``property_name`` is invalid for the selected collection and classes.
+        ValueError
+            If more than one property data record matches the selectors or if
+            ``band`` is not an integer.
+
+        Notes
+        -----
+        The update changes only ``t_data.value``. Existing scenario tags, bands,
+        dates, and text metadata are preserved.
+        """
+        with self._db.transaction():
+            self._update_property_value(
+                object_name,
+                property_name,
+                new_value,
+                object_class=object_class,
+                scenario=scenario,
+                band=band,
+                collection=collection,
+                parent_class=parent_class,
+                parent_object_name=parent_object_name,
+            )
 
     def _update_property_value(
         self,
@@ -4639,11 +4676,17 @@ class PlexosDB:
                 f"Property `{property_name}` was not found for object `{object_name}`"
                 f"{scenario_detail}{band_detail}."
             )
+        if len(data_ids) > 1:
+            scenario_detail = f" for scenario `{scenario}`" if scenario is not None else ""
+            band_detail = f" and band `{band}`" if band is not None else ""
+            raise ValueError(
+                f"Property `{property_name}` matched multiple data records for object `{object_name}`"
+                f"{scenario_detail}{band_detail}; specify a band or narrower selector."
+            )
 
-        placeholders = ", ".join("?" for _ in data_ids)
         self._db.execute(
-            f"UPDATE t_data SET value = ? WHERE data_id IN ({placeholders})",
-            (new_value, *(row[0] for row in data_ids)),
+            "UPDATE t_data SET value = ? WHERE data_id = ?",
+            (new_value, data_ids[0][0]),
         )
 
     def update_scenario(
