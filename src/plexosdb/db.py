@@ -4499,7 +4499,11 @@ class PlexosDB:
             f"SELECT object_id, name FROM t_object WHERE class_id = ? AND name IN ({placeholders})",
             (scenario_class_id, *scenario_names),
         )
-        return {name: scenario_id for scenario_id, name in rows}
+        scenario_ids = {name: scenario_id for scenario_id, name in rows}
+        missing_scenarios = [name for name in scenario_names if name not in scenario_ids]
+        if missing_scenarios:
+            raise NotFoundError(f"Scenario {missing_scenarios[0]!r} does not exist.")
+        return scenario_ids
 
     def _prepare_property_update_selectors(
         self,
@@ -4523,7 +4527,7 @@ class PlexosDB:
             scenario = update.get("scenario")
             scenario_id = scenario_ids.get(scenario) if scenario is not None else None
             if scenario is not None and scenario_id is None:
-                raise AssertionError(f"Scenario {scenario!r} does not exist.")
+                raise NotFoundError(f"Scenario {scenario!r} does not exist.")
             band = update.get("band")
             try:
                 band_id = int(band) if band is not None else None

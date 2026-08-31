@@ -92,6 +92,21 @@ def test_update_properties_updates_multiple_xml_fixture_values(run_of_river_db: 
     assert _property_rows(run_of_river_db, "Gas_Gen1", "Max Capacity") == [(325.0, 1)]
 
 
+def test_update_properties_rejects_missing_scenario(run_of_river_db: PlexosDB) -> None:
+    with pytest.raises(NotFoundError, match="Missing Scenario"):
+        run_of_river_db.update_properties(
+            [
+                {
+                    "object_name": "Coal_Gen",
+                    "property_name": "Max Capacity",
+                    "new_value": 625.0,
+                    "object_class": ClassEnum.Generator,
+                    "scenario": "Missing Scenario",
+                }
+            ]
+        )
+
+
 def test_update_properties_chunks_large_object_validation(db_base: PlexosDB) -> None:
     object_names = [f"Generator{i}" for i in range(1000)]
     db_base.add_objects(ClassEnum.Generator, *object_names)
