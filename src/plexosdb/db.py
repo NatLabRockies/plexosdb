@@ -4409,12 +4409,19 @@ class PlexosDB:
             if implicit_parent_updates
             else {}
         )
+        explicit_membership_map = self._resolve_explicit_membership_map(
+            group,
+            object_class=object_class,
+            parent_class=parent_class,
+            collection=collection,
+        )
         scenario_ids = self._resolve_scenario_ids(group, scenario_class_id)
         selectors = self._prepare_property_update_selectors(
             group,
             valid_properties=valid_properties,
             property_ids=property_ids,
             membership_map=membership_map,
+            explicit_membership_map=explicit_membership_map,
             scenario_ids=scenario_ids,
             collection=collection,
             object_class=object_class,
@@ -4437,6 +4444,49 @@ class PlexosDB:
             prepared_updates.extend((update["new_value"], data_id) for data_id in data_ids)
         return prepared_updates
 
+    def _resolve_explicit_membership_map(
+        self,
+        group: list[dict[str, Any]],
+        *,
+        object_class: ClassEnum,
+        parent_class: ClassEnum,
+        collection: CollectionEnum,
+    ) -> dict[tuple[str, str], int]:
+        """Resolve explicit parent memberships for an update group in one query."""
+        explicit_updates = [update for update in group if update.get("parent_object_name") is not None]
+        if not explicit_updates:
+            return {}
+
+        parent_names = tuple({update["parent_object_name"] for update in explicit_updates})
+        child_names = tuple({update["object_name"] for update in explicit_updates})
+        parent_placeholders = ", ".join("?" for _ in parent_names)
+        child_placeholders = ", ".join("?" for _ in child_names)
+        rows = self._db.fetchall(
+            f"""
+            SELECT membership.membership_id, parent_object.name, child_object.name
+            FROM t_membership AS membership
+            JOIN t_object AS parent_object ON parent_object.object_id = membership.parent_object_id
+            JOIN t_object AS child_object ON child_object.object_id = membership.child_object_id
+            WHERE membership.parent_class_id = ?
+              AND membership.child_class_id = ?
+              AND membership.collection_id = ?
+              AND parent_object.name IN ({parent_placeholders})
+              AND child_object.name IN ({child_placeholders})
+            """,
+            (
+                self.get_class_id(parent_class),
+                self.get_class_id(object_class),
+                self.get_collection_id(
+                    collection,
+                    parent_class_enum=parent_class,
+                    child_class_enum=object_class,
+                ),
+                *parent_names,
+                *child_names,
+            ),
+        )
+        return {(parent_name, child_name): membership_id for membership_id, parent_name, child_name in rows}
+
     def _resolve_scenario_ids(self, group: list[dict[str, Any]], scenario_class_id: int) -> dict[str, int]:
         """Resolve scenario names in an update group to object IDs."""
         scenario_names = tuple({update["scenario"] for update in group if update.get("scenario") is not None})
@@ -4456,6 +4506,7 @@ class PlexosDB:
         valid_properties: list[str],
         property_ids: dict[str, int],
         membership_map: dict[str, int],
+        explicit_membership_map: dict[tuple[str, str], int],
         scenario_ids: dict[str, int],
         collection: CollectionEnum,
         object_class: ClassEnum,
@@ -4477,18 +4528,15 @@ class PlexosDB:
             except (TypeError, ValueError) as exc:
                 raise ValueError(f"Band must be an integer, got {band!r}.") from exc
             parent_object_name = update.get("parent_object_name")
-            membership_id = (
-                resolve_membership_id(
-                    self,
-                    update["object_name"],
-                    object_class=object_class,
-                    collection=collection,
-                    parent_class=parent_class,
-                    parent_object_name=parent_object_name,
-                )
-                if parent_object_name is not None
-                else membership_map[update["object_name"]]
-            )
+            if parent_object_name is not None:
+                membership_id = explicit_membership_map.get((parent_object_name, update["object_name"]))
+                if membership_id is None:
+                    raise NotFoundError(
+                        f"No membership found for '{update['object_name']}' under parent "
+                        f"'{parent_object_name}' in collection '{collection.value}'."
+                    )
+            else:
+                membership_id = membership_map[update["object_name"]]
             selectors.append(
                 (
                     index,
