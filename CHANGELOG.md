@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.0](https://github.com/NatLabRockies/plexosdb/compare/v1.6.1...v1.7.0) (2026-08-31)
+
+
+### 🚀 Features
+
+* integrate update_property non implemented functions on main db ([#170](https://github.com/NatLabRockies/plexosdb/issues/170)) ([96c0334](https://github.com/NatLabRockies/plexosdb/commit/96c03345d82d583556a07526c0edb36e9a81e237))
+
+
+### 🐛 Bug Fixes
+
+* update docstring for explicit function behavior description ([#176](https://github.com/NatLabRockies/plexosdb/issues/176)) ([57f70b9](https://github.com/NatLabRockies/plexosdb/commit/57f70b96c68f09cd281666841a80897beff5f16b))
+
+
+### 📚 Documentation
+
+* update documentation reference for phase mapping on simulation objects ([#178](https://github.com/NatLabRockies/plexosdb/issues/178)) ([f949472](https://github.com/NatLabRockies/plexosdb/commit/f9494728a5a194cba18f8f8216cdd3a0df3b97e2))
+* update documentation to match latest codebase state ([#180](https://github.com/NatLabRockies/plexosdb/issues/180)) ([6caf473](https://github.com/NatLabRockies/plexosdb/commit/6caf473cc2dd88f742f75433f497834b978a11ff))
+
 ## [1.6.1](https://github.com/NatLabRockies/plexosdb/compare/v1.6.0...v1.6.1) (2026-08-11)
 
 
