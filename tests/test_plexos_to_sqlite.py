@@ -926,10 +926,9 @@ def test_materialize_single_solution_table_from_subset_skips_missing_period_entr
         monkeypatch.setattr(
             sr,
             "_build_fallback_create_sql",
-            lambda _schema,
-            _table,
-            _ids,
-            dv_source="main.t_data_values": f'CREATE TABLE data."T" AS SELECT * FROM {dv_source}',
+            lambda _schema, _table, _ids, dv_source="main.t_data_values": (
+                f'CREATE TABLE data."T" AS SELECT * FROM {dv_source}'
+            ),
         )
         monkeypatch.setattr(sr, "_copy_data_table_to_report", lambda *_args, **_kwargs: None)
 

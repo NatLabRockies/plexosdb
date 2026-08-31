@@ -27,7 +27,7 @@ db.add_report(
     collection=CollectionEnum.Generators,  # Collection containing the property
     parent_class=ClassEnum.System,    # Parent class for the collection
     child_class=ClassEnum.Generator,  # Child class for the collection
-    phase_id=4,                       # Phase ID (4=LT, Long Term)
+    phase_id=4,                       # Phase ID (4=ST Schedule)
     report_period=True,               # Include period data
     report_summary=True,              # Include summary data
     report_statistics=False,          # Don't include statistics
@@ -93,9 +93,9 @@ for prop in ["Generation", "Available Capacity"]:
 The `phase_id` parameter specifies which simulation phase to create the report
 for:
 
-- `1`: ST (Short Term)
-- `2`: MT (Medium Term)
-- `3`: PASA (Projected Assessment of System Adequacy)
-- `4`: LT (Long Term)
+- `1`: LT Plan (Long Term)
+- `2`: PASA (Projected Assessment of System Adequacy)
+- `3`: MT Schedule (Medium Term)
+- `4`: ST Schedule (Short Term)
 
 Choose the appropriate phase for your simulation needs.

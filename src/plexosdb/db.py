@@ -699,7 +699,7 @@ class PlexosDB:
         *,
         description: str | None = None,
         category: str | None = None,
-        collection_enum: CollectionEnum | None | Literal[False] = None,
+        collection_enum: CollectionEnum | Literal[False] | None = None,
     ) -> int:
         """Add an object to the database and append a system membership.
 
@@ -1389,15 +1389,17 @@ class PlexosDB:
         report_samples: bool | None = None,
         write_flat_files: bool = False,
     ) -> None:
-        """Add a report configuration to the database.
+        """Add an output property configuration to an existing report.
 
-        Creates a new report in the database with the specified properties and output options.
-        Reports define what data will be available for post-processing after simulation runs.
+        Adds a property and its output options to the specified ``Report`` object.
+        The report object must already exist; call :meth:`add_object` first only when
+        creating a new report object. Reports define what data will be available for
+        post-processing after simulation runs.
 
         Parameters
         ----------
         object_name : str
-            Name of the report object to add the configuration to
+            Name of the existing report object to add the configuration to
         property : str
             Name of the property to report on
         collection : CollectionEnum
@@ -1407,7 +1409,8 @@ class PlexosDB:
         child_class : ClassEnum
             Child class enumeration for the collection
         phase_id : int, optional
-            Phase ID for the report (1=ST, 2=MT, 3=PASA, 4=LT), by default 4 (Long Term)
+            Phase ID for the report (1=LT Plan, 2=PASA, 3=MT Schedule, 4=ST Schedule),
+            by default 4 (ST Schedule)
         report_period : bool | None, optional
             Whether to report period data, by default None
         report_summary : bool | None, optional

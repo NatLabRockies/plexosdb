@@ -435,7 +435,7 @@ db.add_report(
     collection=CollectionEnum.Generators,
     parent_class=ClassEnum.System,
     child_class=ClassEnum.Generator,
-    phase_id=4,  # Long-term phase
+    phase_id=4,  # ST Schedule phase
     report_period=True,
     report_summary=True,
 )
