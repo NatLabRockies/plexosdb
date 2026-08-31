@@ -18,8 +18,9 @@ db = PlexosDB()
 db.create_schema(version=10)
 
 # Create a generator object if it doesn't exist
-if not db.check_object_exists(ClassEnum.Generator, "Generator1"):
-    db.add_object(ClassEnum.Generator, "Generator1")
+for generator_name in ("Generator1", "Generator2", "Generator3"):
+    if not db.check_object_exists(ClassEnum.Generator, generator_name):
+        db.add_object(ClassEnum.Generator, generator_name)
 
 # Add a property to the generator
 db.add_property(
@@ -32,7 +33,7 @@ db.add_property(
 # Add another property
 db.add_property(
     ClassEnum.Generator,
-    object_name="Generator1",
+    object_name="Generator2",
     name="Min Stable Level",
     value=20.0
 )
