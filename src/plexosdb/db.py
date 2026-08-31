@@ -4582,10 +4582,21 @@ class PlexosDB:
                                                     AND scenario_tag.object_id = update_rows.scenario_id
                     ))
                 )
-                AND (update_rows.band_id IS NULL OR EXISTS (
-                    SELECT 1 FROM t_band AS property_band
-                    WHERE property_band.data_id = d.data_id AND property_band.band_id = update_rows.band_id
-                ))
+                AND (
+                    update_rows.band_id IS NULL
+                    OR EXISTS (
+                        SELECT 1 FROM t_band AS property_band
+                        WHERE property_band.data_id = d.data_id
+                          AND property_band.band_id = update_rows.band_id
+                    )
+                    OR (
+                        update_rows.band_id = 1
+                        AND NOT EXISTS (
+                            SELECT 1 FROM t_band AS property_band
+                            WHERE property_band.data_id = d.data_id
+                        )
+                    )
+                )
                 """,
                 (*selector_params, scenario_class_id),
             )
@@ -4712,10 +4723,12 @@ class PlexosDB:
             except (TypeError, ValueError) as exc:
                 raise ValueError(f"Band must be an integer, got {band!r}.") from exc
             conditions.append(
-                "EXISTS (SELECT 1 FROM t_band property_band "
-                "WHERE property_band.data_id = d.data_id AND property_band.band_id = ?)"
+                "(EXISTS (SELECT 1 FROM t_band property_band "
+                "WHERE property_band.data_id = d.data_id AND property_band.band_id = ?) "
+                "OR (? = 1 AND NOT EXISTS (SELECT 1 FROM t_band property_band "
+                "WHERE property_band.data_id = d.data_id)))"
             )
-            params.append(band_id)
+            params.extend((band_id, band_id))
 
         where_clause = " AND ".join(conditions)
         data_ids = self._db.fetchall(f"SELECT d.data_id FROM t_data d WHERE {where_clause}", tuple(params))

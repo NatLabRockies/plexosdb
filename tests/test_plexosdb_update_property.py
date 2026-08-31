@@ -46,6 +46,30 @@ def test_update_property_only_updates_requested_band(run_of_river_db: PlexosDB) 
     assert rows == [(95.0 if band == 2 else 50.0 + 20.0 * band, band) for band in range(1, 11)]
 
 
+def test_band_one_matches_unbanded_property_for_single_and_bulk_updates(run_of_river_db: PlexosDB) -> None:
+    run_of_river_db.update_property(
+        "Coal_Gen",
+        "Max Capacity",
+        625.0,
+        object_class=ClassEnum.Generator,
+        band=1,
+    )
+    assert _property_rows(run_of_river_db, "Coal_Gen", "Max Capacity") == [(625.0, 1)]
+
+    run_of_river_db.update_properties(
+        [
+            {
+                "object_name": "Gas_Gen1",
+                "property_name": "Max Capacity",
+                "new_value": 325.0,
+                "object_class": ClassEnum.Generator,
+                "band": 1,
+            }
+        ]
+    )
+    assert _property_rows(run_of_river_db, "Gas_Gen1", "Max Capacity") == [(325.0, 1)]
+
+
 def test_update_properties_updates_multiple_xml_fixture_values(run_of_river_db: PlexosDB) -> None:
     run_of_river_db.update_properties(
         [
