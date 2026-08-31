@@ -500,7 +500,38 @@ def resolve_membership_id(
     """
     if parent_object_name is not None:
         logger.trace("Resolving membership via explicit parent: {}", parent_object_name)
-        return db.get_membership_id(parent_object_name, object_name, collection)
+        parent_class_id = db.get_class_id(parent_class)
+        child_class_id = db.get_class_id(object_class)
+        parent_object_id = db.get_object_id(parent_class, parent_object_name)
+        child_object_id = db.get_object_id(object_class, object_name)
+        collection_id = db.get_collection_id(
+            collection,
+            parent_class_enum=parent_class,
+            child_class_enum=object_class,
+        )
+        rows = db._db.fetchall(
+            """
+            SELECT membership_id
+            FROM t_membership
+            WHERE parent_class_id = ?
+              AND parent_object_id = ?
+              AND collection_id = ?
+              AND child_class_id = ?
+              AND child_object_id = ?
+            """,
+            (parent_class_id, parent_object_id, collection_id, child_class_id, child_object_id),
+        )
+        if not rows:
+            raise NotFoundError(
+                f"No membership found for '{object_name}' under parent '{parent_object_name}' "
+                f"in collection '{collection.value}'."
+            )
+        if len(rows) > 1:
+            raise ValueError(
+                f"Multiple memberships found for '{object_name}' under parent '{parent_object_name}' "
+                f"in collection '{collection.value}'."
+            )
+        return rows[0][0]
 
     mapping = _resolve_membership_map(
         db,
