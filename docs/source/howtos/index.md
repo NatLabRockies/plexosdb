@@ -14,6 +14,7 @@ create_db
 add_objects
 add_properties
 add_attributes
+add_reports
 delete_objects
 query_database
 work_with_scenarios

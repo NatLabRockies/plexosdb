@@ -1,7 +1,12 @@
-# Inspecting a PLEXOS Solution
+# Inspecting a PLEXOS Solution with SQLite
 
 This guide shows how to import a PLEXOS solution ZIP file into SQLite and
 inspect its table catalog using the `show_db_tables` helper.
+
+This guide uses the SQLite-backed `PlexosSolution` imported from
+`plexosdb.solution_reader`. It is separate from the DuckDB-backed class in
+`plexosdb.db_solution`. See the
+[SQLite solution API reference](../api/solution_reader.md) for the complete API.
 
 ## Converting a solution
 
@@ -13,7 +18,7 @@ only needs the XML metadata tables and is then fast even for large solutions:
 from plexosdb.solution_reader import PlexosSolution, show_db_tables
 
 sol = PlexosSolution.from_zip("my_solution.zip")
-sol.to_sqlite("output.sqlite", if_exists="replace")
+sol.to_sqlite("output.sqlite", if_exists="replace", decode_bin_values=False)
 ```
 
 :::{note} `decode_bin_values=False` is only appropriate for catalog inspection.
@@ -67,8 +72,8 @@ Rows that do not fit within `max_rows` are replaced by three `·` rows. The
 default limit is 20; pass a different value to show more:
 
 ```python
-with client as db:
-    show_db_tables(db, max_rows=50)
+with sol as db:
+  show_db_tables(db, max_rows=50)
 ```
 
 ## Columns
