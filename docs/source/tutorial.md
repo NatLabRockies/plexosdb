@@ -32,8 +32,8 @@ from plexosdb import PlexosDB
 # Create a new in-memory database
 db = PlexosDB()
 
-# Initialize with the built-in default schema
-ok = db.create_schema()
+# Initialize with the version 10 master template
+ok = db.create_schema(version=10)
 assert ok
 
 # Option A: initialize schema + minimal defaults for object workflows
@@ -55,8 +55,8 @@ db_versioned = PlexosDB()
 db_versioned.create_schema(version=10)
 ```
 
-This creates an in-memory database with the PLEXOS schema and minimal lookup
-data so object APIs work immediately.
+This creates an in-memory database with the PLEXOS schema and versioned master
+template data so object APIs work immediately.
 
 If you call `db.create_schema()` without `seed_defaults=True`, only the table
 structure is created. For `add_object(...)` and related workflows, use

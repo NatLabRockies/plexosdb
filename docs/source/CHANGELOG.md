@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.1] - 2026-08-11
+
+### Documentation
+
+- Updated property examples to use the current `datafile_text` and `timeslice`
+  arguments.
+- Documented the current bulk property-record formats and deprecation warning
+  for the legacy nested format.
+- Expanded solution inspection guidance for the 1.6.1 release.
+
+## Current Documentation Updates
+
+- Corrected simulation phase mappings in the report how-to and tutorial.
+
 ## [1.0.0] - 2025-04-07
 
 ### 🚀 Features

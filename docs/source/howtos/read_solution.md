@@ -1,7 +1,12 @@
-# Reading a PLEXOS Solution
+# Reading a PLEXOS Solution with DuckDB
 
-Use the DuckDB-backed `PlexosSolution` API when you need to read result tables
-from a PLEXOS solution ZIP file.
+Use the DuckDB-backed `PlexosSolution` API when you need lazy DuckDB relations
+and SQL queries over result tables from a PLEXOS solution ZIP file. Import it
+from `plexosdb.db_solution`; the SQLite-backed class in
+`plexosdb.solution_reader` is a separate implementation.
+
+See the [DuckDB solution API reference](../api/db_solution.md) for the full
+method and result-type documentation.
 
 ## Converting a solution
 

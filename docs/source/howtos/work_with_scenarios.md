@@ -12,7 +12,7 @@ from plexosdb import PlexosDB
 
 # Initialize database
 db = PlexosDB()
-db.create_schema()
+db.create_schema(version=10)
 
 db.add_scenario("TestScenario")
 ```
@@ -27,7 +27,7 @@ from plexosdb.enums import ClassEnum
 
 # Initialize database
 db = PlexosDB()
-db.create_schema()
+db.create_schema(version=10)
 
 # Create a generator
 db.add_object(ClassEnum.Generator, "Generator1")

@@ -13,7 +13,7 @@ def clean_international_text(text: str) -> str:
 from plexosdb import PlexosDB
 from plexosdb.enums import ClassEnum, CollectionEnum
 db = PlexosDB()
-db.create_schema()
+db.create_schema(version=10)
 
 original_name="Pälli")
 db.add_object(ClassEnum.Generator, original_name)

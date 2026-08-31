@@ -15,7 +15,7 @@ from plexosdb.enums import ClassEnum
 
 # Initialize database
 db = PlexosDB()
-db.create_schema()
+db.create_schema(version=10)
 
 # Add a simple test generator object
 db.add_object(

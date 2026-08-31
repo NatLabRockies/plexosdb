@@ -13,7 +13,7 @@ from plexosdb.enums import ClassEnum, CollectionEnum
 
 # Initialize database
 db = PlexosDB()
-db.create_schema()
+db.create_schema(version=10)
 
 # Create parent and child objects
 db.add_object(ClassEnum.Region, "Region1")
