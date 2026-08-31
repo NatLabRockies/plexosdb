@@ -80,6 +80,12 @@ fields narrow the matching property row. For relationship properties, use
 `parent_object_name` with `parent_class` to select the property belonging to a
 specific parent object.
 
+Each bulk selector updates every matching data record. For a multi-band
+property, omitting `band` updates all bands; provide `band` when only one band
+should change. This differs from `update_property`, which requires its selectors
+to identify exactly one data record and raises an error when multiple records
+match.
+
 ```python
 updates = [
     {

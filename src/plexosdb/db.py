@@ -4321,7 +4321,14 @@ class PlexosDB:
         return True
 
     def update_properties(self, updates: list[dict[str, Any]]) -> None:
-        """Update multiple properties in a single transaction."""
+        """Update multiple matching property data records in one transaction.
+
+        Each update mapping uses the selectors accepted by :meth:`update_property`.
+        Unlike :meth:`update_property`, a bulk selector may match multiple data
+        records; every matching record is updated. In particular, omitting
+        ``band`` updates all bands for the selected object, property, scenario,
+        and membership. Include ``band`` when only one band should be changed.
+        """
         if not updates:
             return
 
@@ -4459,47 +4466,58 @@ class PlexosDB:
         if not explicit_updates:
             return {}
 
-        parent_names = tuple({update["parent_object_name"] for update in explicit_updates})
-        child_names = tuple({update["object_name"] for update in explicit_updates})
-        parent_placeholders = ", ".join("?" for _ in parent_names)
-        child_placeholders = ", ".join("?" for _ in child_names)
-        rows = self._db.fetchall(
-            f"""
-            SELECT membership.membership_id, parent_object.name, child_object.name
-            FROM t_membership AS membership
-            JOIN t_object AS parent_object ON parent_object.object_id = membership.parent_object_id
-            JOIN t_object AS child_object ON child_object.object_id = membership.child_object_id
-            WHERE membership.parent_class_id = ?
-              AND membership.child_class_id = ?
-              AND membership.collection_id = ?
-              AND parent_object.name IN ({parent_placeholders})
-              AND child_object.name IN ({child_placeholders})
-            """,
-            (
-                self.get_class_id(parent_class),
-                self.get_class_id(object_class),
-                self.get_collection_id(
-                    collection,
-                    parent_class_enum=parent_class,
-                    child_class_enum=object_class,
-                ),
-                *parent_names,
-                *child_names,
-            ),
+        parent_class_id = self.get_class_id(parent_class)
+        child_class_id = self.get_class_id(object_class)
+        collection_id = self.get_collection_id(
+            collection,
+            parent_class_enum=parent_class,
+            child_class_enum=object_class,
         )
-        return {(parent_name, child_name): membership_id for membership_id, parent_name, child_name in rows}
+        membership_map: dict[tuple[str, str], int] = {}
+        # Keep the two name lists together below SQLite's 999-variable limit.
+        for update_batch in batched(explicit_updates, 450):
+            parent_names = tuple({update["parent_object_name"] for update in update_batch})
+            child_names = tuple({update["object_name"] for update in update_batch})
+            parent_placeholders = ", ".join("?" for _ in parent_names)
+            child_placeholders = ", ".join("?" for _ in child_names)
+            rows = self._db.fetchall(
+                f"""
+                SELECT membership.membership_id, parent_object.name, child_object.name
+                FROM t_membership AS membership
+                JOIN t_object AS parent_object ON parent_object.object_id = membership.parent_object_id
+                JOIN t_object AS child_object ON child_object.object_id = membership.child_object_id
+                WHERE membership.parent_class_id = ?
+                  AND membership.child_class_id = ?
+                  AND membership.collection_id = ?
+                  AND parent_object.name IN ({parent_placeholders})
+                  AND child_object.name IN ({child_placeholders})
+                """,
+                (
+                    parent_class_id,
+                    child_class_id,
+                    collection_id,
+                    *parent_names,
+                    *child_names,
+                ),
+            )
+            membership_map.update(
+                {(parent_name, child_name): membership_id for membership_id, parent_name, child_name in rows}
+            )
+        return membership_map
 
     def _resolve_scenario_ids(self, group: list[dict[str, Any]], scenario_class_id: int) -> dict[str, int]:
         """Resolve scenario names in an update group to object IDs."""
         scenario_names = tuple({update["scenario"] for update in group if update.get("scenario") is not None})
         if not scenario_names:
             return {}
-        placeholders = ", ".join("?" for _ in scenario_names)
-        rows = self._db.fetchall(
-            f"SELECT object_id, name FROM t_object WHERE class_id = ? AND name IN ({placeholders})",
-            (scenario_class_id, *scenario_names),
-        )
-        scenario_ids = {name: scenario_id for scenario_id, name in rows}
+        scenario_ids: dict[str, int] = {}
+        for scenario_batch in batched(scenario_names, 900):
+            placeholders = ", ".join("?" for _ in scenario_batch)
+            rows = self._db.fetchall(
+                f"SELECT object_id, name FROM t_object WHERE class_id = ? AND name IN ({placeholders})",
+                (scenario_class_id, *scenario_batch),
+            )
+            scenario_ids.update({name: scenario_id for scenario_id, name in rows})
         missing_scenarios = [name for name in scenario_names if name not in scenario_ids]
         if missing_scenarios:
             raise NotFoundError(f"Scenario {missing_scenarios[0]!r} does not exist.")
@@ -4617,7 +4635,7 @@ class PlexosDB:
         *,
         object_class: ClassEnum,
         scenario: str | None = None,
-        band: str | None = None,
+        band: str | int | None = None,
         collection: CollectionEnum | None = None,
         parent_class: ClassEnum | None = None,
         parent_object_name: str | None = None,
@@ -4637,8 +4655,10 @@ class PlexosDB:
         scenario : str | None, optional
             Scenario used to select the property data record. If omitted, only
             an unscoped property record is considered.
-        band : str | None, optional
-            Band used to select the property data record.
+        band : str | int | None, optional
+            Band number used to select the property data record. Strings and
+            integers are accepted. If omitted, the selector must match exactly
+            one data record or ``ValueError`` is raised.
         collection : CollectionEnum | None, optional
             Property collection. Defaults to the collection for ``object_class``.
         parent_class : ClassEnum | None, optional
