@@ -13,6 +13,9 @@ behavior.
 :maxdepth: 2
 
 plexosdb
+checks
+db_solution
+solution_reader
 model_attributes
 production_attributes
 performance_attributes

@@ -65,63 +65,23 @@ else:
     print("Export failed")
 ```
 
-## Importing from CSV
+## CSV and database backups
 
-Import data from CSV files:
+The `import_from_csv()`, `to_csv()`, and `backup_database()` methods are part of
+the declared API but currently raise `NotImplementedError`. Use XML import and
+export for supported file-based workflows.
 
-```python
-# Import specific tables from CSV files
-db.import_from_csv(
-    "/path/to/csv_directory",
-    tables=["t_object", "t_data", "t_property"]
-)
-```
-
-## Exporting to CSV
-
-Export database tables to CSV files:
-
-```python
-# Export all tables to CSV
-db.to_csv("/path/to/output_directory")
-
-# Export specific tables
-db.to_csv(
-    "/path/to/output_directory",
-    tables=["t_object", "t_data", "t_property"]
-)
-```
-
-## Database Backup
-
-Create a backup of your in-memory database:
-
-```python
-# Backup the database to a file
-db.backup_database("/path/to/backup.db")
-```
-
-## Creating and Optimizing Databases
+## Creating databases
 
 ```python
 # Create an empty database
 db = PlexosDB()
-db.create_schema()
+db.create_schema(version=10)
 
-# After making many changes, optimize the database
-db._db.optimize()
-```
-
-## Converting Between Formats
-
-Converting from XML to CSV:
-
-```python
-# Import from XML then export to CSV
-db = PlexosDB.from_xml("/path/to/model.xml")
-db.to_csv("/path/to/csv_output")
 ```
 
 ```{warning}
-When working with large files, ensure you have sufficient memory and disk space for the operations.
+When working with large XML files, ensure you have sufficient memory and disk
+space for the operations. CSV conversion and database backup are not currently
+implemented.
 ```

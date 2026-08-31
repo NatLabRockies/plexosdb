@@ -134,7 +134,7 @@ This software is released under a BSD-3-Clause
 [License](https://github.com/NatLabRockies/plexosdb/blob/main/LICENSE.txt).
 
 This software was developed under software record SWR-24-90 at the National
-Renewable Energy Laboratory ([NREL](https://www.nrel.gov)).
+Laboratory of the Rockies (NLR).
 
 ## Disclaimer
 

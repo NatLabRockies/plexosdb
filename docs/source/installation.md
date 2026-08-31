@@ -23,7 +23,7 @@ pip install plexosdb==1.2.3
 To install the latest development version directly from GitHub:
 
 ```bash
-pip install git+https://github.com/NREL/plexosdb.git
+pip install git+https://github.com/NatLabRockies/plexosdb.git
 ```
 
 ## Using uv

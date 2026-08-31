@@ -18,7 +18,7 @@ from plexosdb.enums import ClassEnum, CollectionEnum
 
 # Initialize the database
 db = PlexosDB()
-db.create_schema()
+db.create_schema(version=10)
 
 # Create the objects first
 db.add_object(ClassEnum.Generator, "Generator1")
@@ -134,7 +134,7 @@ from plexosdb.utils import create_membership_record
 
 # Initialize the database
 db = PlexosDB()
-db.create_schema()
+db.create_schema(version=10)
 
 # Create parent and child objects
 region_id = db.add_object(ClassEnum.Region, "MainRegion")
