@@ -75,8 +75,10 @@ Key performance features:
 Use `update_properties` to update several existing property values in one
 transaction. Each update record uses the same selectors as `update_property`:
 `object_name`, `property_name`, `new_value`, and `object_class`. The optional
-`scenario`, `band`, `collection`, and `parent_class` fields narrow the matching
-property row.
+`scenario`, `band`, `collection`, `parent_class`, and `parent_object_name`
+fields narrow the matching property row. For relationship properties, use
+`parent_object_name` with `parent_class` to select the property belonging to a
+specific parent object.
 
 ```python
 updates = [
