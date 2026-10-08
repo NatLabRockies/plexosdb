@@ -3,16 +3,22 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from contextlib import closing
+from functools import cache
+from importlib.resources import files
+import sqlite3
+from string import Template
 from typing import TYPE_CHECKING
 
 from loguru import logger
 
 from .enums import ClassEnum, CollectionEnum, Schema
-from .exceptions import NotFoundError
-from .utils import normalize_names
+from .exceptions import DatabaseValidationCategory, DatabaseValidationFinding, NotFoundError
+from .utils import get_sql_query, no_space, normalize_names
 
 if TYPE_CHECKING:
     from .db import PlexosDB
+    from .db_manager import SQLiteManager
 
 MEMBERSHIP_FROM_RECORD_FIELDS = {
     "parent_object_id",
@@ -21,6 +27,13 @@ MEMBERSHIP_FROM_RECORD_FIELDS = {
     "child_class_id",
     "parent_class_id",
 }
+
+SQLITE_INTEGRITY_QUERY = get_sql_query("database_validation_integrity.sql")
+FOREIGN_KEY_CHECK_QUERY = get_sql_query("database_validation_foreign_keys.sql")
+TABLE_NAMES_QUERY = get_sql_query("database_validation_table_names.sql")
+TABLE_INFO_QUERY = Template(get_sql_query("database_validation_table_info.sql"))
+RELATIONSHIP_FINDINGS_QUERY = get_sql_query("database_validation_relationships.sql")
+REPAIR_MEMBERSHIP_CLASS_IDS_SCRIPT = get_sql_query("database_validation_repair_memberships.sql")
 
 
 def check_memberships_from_records(memberships: list[dict[str, int]]) -> bool:
@@ -497,6 +510,111 @@ def check_scenario_exists(db: PlexosDB, name: str) -> bool:
     query = f"SELECT 1 FROM {Schema.Objects.name} WHERE name = ? AND class_id = ?"
     class_id = db.get_class_id(ClassEnum.Scenario)
     return bool(db._db.query(query, (name, class_id)))
+
+
+@cache
+def get_default_schema_columns() -> tuple[tuple[str, frozenset[str]], ...]:
+    """Return table columns introspected from the packaged PLEXOS schema."""
+    schema_sql = files("plexosdb").joinpath("schema.sql").read_text(encoding="utf-8-sig")
+    with closing(sqlite3.connect(":memory:")) as schema_db:
+        schema_db.create_collation("NOSPACE", no_space)
+        schema_db.executescript(schema_sql)
+        table_names = [
+            row[0] for row in schema_db.execute(TABLE_NAMES_QUERY) if not row[0].startswith("sqlite_")
+        ]
+        return tuple(
+            (
+                table,
+                frozenset(row[1] for row in schema_db.execute(TABLE_INFO_QUERY.substitute(table=table))),
+            )
+            for table in table_names
+        )
+
+
+def find_database_schema_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
+    """Compare database tables and columns with the packaged PLEXOS schema."""
+    available_tables = set(db.tables)
+    findings: list[DatabaseValidationFinding] = []
+    for table, expected_columns in get_default_schema_columns():
+        if table not in available_tables:
+            findings.append(
+                DatabaseValidationFinding(
+                    category=DatabaseValidationCategory.SCHEMA,
+                    message=f"Required table {table!r} is missing.",
+                )
+            )
+            continue
+
+        available_columns = {row[1] for row in db.query(TABLE_INFO_QUERY.substitute(table=table))}
+        missing_columns = sorted(expected_columns.difference(available_columns))
+        for column in missing_columns:
+            findings.append(
+                DatabaseValidationFinding(
+                    category=DatabaseValidationCategory.SCHEMA,
+                    message=f"Required column '{table}.{column}' is missing.",
+                )
+            )
+    return findings
+
+
+def find_database_validation_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
+    """Collect database integrity and cross-table consistency findings."""
+    findings = find_sqlite_integrity_issues(db)
+    schema_findings = find_database_schema_issues(db)
+    findings.extend(schema_findings)
+    if schema_findings:
+        return findings
+
+    findings.extend(find_foreign_key_issues(db))
+    findings.extend(find_database_relationship_issues(db))
+    return findings
+
+
+def find_sqlite_integrity_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
+    """Return SQLite integrity-check messages other than ``ok``."""
+    return [
+        DatabaseValidationFinding(
+            category=DatabaseValidationCategory.SQLITE,
+            message=str(message),
+        )
+        for (message,) in db.query(SQLITE_INTEGRITY_QUERY)
+        if message != "ok"
+    ]
+
+
+def find_foreign_key_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
+    """Return foreign-key violations reported by SQLite."""
+    return [
+        DatabaseValidationFinding(
+            category=DatabaseValidationCategory.FOREIGN_KEYS,
+            message=f"{table} rowid={rowid} violates foreign key {foreign_key_id} to {parent_table}.",
+        )
+        for table, rowid, parent_table, foreign_key_id in db.query(FOREIGN_KEY_CHECK_QUERY)
+    ]
+
+
+def find_database_relationship_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
+    """Return model relationship and integer-attribute findings from shared SQL."""
+    findings: list[DatabaseValidationFinding] = []
+    for category_value, message, object_id, attribute_id, value in db.iter_query(RELATIONSHIP_FINDINGS_QUERY):
+        category = DatabaseValidationCategory(category_value)
+        if category is DatabaseValidationCategory.TYPES:
+            if isinstance(value, int) or (isinstance(value, float) and value.is_integer()):
+                continue
+            message = (
+                f"t_attribute_data for object_id={object_id} and attribute_id={attribute_id} "
+                f"has non-integer value {value!r}."
+            )
+        elif not isinstance(message, str):
+            raise TypeError(f"Validation SQL returned no message for category {category.value!r}.")
+        findings.append(DatabaseValidationFinding(category=category, message=message))
+    return findings
+
+
+def repair_safe_membership_class_ids(db: SQLiteManager, /) -> None:
+    """Repair membership class IDs when the object and collection agree."""
+    if not db.executescript(REPAIR_MEMBERSHIP_CLASS_IDS_SCRIPT):
+        raise RuntimeError("Safe membership class repairs did not complete.")
 
 
 def _check_attribute_exists_method(

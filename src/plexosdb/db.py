@@ -25,6 +25,8 @@ from .enums import (
     parse_collection_enum,
 )
 from .exceptions import (
+    DatabaseValidationCategory,
+    DatabaseValidationError,
     NameError,
     NoPropertiesError,
     NotFoundError,
@@ -4799,9 +4801,53 @@ class PlexosDB:
         """Update text data for a property data record."""
         raise NotImplementedError  # pragma: no cover
 
-    def validate_database(self, /, *, fix_issues: bool = False) -> dict[str, list[str]]:
-        """Validate database integrity and consistency."""
-        raise NotImplementedError  # pragma: no cover
+    def validate_database(self, /, *, fix_issues: bool = False) -> bool:
+        """Validate the packaged PLEXOS schema and database relationships.
+
+        Checks that required tables and columns exist, SQLite integrity and
+        foreign keys are valid, classes are consistent across objects,
+        memberships, attributes, and properties, and integer-valued attributes
+        marked with ``is_integer``. By default, validation does not modify the
+        database. Findings are ``DatabaseValidationFinding`` instances with a
+        ``DatabaseValidationCategory`` and a message.
+
+        Parameters
+        ----------
+        fix_issues : bool, optional
+            If True, repair membership class IDs only when the referenced object
+            and collection agree, and only when membership findings are the sole
+            findings. Repairs are committed only if validation then passes.
+            Otherwise, changes are rolled back and findings are raised.
+
+        Returns
+        -------
+        bool
+            True when the database passes all supported checks.
+
+        Raises
+        ------
+        DatabaseValidationError
+            If one or more checks fail. The exception's ``findings`` attribute
+            contains typed validation findings.
+        TypeError
+            If ``fix_issues`` is not a bool.
+        """
+        if not isinstance(fix_issues, bool):
+            raise TypeError("fix_issues must be a bool.")
+
+        findings = checks_module.find_database_validation_issues(self._db)
+        if not findings:
+            return True
+        if not fix_issues or {finding.category for finding in findings} != {
+            DatabaseValidationCategory.MEMBERSHIPS
+        }:
+            raise DatabaseValidationError(findings)
+
+        with self._db.transaction():
+            checks_module.repair_safe_membership_class_ids(self._db)
+            if checks_module.find_database_validation_issues(self._db):
+                raise DatabaseValidationError(findings)
+        return True
 
     def _validate_and_filter_objects(
         self, object_names: str | Iterable[str], class_enum: ClassEnum

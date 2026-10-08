@@ -17,6 +17,7 @@ from .db_solution_models import (
     TableInfo,
 )
 from .enums import ClassEnum, CollectionEnum, PeriodEnum, PhaseEnum, TableTypeEnum
+from .exceptions import DatabaseValidationCategory, DatabaseValidationError, DatabaseValidationFinding
 from .xml_handler import XMLHandler
 
 __version__ = version("plexosdb")
@@ -26,6 +27,9 @@ logger.disable("r2x_core")
 __all__ = (
     "ClassEnum",
     "CollectionEnum",
+    "DatabaseValidationCategory",
+    "DatabaseValidationError",
+    "DatabaseValidationFinding",
     "DuckDBResult",
     "DuckDBSchema",
     "DuckDBSolutionInfo",
