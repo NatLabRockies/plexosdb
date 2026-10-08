@@ -13,6 +13,20 @@ class ModelError(Exception):
     """Raised for generic errors related to model relationships."""
 
 
+class DatabaseValidationError(ModelError):
+    """Raised when database validation finds integrity or consistency issues."""
+
+    def __init__(self, findings: dict[str, list[str]]) -> None:
+        """Create an error carrying findings grouped by validation category."""
+        self.findings = {category: list(messages) for category, messages in findings.items()}
+        details = "\n".join(
+            f"- [{category}] {message}"
+            for category, messages in self.findings.items()
+            for message in messages
+        )
+        super().__init__(f"Database validation failed:\n{details}")
+
+
 class MultipleFilesError(Exception):
     """Raised when multiple files are provided but only one is expected."""
 
