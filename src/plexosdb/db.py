@@ -25,6 +25,7 @@ from .enums import (
     parse_collection_enum,
 )
 from .exceptions import (
+    DatabaseValidationCategory,
     DatabaseValidationError,
     NameError,
     NoPropertiesError,
@@ -4801,22 +4802,22 @@ class PlexosDB:
         raise NotImplementedError  # pragma: no cover
 
     def validate_database(self, /, *, fix_issues: bool = False) -> bool:
-        """Validate SQLite integrity and PLEXOS table relationships.
+        """Validate the packaged PLEXOS schema and database relationships.
 
         Checks that required tables and columns exist, SQLite integrity and
         foreign keys are valid, classes are consistent across objects,
         memberships, attributes, and properties, and integer-valued attributes
         marked with ``is_integer``. By default, validation does not modify the
-        database. Findings are grouped under ``sqlite``, ``foreign_keys``,
-        ``schema``, ``objects``, ``memberships``, ``attributes``, ``properties``,
-        and ``types``.
+        database. Findings are ``DatabaseValidationFinding`` instances with a
+        ``DatabaseValidationCategory`` and a message.
 
         Parameters
         ----------
         fix_issues : bool, optional
             If True, repair membership class IDs only when the referenced object
-            and collection agree. Repairs are committed only if validation then
-            passes. Otherwise, the changes are rolled back and findings are raised.
+            and collection agree, and only when membership findings are the sole
+            findings. Repairs are committed only if validation then passes.
+            Otherwise, changes are rolled back and findings are raised.
 
         Returns
         -------
@@ -4827,7 +4828,7 @@ class PlexosDB:
         ------
         DatabaseValidationError
             If one or more checks fail. The exception's ``findings`` attribute
-            contains messages grouped by category.
+            contains typed validation findings.
         TypeError
             If ``fix_issues`` is not a bool.
         """
@@ -4837,7 +4838,9 @@ class PlexosDB:
         findings = checks_module.find_database_validation_issues(self._db)
         if not findings:
             return True
-        if not fix_issues or set(findings) != {"memberships"}:
+        if not fix_issues or {finding.category for finding in findings} != {
+            DatabaseValidationCategory.MEMBERSHIPS
+        }:
             raise DatabaseValidationError(findings)
 
         with self._db.transaction():

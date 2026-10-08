@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from plexosdb import ClassEnum, DatabaseValidationError, PlexosDB
+from plexosdb import ClassEnum, DatabaseValidationCategory, DatabaseValidationError, PlexosDB
 
 
 @pytest.fixture
@@ -51,10 +51,14 @@ def test_validate_database_raises_with_foreign_key_findings(
     with pytest.raises(DatabaseValidationError) as exc_info:
         db.validate_database()
 
-    messages = exc_info.value.findings["foreign_keys"]
-    assert len(messages) == 1
-    assert "t_data rowid=1" in messages[0]
-    assert "t_membership" in messages[0]
+    findings = [
+        finding
+        for finding in exc_info.value.findings
+        if finding.category is DatabaseValidationCategory.FOREIGN_KEYS
+    ]
+    assert len(findings) == 1
+    assert "t_data rowid=1" in findings[0].message
+    assert "t_membership" in findings[0].message
     assert "t_data rowid=1" in str(exc_info.value)
 
 
@@ -75,12 +79,38 @@ def test_validate_database_raises_with_model_consistency_findings(
         db.validate_database()
 
     findings = exc_info.value.findings
-    assert set(findings) == {"objects", "memberships", "attributes", "properties", "types"}
-    assert any("object_id=2" in message for message in findings["objects"])
-    assert any("membership_id=1" in message for message in findings["memberships"])
-    assert any("object_id=2" in message for message in findings["attributes"])
-    assert any("data_id=1" in message for message in findings["properties"])
-    assert any("non-integer value 1.5" in message for message in findings["types"])
+    assert {finding.category for finding in findings} == {
+        DatabaseValidationCategory.OBJECTS,
+        DatabaseValidationCategory.MEMBERSHIPS,
+        DatabaseValidationCategory.ATTRIBUTES,
+        DatabaseValidationCategory.PROPERTIES,
+        DatabaseValidationCategory.TYPES,
+    }
+    assert any(
+        "object_id=2" in finding.message
+        for finding in findings
+        if finding.category is DatabaseValidationCategory.OBJECTS
+    )
+    assert any(
+        "membership_id=1" in finding.message
+        for finding in findings
+        if finding.category is DatabaseValidationCategory.MEMBERSHIPS
+    )
+    assert any(
+        "object_id=2" in finding.message
+        for finding in findings
+        if finding.category is DatabaseValidationCategory.ATTRIBUTES
+    )
+    assert any(
+        "data_id=1" in finding.message
+        for finding in findings
+        if finding.category is DatabaseValidationCategory.PROPERTIES
+    )
+    assert any(
+        "non-integer value 1.5" in finding.message
+        for finding in findings
+        if finding.category is DatabaseValidationCategory.TYPES
+    )
 
 
 @pytest.mark.parametrize(
@@ -97,7 +127,11 @@ def test_validate_database_reports_missing_membership_relations(
     with pytest.raises(DatabaseValidationError) as exc_info:
         db.validate_database()
 
-    assert any(f"missing required {field}" in message for message in exc_info.value.findings["memberships"])
+    assert any(
+        finding.category is DatabaseValidationCategory.MEMBERSHIPS
+        and f"missing required {field}" in finding.message
+        for finding in exc_info.value.findings
+    )
 
 
 @pytest.mark.parametrize("field", ("membership_id", "property_id"))
@@ -111,29 +145,42 @@ def test_validate_database_reports_missing_property_relations(
     with pytest.raises(DatabaseValidationError) as exc_info:
         db.validate_database()
 
-    assert any(f"missing required {field}" in message for message in exc_info.value.findings["properties"])
+    assert any(
+        finding.category is DatabaseValidationCategory.PROPERTIES
+        and f"missing required {field}" in finding.message
+        for finding in exc_info.value.findings
+    )
 
 
 @pytest.mark.parametrize(
     ("statement", "category"),
     (
-        ("UPDATE t_object SET class_id = NULL WHERE object_id = 2", "objects"),
-        ("UPDATE t_attribute SET class_id = NULL WHERE attribute_id = 1", "attributes"),
-        ("UPDATE t_collection SET child_class_id = NULL WHERE collection_id = 1", "memberships"),
-        ("UPDATE t_property SET collection_id = NULL WHERE property_id = 1", "properties"),
+        ("UPDATE t_object SET class_id = NULL WHERE object_id = 2", DatabaseValidationCategory.OBJECTS),
+        (
+            "UPDATE t_attribute SET class_id = NULL WHERE attribute_id = 1",
+            DatabaseValidationCategory.ATTRIBUTES,
+        ),
+        (
+            "UPDATE t_collection SET child_class_id = NULL WHERE collection_id = 1",
+            DatabaseValidationCategory.MEMBERSHIPS,
+        ),
+        (
+            "UPDATE t_property SET collection_id = NULL WHERE property_id = 1",
+            DatabaseValidationCategory.PROPERTIES,
+        ),
     ),
 )
 def test_validate_database_reports_missing_related_class_metadata(
     db_with_validation_records: PlexosDB,
     statement: str,
-    category: str,
+    category: DatabaseValidationCategory,
 ) -> None:
     db_with_validation_records._db.execute(statement)
 
     with pytest.raises(DatabaseValidationError) as exc_info:
         db_with_validation_records.validate_database()
 
-    assert category in exc_info.value.findings
+    assert any(finding.category is category for finding in exc_info.value.findings)
 
 
 def test_validate_database_reports_missing_required_column() -> None:
@@ -157,15 +204,22 @@ def test_validate_database_reports_missing_required_column() -> None:
     finally:
         db._db.close()
 
-    assert "Required column 't_attribute.is_integer' is missing." in exc_info.value.findings["schema"]
+    assert any(
+        finding.category is DatabaseValidationCategory.SCHEMA
+        and "Required column 't_attribute.is_integer' is missing." in finding.message
+        for finding in exc_info.value.findings
+    )
 
 
 def test_validate_database_reports_missing_schema_tables(db_instance: PlexosDB) -> None:
     with pytest.raises(DatabaseValidationError) as exc_info:
         db_instance.validate_database()
 
-    assert "schema" in exc_info.value.findings
-    assert "Required table 't_class' is missing." in exc_info.value.findings["schema"]
+    assert any(
+        finding.category is DatabaseValidationCategory.SCHEMA
+        and "Required table 't_class' is missing." in finding.message
+        for finding in exc_info.value.findings
+    )
 
 
 @pytest.mark.parametrize(
@@ -199,7 +253,9 @@ def test_validate_database_rolls_back_unsafe_partial_repairs(
     with pytest.raises(DatabaseValidationError) as exc_info:
         db.validate_database(fix_issues=True)
 
-    assert "memberships" in exc_info.value.findings
+    assert any(
+        finding.category is DatabaseValidationCategory.MEMBERSHIPS for finding in exc_info.value.findings
+    )
     membership_classes = db.query(
         "SELECT parent_class_id, child_class_id FROM t_membership WHERE membership_id = 1"
     )[0]
@@ -216,7 +272,10 @@ def test_validate_database_does_not_repair_memberships_with_other_findings(
     with pytest.raises(DatabaseValidationError) as exc_info:
         db.validate_database(fix_issues=True)
 
-    assert {"memberships", "properties"}.issubset(exc_info.value.findings)
+    assert {finding.category for finding in exc_info.value.findings} >= {
+        DatabaseValidationCategory.MEMBERSHIPS,
+        DatabaseValidationCategory.PROPERTIES,
+    }
     assert db.query("SELECT child_class_id FROM t_membership WHERE membership_id = 1")[0][0] == 3
 
 

@@ -3,26 +3,37 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from contextlib import closing
+from functools import cache
+from importlib.resources import files
+import sqlite3
+from string import Template
 from typing import TYPE_CHECKING
 
 from loguru import logger
 
 from .enums import ClassEnum, CollectionEnum, Schema
-from .exceptions import NotFoundError
-from .utils import normalize_names
+from .exceptions import DatabaseValidationCategory, DatabaseValidationFinding, NotFoundError
+from .utils import get_sql_query, no_space, normalize_names
 
 if TYPE_CHECKING:
     from .db import PlexosDB
     from .db_manager import SQLiteManager
 
-MEMBERSHIP_VALIDATION_FIELDS = (
-    "parent_class_id",
+MEMBERSHIP_FROM_RECORD_FIELDS = {
     "parent_object_id",
+    "child_object_id",
     "collection_id",
     "child_class_id",
-    "child_object_id",
-)
-MEMBERSHIP_FROM_RECORD_FIELDS = set(MEMBERSHIP_VALIDATION_FIELDS)
+    "parent_class_id",
+}
+
+SQLITE_INTEGRITY_QUERY = get_sql_query("database_validation_integrity.sql")
+FOREIGN_KEY_CHECK_QUERY = get_sql_query("database_validation_foreign_keys.sql")
+TABLE_NAMES_QUERY = get_sql_query("database_validation_table_names.sql")
+TABLE_INFO_QUERY = Template(get_sql_query("database_validation_table_info.sql"))
+RELATIONSHIP_FINDINGS_QUERY = get_sql_query("database_validation_relationships.sql")
+REPAIR_MEMBERSHIP_CLASS_IDS_SCRIPT = get_sql_query("database_validation_repair_memberships.sql")
 
 
 def check_memberships_from_records(memberships: list[dict[str, int]]) -> bool:
@@ -501,257 +512,109 @@ def check_scenario_exists(db: PlexosDB, name: str) -> bool:
     return bool(db._db.query(query, (name, class_id)))
 
 
-DATABASE_VALIDATION_COLUMNS = {
-    "t_attribute": ("attribute_id", "class_id", "is_integer"),
-    "t_attribute_data": ("object_id", "attribute_id", "value"),
-    "t_category": ("category_id", "class_id"),
-    "t_class": ("class_id",),
-    "t_collection": ("collection_id", "parent_class_id", "child_class_id"),
-    "t_data": ("data_id", "membership_id", "property_id"),
-    "t_membership": ("membership_id", *MEMBERSHIP_VALIDATION_FIELDS),
-    "t_object": ("object_id", "class_id", "category_id"),
-    "t_property": ("property_id", "collection_id"),
-}
+@cache
+def get_default_schema_columns() -> tuple[tuple[str, frozenset[str]], ...]:
+    """Return table columns introspected from the packaged PLEXOS schema."""
+    schema_sql = files("plexosdb").joinpath("schema.sql").read_text(encoding="utf-8-sig")
+    with closing(sqlite3.connect(":memory:")) as schema_db:
+        schema_db.create_collation("NOSPACE", no_space)
+        schema_db.executescript(schema_sql)
+        table_names = [
+            row[0] for row in schema_db.execute(TABLE_NAMES_QUERY) if not row[0].startswith("sqlite_")
+        ]
+        return tuple(
+            (
+                table,
+                frozenset(row[1] for row in schema_db.execute(TABLE_INFO_QUERY.substitute(table=table))),
+            )
+            for table in table_names
+        )
 
 
-def find_database_validation_issues(db: SQLiteManager, /) -> dict[str, list[str]]:
-    """Collect database integrity and cross-table consistency findings."""
-    findings: dict[str, list[str]] = {}
-    integrity_issues = find_sqlite_integrity_issues(db)
-    if integrity_issues:
-        findings["sqlite"] = integrity_issues
-
+def find_database_schema_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
+    """Compare database tables and columns with the packaged PLEXOS schema."""
     available_tables = set(db.tables)
-    schema_issues = [
-        f"Required table {table!r} is missing."
-        for table in sorted(set(DATABASE_VALIDATION_COLUMNS).difference(available_tables))
-    ]
-    for table in sorted(set(DATABASE_VALIDATION_COLUMNS).intersection(available_tables)):
-        available_columns = {row[1] for row in db.query(f"PRAGMA table_info('{table}')")}
-        missing_columns = sorted(set(DATABASE_VALIDATION_COLUMNS[table]).difference(available_columns))
-        schema_issues.extend(f"Required column '{table}.{column}' is missing." for column in missing_columns)
-    if schema_issues:
-        findings["schema"] = schema_issues
-        return findings
+    findings: list[DatabaseValidationFinding] = []
+    for table, expected_columns in get_default_schema_columns():
+        if table not in available_tables:
+            findings.append(
+                DatabaseValidationFinding(
+                    category=DatabaseValidationCategory.SCHEMA,
+                    message=f"Required table {table!r} is missing.",
+                )
+            )
+            continue
 
-    checks = (
-        ("foreign_keys", find_foreign_key_issues(db)),
-        ("objects", find_object_relationship_issues(db)),
-        ("memberships", find_membership_relationship_issues(db)),
-        ("attributes", find_attribute_relationship_issues(db)),
-        ("properties", find_property_relationship_issues(db)),
-        ("types", find_integer_attribute_issues(db)),
-    )
-    for category, messages in checks:
-        if messages:
-            findings[category] = messages
+        available_columns = {row[1] for row in db.query(TABLE_INFO_QUERY.substitute(table=table))}
+        missing_columns = sorted(expected_columns.difference(available_columns))
+        for column in missing_columns:
+            findings.append(
+                DatabaseValidationFinding(
+                    category=DatabaseValidationCategory.SCHEMA,
+                    message=f"Required column '{table}.{column}' is missing.",
+                )
+            )
     return findings
 
 
-def find_sqlite_integrity_issues(db: SQLiteManager, /) -> list[str]:
+def find_database_validation_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
+    """Collect database integrity and cross-table consistency findings."""
+    findings = find_sqlite_integrity_issues(db)
+    schema_findings = find_database_schema_issues(db)
+    findings.extend(schema_findings)
+    if schema_findings:
+        return findings
+
+    findings.extend(find_foreign_key_issues(db))
+    findings.extend(find_database_relationship_issues(db))
+    return findings
+
+
+def find_sqlite_integrity_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
     """Return SQLite integrity-check messages other than ``ok``."""
-    return [str(message) for (message,) in db.query("PRAGMA integrity_check") if message != "ok"]
+    return [
+        DatabaseValidationFinding(
+            category=DatabaseValidationCategory.SQLITE,
+            message=str(message),
+        )
+        for (message,) in db.query(SQLITE_INTEGRITY_QUERY)
+        if message != "ok"
+    ]
 
 
-def find_foreign_key_issues(db: SQLiteManager, /) -> list[str]:
+def find_foreign_key_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
     """Return foreign-key violations reported by SQLite."""
     return [
-        f"{table} rowid={rowid} violates foreign key {foreign_key_id} to {parent_table}."
-        for table, rowid, parent_table, foreign_key_id in db.query("PRAGMA foreign_key_check")
+        DatabaseValidationFinding(
+            category=DatabaseValidationCategory.FOREIGN_KEYS,
+            message=f"{table} rowid={rowid} violates foreign key {foreign_key_id} to {parent_table}.",
+        )
+        for table, rowid, parent_table, foreign_key_id in db.query(FOREIGN_KEY_CHECK_QUERY)
     ]
 
 
-def find_object_relationship_issues(db: SQLiteManager, /) -> list[str]:
-    """Return objects without a class or with a category from a different class."""
-    issues = [
-        f"t_object.object_id={object_id} is missing required class_id."
-        for (object_id,) in db.iter_query("SELECT object_id FROM t_object WHERE class_id IS NULL")
-    ]
-    query = """
-        SELECT obj.object_id, obj.class_id, obj.category_id, category.class_id
-        FROM t_object AS obj
-        JOIN t_category AS category ON category.category_id = obj.category_id
-        WHERE obj.class_id IS NOT NULL
-          AND obj.class_id != category.class_id
-    """
-    issues.extend(
-        f"t_object.object_id={object_id} has class_id={object_class_id}, but "
-        f"category_id={category_id} belongs to class_id={category_class_id}."
-        for object_id, object_class_id, category_id, category_class_id in db.iter_query(query)
-    )
-    return issues
-
-
-def find_membership_relationship_issues(db: SQLiteManager, /) -> list[str]:
-    """Return missing membership references and class mismatches."""
-    issues: list[str] = []
-    missing_fields_query = """
-        SELECT membership_id, parent_class_id, parent_object_id, collection_id,
-               child_class_id, child_object_id
-        FROM t_membership
-        WHERE parent_class_id IS NULL
-           OR parent_object_id IS NULL
-           OR collection_id IS NULL
-           OR child_class_id IS NULL
-           OR child_object_id IS NULL
-    """
-    for membership_id, *values in db.iter_query(missing_fields_query):
-        for field, value in zip(MEMBERSHIP_VALIDATION_FIELDS, values, strict=True):
-            if value is None:
-                issues.append(f"t_membership.membership_id={membership_id} is missing required {field}.")
-
-    checks = (
-        (
-            "parent_class_id",
-            "parent object",
-            """
-            SELECT membership.membership_id, membership.parent_class_id, parent.class_id
-            FROM t_membership AS membership
-            JOIN t_object AS parent ON parent.object_id = membership.parent_object_id
-            WHERE membership.parent_class_id IS NOT NULL
-              AND membership.parent_class_id IS NOT parent.class_id
-            """,
-        ),
-        (
-            "child_class_id",
-            "child object",
-            """
-            SELECT membership.membership_id, membership.child_class_id, child.class_id
-            FROM t_membership AS membership
-            JOIN t_object AS child ON child.object_id = membership.child_object_id
-            WHERE membership.child_class_id IS NOT NULL
-              AND membership.child_class_id IS NOT child.class_id
-            """,
-        ),
-        (
-            "parent_class_id",
-            "collection parent",
-            """
-            SELECT membership.membership_id, membership.parent_class_id, collection.parent_class_id
-            FROM t_membership AS membership
-            JOIN t_collection AS collection ON collection.collection_id = membership.collection_id
-            WHERE membership.parent_class_id IS NOT NULL
-              AND membership.parent_class_id IS NOT collection.parent_class_id
-            """,
-        ),
-        (
-            "child_class_id",
-            "collection child",
-            """
-            SELECT membership.membership_id, membership.child_class_id, collection.child_class_id
-            FROM t_membership AS membership
-            JOIN t_collection AS collection ON collection.collection_id = membership.collection_id
-            WHERE membership.child_class_id IS NOT NULL
-              AND membership.child_class_id IS NOT collection.child_class_id
-            """,
-        ),
-    )
-    for class_field, related_entity, query in checks:
-        for membership_id, membership_class_id, related_class_id in db.iter_query(query):
-            issues.append(
-                f"t_membership.membership_id={membership_id} has {class_field}={membership_class_id}, "
-                f"but the {related_entity} class_id is {related_class_id}."
+def find_database_relationship_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
+    """Return model relationship and integer-attribute findings from shared SQL."""
+    findings: list[DatabaseValidationFinding] = []
+    for category_value, message, object_id, attribute_id, value in db.iter_query(RELATIONSHIP_FINDINGS_QUERY):
+        category = DatabaseValidationCategory(category_value)
+        if category is DatabaseValidationCategory.TYPES:
+            if isinstance(value, int) or (isinstance(value, float) and value.is_integer()):
+                continue
+            message = (
+                f"t_attribute_data for object_id={object_id} and attribute_id={attribute_id} "
+                f"has non-integer value {value!r}."
             )
-    return issues
+        elif not isinstance(message, str):
+            raise TypeError(f"Validation SQL returned no message for category {category.value!r}.")
+        findings.append(DatabaseValidationFinding(category=category, message=message))
+    return findings
 
 
 def repair_safe_membership_class_ids(db: SQLiteManager, /) -> None:
     """Repair membership class IDs when the object and collection agree."""
-    repairs = (
-        ("parent_class_id", "parent_object_id", "parent_class_id"),
-        ("child_class_id", "child_object_id", "child_class_id"),
-    )
-    for membership_class_field, object_field, collection_class_field in repairs:
-        matching_class_query = f"""
-            SELECT endpoint.class_id
-            FROM t_object AS endpoint
-            JOIN t_collection AS collection
-                ON collection.collection_id = t_membership.collection_id
-            WHERE endpoint.object_id = t_membership.{object_field}
-              AND endpoint.class_id IS NOT NULL
-              AND endpoint.class_id = collection.{collection_class_field}
-        """
-        query = f"""
-            UPDATE t_membership
-            SET {membership_class_field} = ({matching_class_query})
-            WHERE t_membership.{membership_class_field} IS NOT ({matching_class_query})
-              AND EXISTS ({matching_class_query})
-        """
-        db.execute(query)
-
-
-def find_attribute_relationship_issues(db: SQLiteManager, /) -> list[str]:
-    """Return attribute values assigned to objects of a different class."""
-    query = """
-        SELECT data.object_id, data.attribute_id, obj.class_id, attribute.class_id
-        FROM t_attribute_data AS data
-        JOIN t_object AS obj ON obj.object_id = data.object_id
-        JOIN t_attribute AS attribute ON attribute.attribute_id = data.attribute_id
-        WHERE attribute.class_id IS NULL
-           OR obj.class_id IS NOT attribute.class_id
-    """
-    return [
-        f"t_attribute_data for object_id={object_id} and attribute_id={attribute_id} "
-        f"connects class_id={object_class_id} to an attribute for class_id={attribute_class_id}."
-        for object_id, attribute_id, object_class_id, attribute_class_id in db.iter_query(query)
-    ]
-
-
-def find_property_relationship_issues(db: SQLiteManager, /) -> list[str]:
-    """Return missing data references and property/membership collection mismatches."""
-    issues: list[str] = []
-    missing_references_query = """
-        SELECT data_id, membership_id, property_id
-        FROM t_data
-        WHERE membership_id IS NULL OR property_id IS NULL
-    """
-    for data_id, membership_id, property_id in db.iter_query(missing_references_query):
-        if membership_id is None:
-            issues.append(f"t_data.data_id={data_id} is missing required membership_id.")
-        if property_id is None:
-            issues.append(f"t_data.data_id={data_id} is missing required property_id.")
-
-    query = """
-        SELECT data.data_id, data.property_id, property.collection_id,
-               data.membership_id, membership.collection_id
-        FROM t_data AS data
-        JOIN t_property AS property ON property.property_id = data.property_id
-        JOIN t_membership AS membership ON membership.membership_id = data.membership_id
-        WHERE property.collection_id IS NOT membership.collection_id
-    """
-    for (
-        data_id,
-        property_id,
-        property_collection_id,
-        membership_id,
-        membership_collection_id,
-    ) in db.iter_query(query):
-        issues.append(
-            f"t_data.data_id={data_id} uses property_id={property_id} from collection_id="
-            f"{property_collection_id}, but membership_id={membership_id} uses collection_id="
-            f"{membership_collection_id}."
-        )
-    return issues
-
-
-def find_integer_attribute_issues(db: SQLiteManager, /) -> list[str]:
-    """Return non-integer values assigned to integer-marked attributes."""
-    query = """
-        SELECT data.object_id, data.attribute_id, data.value
-        FROM t_attribute_data AS data
-        JOIN t_attribute AS attribute ON attribute.attribute_id = data.attribute_id
-        WHERE attribute.is_integer = 1
-          AND data.value IS NOT NULL
-    """
-    issues = []
-    for object_id, attribute_id, value in db.iter_query(query):
-        if isinstance(value, int) or (isinstance(value, float) and value.is_integer()):
-            continue
-        issues.append(
-            f"t_attribute_data for object_id={object_id} and attribute_id={attribute_id} "
-            f"has non-integer value {value!r}."
-        )
-    return issues
+    if not db.executescript(REPAIR_MEMBERSHIP_CLASS_IDS_SCRIPT):
+        raise RuntimeError("Safe membership class repairs did not complete.")
 
 
 def _check_attribute_exists_method(
