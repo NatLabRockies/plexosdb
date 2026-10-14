@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<MasterDataSet xmlns="http://tempuri.org/MasterDataSet.xsd">
+  <t_class>
+    <class_id>2</class_id>
+    <name>Generator</name>
+  </t_class>
+  <t_object>
+    <object_id>1</object_id>
+    <GUID>95a5e8d0-4d74-4931-9e94-0810b91a1131</GUID>
+    <class_id>2</class_id>
+    <name>7706j</name>
+  </t_object>
+  <t_object>
+    <object_id>2</object_id>
+    <GUID>dc682423-3b84-4dbc-b919-82ab5e2b3131</GUID>
+    <class_id>2</class_id>
+    <name>7999j</name>
+  </t_object>
+</MasterDataSet>

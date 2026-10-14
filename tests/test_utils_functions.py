@@ -492,3 +492,21 @@ def test_get_sql_query_property_query():
     result = get_sql_query("property_query.sql")
     assert isinstance(result, str)
     assert len(result) > 0
+
+
+@pytest.mark.parametrize("value", ["7706j", "7999j", "2J", "-3j", "+4j", "1+2j", "(3j)", " 5j ", "1_0j"])
+def test_validate_string_preserves_complex_like_names(value: str) -> None:
+    from plexosdb.utils import validate_string
+
+    result = validate_string(value)
+    assert isinstance(result, str)
+    assert result == value
+
+
+@pytest.mark.parametrize("value, expected", [("'7706j'", "7706j"), ("[2j]", [2j]), ("0x10", 16)])
+def test_validate_string_retains_literal_behavior(value: str, expected: str | list[complex] | int) -> None:
+    from plexosdb.utils import validate_string
+
+    result = validate_string(value)
+    assert type(result) is type(expected)
+    assert result == expected
