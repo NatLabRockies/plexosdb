@@ -46,7 +46,8 @@ def batched(iterable: Iterable[Any], n: int) -> Iterator[tuple[Any, ...]]:
 def validate_string(value: str) -> Any:
     """Validate string and convert it to python object.
 
-    This function also tries to parse floats or ints.
+    This function also tries to parse floats or ints. Complex-looking strings
+    are kept unchanged because they may be PLEXOS identifiers.
 
     Parameters
     ----------
@@ -78,7 +79,8 @@ def validate_string(value: str) -> Any:
     if value == "false" or value == "FALSE":
         return False
     try:
-        value = ast.literal_eval(value)
+        parsed_value = ast.literal_eval(value)
+        return value if isinstance(parsed_value, complex) else parsed_value
     except (ValueError, SyntaxError):
         logger.trace("Could not parse {}", value)
     return value
