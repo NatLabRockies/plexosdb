@@ -47,7 +47,8 @@ def validate_string(value: str) -> Any:
     """Validate string and convert it to python object.
 
     This function also tries to parse floats or ints. Numeric strings containing
-    underscores are kept unchanged because they may be PLEXOS identifiers.
+    underscores and complex-looking strings are kept unchanged because they may
+    be PLEXOS identifiers.
 
     Parameters
     ----------
@@ -83,9 +84,9 @@ def validate_string(value: str) -> Any:
         return False
     try:
         parsed_value = ast.literal_eval(value)
-        if "_" in value and isinstance(parsed_value, (int, float, complex)):
+        if isinstance(parsed_value, complex) or ("_" in value and isinstance(parsed_value, (int, float))):
             return value
-        value = parsed_value
+        return parsed_value
     except (ValueError, SyntaxError):
         logger.trace("Could not parse {}", value)
     return value

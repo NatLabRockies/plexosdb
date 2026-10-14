@@ -141,3 +141,26 @@ def test_numeric_object_names_xml_round_trip(tmp_path):
         assert set(reloaded.list_objects_by_class(ClassEnum.Generator)) == set(expected)
         for name, object_id in expected.items():
             assert reloaded.get_object_id(ClassEnum.Generator, name) == object_id
+
+
+@pytest.mark.parametrize("in_memory", [True, False])
+def test_complex_like_object_names(in_memory: bool) -> None:
+    handler = XMLHandler.parse(fpath="tests/data/complex_object_names.xml", in_memory=in_memory)
+    records = handler.get_records(Schema.Objects)
+    assert [(record["name"], record["object_id"]) for record in records] == [("7706j", 1), ("7999j", 2)]
+
+
+def test_complex_like_object_names_round_trip(tmp_path: Path) -> None:
+    source = Path("tests/data/complex_object_names.xml")
+    expected = {"7706j": 1, "7999j": 2}
+    exported = tmp_path / "complex_object_names.xml"
+    for path in (source, exported):
+        with closing(sqlite3.connect(":memory:")) as connection:
+            db = PlexosDB.from_xml(path, fpath_or_conn=connection)
+            assert set(db.list_objects_by_class(ClassEnum.Generator)) == set(expected)
+            for name, object_id in expected.items():
+                assert db.get_object_id(ClassEnum.Generator, name) == object_id
+            if path == source:
+                assert db.to_xml(exported)
+                names = [element.text for element in ET.parse(exported).findall(".//{*}t_object/{*}name")]
+                assert set(names) == set(expected)
