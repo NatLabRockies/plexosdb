@@ -98,6 +98,14 @@ class XMLHandler:
             for (column_name, column_type), column_value in zip(column_types.items(), row):
                 if column_value is None:
                     continue
+                if (
+                    table_name == Schema.AttributeData.name
+                    and column_name == "value"
+                    and isinstance(column_value, float)
+                    and column_value.is_integer()
+                ):
+                    # SQLite FLOAT affinity adds a decimal suffix that PLEXOS integer attributes reject.
+                    column_value = int(column_value)
                 column_element = ET.SubElement(table_element, column_name)
                 match column_type:
                     case "BIT":
