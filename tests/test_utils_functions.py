@@ -494,6 +494,57 @@ def test_get_sql_query_property_query():
     assert len(result) > 0
 
 
+@pytest.mark.parametrize(
+    "value",
+    [
+        "113_316_1",
+        "000_123",
+        "+1_000",
+        "-1_000",
+        " 1_000 ",
+        "9_223_372_036_854_775_808",
+        "1_000.5",
+        "1.2_5",
+        "1e1_0",
+        "0xFF_FF",
+        "0b1_0",
+        "0o1_0",
+        "1_0j",
+        "1_0+2j",
+        "(1_000)",
+    ],
+)
+def test_validate_string_preserves_underscore_numeric_identifiers(value):
+    """Numeric-looking identifiers must retain their exact spelling."""
+    from plexosdb.utils import validate_string
+
+    result = validate_string(value)
+    assert isinstance(result, str)
+    assert result == value
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        ("['gen_1']", ["gen_1"]),
+        ("{'my_key': 1}", {"my_key": 1}),
+        ("'gen_1'", "gen_1"),
+        ("'1_000'", "1_000"),
+        ("[1_000]", [1000]),
+        ("(1_000,)", (1000,)),
+        ("{1_000}", {1000}),
+        ('b"gen_1"', b"gen_1"),
+    ],
+)
+def test_validate_string_preserves_underscore_literal_parsing(value, expected):
+    """Containers and quoted literals retain their existing parsing behavior."""
+    from plexosdb.utils import validate_string
+
+    result = validate_string(value)
+    assert type(result) is type(expected)
+    assert result == expected
+
+
 @pytest.mark.parametrize("value", ["7706j", "7999j", "2J", "-3j", "+4j", "1+2j", "(3j)", " 5j ", "1_0j"])
 def test_validate_string_preserves_complex_like_names(value: str) -> None:
     from plexosdb.utils import validate_string

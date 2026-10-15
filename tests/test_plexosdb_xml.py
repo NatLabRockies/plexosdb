@@ -113,6 +113,37 @@ def test_cache_iter_with_label_filter(xml_handler):
 
 
 @pytest.mark.parametrize("in_memory", [True, False])
+def test_numeric_object_names_remain_distinct(in_memory):
+    """Numeric object names remain distinct with or without the XML cache."""
+    handler = XMLHandler.parse(fpath="tests/data/numeric_object_names.xml", in_memory=in_memory)
+    records = handler.get_records(Schema.Objects)
+    assert [(record["name"], record["object_id"]) for record in records] == [
+        ("113_316_1", 1),
+        (1133161, 2),
+    ]
+
+
+def test_numeric_object_names_xml_round_trip(tmp_path):
+    """Import and export preserve numeric object names and their identifiers."""
+    source = Path("tests/data/numeric_object_names.xml")
+    expected = {"113_316_1": 1, "1133161": 2}
+    with closing(sqlite3.connect(":memory:")) as connection:
+        db = PlexosDB.from_xml(source, fpath_or_conn=connection)
+        assert set(db.list_objects_by_class(ClassEnum.Generator)) == set(expected)
+        for name, object_id in expected.items():
+            assert db.get_object_id(ClassEnum.Generator, name) == object_id
+
+        exported = tmp_path / "numeric_object_names.xml"
+        assert db.to_xml(exported)
+
+    with closing(sqlite3.connect(":memory:")) as connection:
+        reloaded = PlexosDB.from_xml(exported, fpath_or_conn=connection)
+        assert set(reloaded.list_objects_by_class(ClassEnum.Generator)) == set(expected)
+        for name, object_id in expected.items():
+            assert reloaded.get_object_id(ClassEnum.Generator, name) == object_id
+
+
+@pytest.mark.parametrize("in_memory", [True, False])
 def test_complex_like_object_names(in_memory: bool) -> None:
     handler = XMLHandler.parse(fpath="tests/data/complex_object_names.xml", in_memory=in_memory)
     records = handler.get_records(Schema.Objects)
