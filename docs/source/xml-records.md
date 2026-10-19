@@ -37,6 +37,9 @@ Optional `phase_id`, `is_summary`, and fallback `period_type_id` values treat
 blank text as missing during materialization. Stored XML fields remain
 unchanged.
 
+Unit references containing only XML whitespace use the missing-unit fallback; an
+explicit zero still refers to unit 0.
+
 Report timestamp conversion trims surrounding XML whitespace (space, tab,
 carriage return, and newline) before converting ISO or day/month/year dates. The
 imported XML and derived data datetime fields retain their original text. This

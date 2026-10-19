@@ -8,10 +8,9 @@ from collections import defaultdict
 from typing import Any
 
 from ..types import XMLRecord
+from ..utils import SQLITE_ASCII_CASE_FOLD
 from ..xml_records import element_to_record, local_name
 from .utils import _quote_ident
-
-SQLITE_ASCII_CASE_FOLD = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
 
 
 class _BOMStripStream:
@@ -74,7 +73,12 @@ def _stream_xml_to_sqlite(
             if depth == 2 and root is not None:
                 # Direct child of root — this is a table-row element.
                 tag = local_name(element.tag)
-                row = element_to_record(element)
+                field_names: dict[str, str] = {}
+                aliases: dict[str, str] = {}
+                for field in element:
+                    name = local_name(field.tag)
+                    aliases[name] = field_names.setdefault(name.translate(SQLITE_ASCII_CASE_FOLD), name)
+                row = element_to_record(element, rename=aliases)
                 buffers[tag].append(row)
                 # Detach the processed element from root to free memory.
                 element.clear()

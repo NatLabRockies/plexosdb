@@ -168,11 +168,14 @@ def test_numeric_model_columns_use_schema_affinity(tmp_path: Path, value: str, e
         ("\tFalse\n", 0),
     ],
 )
-def test_boolean_conversion_is_limited_to_bit_columns(tmp_path: Path, value: str, expected: int) -> None:
+@pytest.mark.parametrize("field", ["is_enabled", "IS_ENABLED", "Is_Enabled"])
+def test_boolean_conversion_is_limited_to_bit_columns(
+    tmp_path: Path, value: str, expected: int, field: str
+) -> None:
     source = tmp_path / "source.xml"
     source.write_text(
         "<MasterDataSet><t_class><class_id>1</class_id>"
-        f"<name>{value}</name><is_enabled>{value}</is_enabled></t_class></MasterDataSet>",
+        f"<name>{value}</name><{field}>{value}</{field}></t_class></MasterDataSet>",
         encoding="utf-8",
     )
     target = tmp_path / "export.xml"

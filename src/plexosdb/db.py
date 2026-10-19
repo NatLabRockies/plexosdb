@@ -31,6 +31,7 @@ from .exceptions import (
     NotFoundError,
 )
 from .utils import (
+    SQLITE_ASCII_CASE_FOLD,
     apply_scenario_tags,
     batched,
     create_membership_record,
@@ -199,7 +200,7 @@ class PlexosDB:
                     continue
 
                 bit_columns: set[str] = {
-                    name
+                    name.translate(SQLITE_ASCII_CASE_FOLD)
                     for (name,) in self.query(
                         "SELECT name FROM pragma_table_info(?) WHERE upper(type) = 'BIT'", (tag,)
                     )
@@ -207,10 +208,11 @@ class PlexosDB:
                 column_groups: dict[frozenset[str], list[SQLiteRecord]] = {}
                 for xml_record in xml_records:
                     record: SQLiteRecord = dict(xml_record)
-                    for column in bit_columns:
-                        value = xml_record.get(column)
-                        if value is not None and value.strip().lower() in {"true", "false"}:
-                            record[column] = int(value.strip().lower() == "true")
+                    for column, value in xml_record.items():
+                        if column.translate(SQLITE_ASCII_CASE_FOLD) in bit_columns and value is not None:
+                            normalized = value.strip().lower()
+                            if normalized in {"true", "false"}:
+                                record[column] = int(normalized == "true")
                     # Create a hashable key from the record's column names
                     column_key = frozenset(record.keys())
                     if column_key not in column_groups:

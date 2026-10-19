@@ -208,7 +208,7 @@ def _build_key_period_map(
         key_id_int = int(key_id)
         if key_id_int in key_period:
             continue
-        key_period[key_id_int] = int(period_type_id) if period_type_id is not None else None
+        key_period[key_id_int] = parse_optional_integer(period_type_id)
     return key_period
 
 
@@ -389,9 +389,11 @@ def _resolve_report_unit(
             {unit_expr} AS unit_text
         FROM t_key k
         JOIN t_property p ON CAST(p.property_id AS INTEGER) = CAST(k.property_id AS INTEGER)
-        LEFT JOIN t_unit pu ON CAST(pu.unit_id AS INTEGER) = CAST(p.unit_id AS INTEGER)
+        LEFT JOIN t_unit pu ON CAST(pu.unit_id AS INTEGER) =
+            CAST(NULLIF(TRIM(p.unit_id, CHAR(32, 9, 10, 13)), '') AS INTEGER)
         LEFT JOIN t_unit pu_summary
-            ON CAST(pu_summary.unit_id AS INTEGER) = CAST(p.summary_unit_id AS INTEGER)
+            ON CAST(pu_summary.unit_id AS INTEGER) =
+                CAST(NULLIF(TRIM(p.summary_unit_id, CHAR(32, 9, 10, 13)), '') AS INTEGER)
         WHERE CAST(k.key_id AS INTEGER) IN ({key_ids_sql})
         LIMIT 1
         """
