@@ -450,7 +450,7 @@ def _copy_data_table_to_report(con: sqlite3.Connection, table_name: str, *, key_
                 d.value AS {value_col},
                 {unit_sql} AS unit
             FROM (
-                SELECT *, TRIM(datetime, '{STRIP_CHARACTERS}') AS report_datetime
+                SELECT *, NULLIF(TRIM(datetime, '{STRIP_CHARACTERS}'), '') AS report_datetime
                 FROM data.{tq}
             ) d
             LEFT JOIN t_object o ON o.name = d.name
