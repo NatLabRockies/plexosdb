@@ -7,7 +7,7 @@ from collections import defaultdict
 from typing import Any
 from zipfile import ZipFile
 
-from .utils import _quote_ident, parse_optional_integer
+from .utils import STRIP_CHARACTERS, _quote_ident, integer_reference_sql, parse_optional_integer
 
 
 def _sanitize_name(value: str | None) -> str:
@@ -81,13 +81,13 @@ def _ensure_join_indexes(con: sqlite3.Connection, table_names: set[str]) -> None
     ]:
         if tbl in table_names:
             con.execute(
-                f"CREATE INDEX IF NOT EXISTS idx_{tbl}_{col}_numeric ON {tbl}(CAST({col} AS INTEGER))"
+                f"CREATE INDEX IF NOT EXISTS idx_{tbl}_{col}_reference ON {tbl}({integer_reference_sql(col)})"
             )
     for period_table, id_col, _ in _PERIOD_TABLE_META.values():
         if period_table in table_names:
             con.execute(
-                f"CREATE INDEX IF NOT EXISTS idx_{period_table}_{id_col}_numeric "
-                f"ON {period_table}(CAST({id_col} AS INTEGER))"
+                f"CREATE INDEX IF NOT EXISTS idx_{period_table}_{id_col}_reference "
+                f"ON {period_table}({integer_reference_sql(id_col)})"
             )
 
 
@@ -101,7 +101,8 @@ def _build_period_join(table_name: str, table_names: set[str]) -> tuple[str, str
         if meta:
             period_table, id_col, dt_col = meta
             if period_table in table_names:
-                join = f"LEFT JOIN main.{period_table} p ON CAST(p.{id_col} AS INTEGER) = dv.block_id"
+                reference = integer_reference_sql(f"p.{id_col}")
+                join = f"LEFT JOIN main.{period_table} p ON {reference} = dv.block_id"
                 return join, f"p.{dt_col} AS datetime"
     return "", "NULL AS datetime"
 
@@ -122,15 +123,18 @@ def _build_rich_create_sql(
         SELECT
             o.name AS name,
             COALESCE(s.sample_name, 'Mean') AS sample_name,
-            CAST(k.band_id AS INTEGER) AS band_id,
+            {integer_reference_sql("k.band_id")} AS band_id,
             dv.block_id,
             {datetime_expr},
             dv.value
         FROM {dv_source} dv
-        JOIN main.t_key k ON CAST(k.key_id AS INTEGER) = dv.key_id
-        LEFT JOIN main.t_sample s ON CAST(s.sample_id AS INTEGER) = CAST(k.sample_id AS INTEGER)
-        LEFT JOIN main.t_membership m ON CAST(m.membership_id AS INTEGER) = CAST(k.membership_id AS INTEGER)
-        LEFT JOIN main.t_object o ON CAST(o.object_id AS INTEGER) = CAST(m.child_object_id AS INTEGER)
+        JOIN main.t_key k ON {integer_reference_sql("k.key_id")} = dv.key_id
+        LEFT JOIN main.t_sample s
+            ON {integer_reference_sql("s.sample_id")} = {integer_reference_sql("k.sample_id")}
+        LEFT JOIN main.t_membership m
+            ON {integer_reference_sql("m.membership_id")} = {integer_reference_sql("k.membership_id")}
+        LEFT JOIN main.t_object o
+            ON {integer_reference_sql("o.object_id")} = {integer_reference_sql("m.child_object_id")}
         {period_join}
         WHERE dv.key_id IN ({key_ids_sql})
     """
@@ -323,7 +327,7 @@ def _build_derived_table_map(con: sqlite3.Connection) -> dict[tuple[str, str], s
         collection_name = collection_map.get(membership_collection.get(membership_id, -1), "Collection")
         prop_name, summary_name = property_map.get(property_id, ("Property", ""))
 
-        selected_prop = summary_name if is_summary and summary_name else prop_name
+        selected_prop = summary_name if is_summary and summary_name.strip() else prop_name
         table_name = "__".join(
             [
                 _table_label_part(phase_name),
@@ -370,10 +374,10 @@ def _resolve_report_unit(
     has_is_summary = "is_summary" in key_cols
     key_ids_sql = ",".join(str(int(k)) for k in sorted(key_ids))
     if has_is_summary:
-        unit_expr = """
+        unit_expr = f"""
             COALESCE(
                 CASE
-                    WHEN COALESCE(CAST(k.is_summary AS INTEGER), 0) = 1
+                    WHEN COALESCE({integer_reference_sql("k.is_summary")}, 0) = 1
                     THEN pu_summary.value
                     ELSE pu.value
                 END,
@@ -388,13 +392,12 @@ def _resolve_report_unit(
         SELECT
             {unit_expr} AS unit_text
         FROM t_key k
-        JOIN t_property p ON CAST(p.property_id AS INTEGER) = CAST(k.property_id AS INTEGER)
-        LEFT JOIN t_unit pu ON CAST(pu.unit_id AS INTEGER) =
-            CAST(NULLIF(TRIM(p.unit_id, CHAR(32, 9, 10, 13)), '') AS INTEGER)
+        JOIN t_property p
+            ON {integer_reference_sql("p.property_id")} = {integer_reference_sql("k.property_id")}
+        LEFT JOIN t_unit pu ON {integer_reference_sql("pu.unit_id")} = {integer_reference_sql("p.unit_id")}
         LEFT JOIN t_unit pu_summary
-            ON CAST(pu_summary.unit_id AS INTEGER) =
-                CAST(NULLIF(TRIM(p.summary_unit_id, CHAR(32, 9, 10, 13)), '') AS INTEGER)
-        WHERE CAST(k.key_id AS INTEGER) IN ({key_ids_sql})
+            ON {integer_reference_sql("pu_summary.unit_id")} = {integer_reference_sql("p.summary_unit_id")}
+        WHERE {integer_reference_sql("k.key_id")} IN ({key_ids_sql})
         LIMIT 1
         """
     ).fetchone()
@@ -444,11 +447,12 @@ def _copy_data_table_to_report(con: sqlite3.Connection, table_name: str, *, key_
                 d.value AS {value_col},
                 {unit_sql} AS unit
             FROM (
-                SELECT *, TRIM(datetime, CHAR(32, 9, 10, 13)) AS report_datetime
+                SELECT *, TRIM(datetime, '{STRIP_CHARACTERS}') AS report_datetime
                 FROM data.{tq}
             ) d
             LEFT JOIN t_object o ON o.name = d.name
-            LEFT JOIN t_category c ON CAST(c.category_id AS INTEGER) = CAST(o.category_id AS INTEGER)
+            LEFT JOIN t_category c
+                ON {integer_reference_sql("c.category_id")} = {integer_reference_sql("o.category_id")}
             """
         )
         return

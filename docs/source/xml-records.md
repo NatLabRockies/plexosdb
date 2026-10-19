@@ -37,10 +37,12 @@ Optional `phase_id`, `is_summary`, and fallback `period_type_id` values treat
 blank text as missing during materialization. Stored XML fields remain
 unchanged.
 
-Unit references containing only XML whitespace use the missing-unit fallback; an
-explicit zero still refers to unit 0.
+Numeric reference joins treat Unicode-whitespace-only values as missing and keep
+explicit zero valid. Matching expression indexes use the same native SQLite
+normalization. Blank summary names fall back to property names so distinct
+properties retain distinct result tables.
 
-Report timestamp conversion trims surrounding XML whitespace (space, tab,
-carriage return, and newline) before converting ISO or day/month/year dates. The
-imported XML and derived data datetime fields retain their original text. This
-fixes padded report dates without changing raw extraction policy.
+Report timestamp conversion trims surrounding Unicode whitespace before
+converting ISO or day/month/year dates. The imported XML and derived data
+datetime fields retain their original text. This fixes padded report dates
+without changing raw extraction policy.
