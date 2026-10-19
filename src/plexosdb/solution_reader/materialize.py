@@ -431,16 +431,21 @@ def _copy_data_table_to_report(con: sqlite3.Connection, table_name: str, *, key_
                 c.name AS category,
                 CASE
                     WHEN d.datetime IS NULL THEN NULL
-                    WHEN INSTR(d.datetime, '/') > 0
-                        THEN SUBSTR(d.datetime, 7, 4) || '-' || SUBSTR(d.datetime, 4, 2) || '-' ||
-                             SUBSTR(d.datetime, 1, 2) || ' ' || SUBSTR(d.datetime, 12, 8)
-                    WHEN INSTR(d.datetime, 'T') > 0 THEN REPLACE(SUBSTR(d.datetime, 1, 19), 'T', ' ')
-                    ELSE d.datetime
+                    WHEN INSTR(d.report_datetime, '/') > 0
+                        THEN SUBSTR(d.report_datetime, 7, 4) || '-' ||
+                             SUBSTR(d.report_datetime, 4, 2) || '-' ||
+                             SUBSTR(d.report_datetime, 1, 2) || ' ' || SUBSTR(d.report_datetime, 12, 8)
+                    WHEN INSTR(d.report_datetime, 'T') > 0
+                        THEN REPLACE(SUBSTR(d.report_datetime, 1, 19), 'T', ' ')
+                    ELSE d.report_datetime
                 END AS timestamp,
                 {interval_sql} AS interval_length,
                 d.value AS {value_col},
                 {unit_sql} AS unit
-            FROM data.{tq} d
+            FROM (
+                SELECT *, TRIM(datetime, CHAR(32, 9, 10, 13)) AS report_datetime
+                FROM data.{tq}
+            ) d
             LEFT JOIN t_object o ON o.name = d.name
             LEFT JOIN t_category c ON CAST(c.category_id AS INTEGER) = CAST(o.category_id AS INTEGER)
             """

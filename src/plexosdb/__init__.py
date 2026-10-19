@@ -19,6 +19,7 @@ from .db_solution_models import (
 from .enums import ClassEnum, CollectionEnum, PeriodEnum, PhaseEnum, TableTypeEnum
 from .types import SQLiteRecord, SQLiteValue, XMLRecord, XMLValue
 from .xml_handler import XMLHandler
+from .xml_records import element_to_record
 
 __version__ = version("plexosdb")
 
@@ -45,4 +46,5 @@ __all__ = (
     "XMLHandler",
     "XMLRecord",
     "XMLValue",
+    "element_to_record",
 )

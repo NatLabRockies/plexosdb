@@ -10,6 +10,7 @@ from loguru import logger
 
 from .enums import Schema
 from .types import XMLRecord
+from .xml_records import element_to_record
 
 PLEXOS_NAMESPACE = "http://tempuri.org/MasterDataSet.xsd"
 
@@ -130,10 +131,8 @@ class XMLHandler:
         Values are strings or None for empty elements. Schema-specific conversion
         belongs to the importer so numeric-looking text retains its spelling.
         """
-        if rename_dict is None:
-            rename_dict = {}
         return [
-            {rename_dict.get(child.tag, child.tag): child.text for child in element}
+            element_to_record(element, rename=rename_dict)
             for element in self.iter(element_enum, *elements, **tag_elements)
         ]
 
