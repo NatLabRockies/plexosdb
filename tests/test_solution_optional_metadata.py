@@ -184,7 +184,7 @@ def test_optional_references_preserve_defaults_and_explicit_zero(
             f"EXPLAIN QUERY PLAN SELECT * FROM t_sample WHERE {integer_reference_sql('sample_id')} = ?",
             (1,),
         ).fetchall()
-        assert any("idx_t_sample_sample_id_reference" in row[3] for row in plan)
+        assert any("idx_t_sample_sample_id_integer" in row[3] for row in plan)
 
 
 @pytest.mark.parametrize("summary_name", [" \t\n", "\u00a0"])
