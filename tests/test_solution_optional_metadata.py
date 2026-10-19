@@ -25,20 +25,27 @@ def write_metadata_zip(tables: dict[str, list[XMLRecord]], /, *, destination: Pa
 @pytest.mark.parametrize(
     "period, expected", [(None, None), ("", None), (" \t\n", None), ("\u00a0", None), (" 0 ", 0)]
 )
-def test_optional_key_index_period_keeps_missing_default(
-    tmp_path: Path, period: str | None, expected: int | None
+@pytest.mark.parametrize("use_key_period", [False, True])
+def test_optional_period_keeps_missing_default(
+    tmp_path: Path, period: str | None, expected: int | None, use_key_period: bool
 ) -> None:
+    table = "t_key" if use_key_period else "t_key_index"
+    tables: dict[str, list[XMLRecord]] = {table: [{"key_id": "1", "period_type_id": period}]}
+    if use_key_period:
+        tables["t_key_index"] = [{"key_id": "1"}]
     archive = write_metadata_zip(
-        {"t_key_index": [{"key_id": "1", "period_type_id": period}]},
+        tables,
         destination=tmp_path / "period.zip",
     )
     with PlexosSolution.from_zip(archive) as solution:
         solution.to_sqlite(decode_bin_values=False)
-        assert solution.connection.execute("SELECT period_type_id FROM t_key_index").fetchone() == (
+        assert solution.connection.execute(f"SELECT period_type_id FROM {table}").fetchone() == (
             period or None,
         )
         assert _build_key_period_map(
-            solution.connection, has_key_period=False, key_index_cols=["key_id", "period_type_id"]
+            solution.connection,
+            has_key_period=use_key_period,
+            key_index_cols=["key_id"] if use_key_period else ["key_id", "period_type_id"],
         ) == {1: expected}
 
 
