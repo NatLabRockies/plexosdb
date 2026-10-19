@@ -16,6 +16,42 @@ NAMESPACE = "http://tempuri.org/MasterDataSet.xsd"
 @pytest.mark.parametrize(
     "value, expected",
     [
+        ("0,7", "0,7"),
+        ("0, 7", "0, 7"),
+        ("(1, 2)", "(1, 2)"),
+        ("[1, 2]", "[1, 2]"),
+        ("{'key': 1}", "{'key': 1}"),
+        ("{1, 2}", "{1, 2}"),
+        ("[2j]", "[2j]"),
+        ("42", "42"),
+        ("0.7", "0.7"),
+        ("true", "1"),
+        ("false", "0"),
+    ],
+)
+def test_text_values_round_trip_as_plexos_xml(tmp_path: Path, value: str, expected: str) -> None:
+    source = tmp_path / "source.xml"
+    source.write_text(
+        f'<MasterDataSet xmlns="{NAMESPACE}">'
+        "<t_text><data_id>1</data_id><class_id>1</class_id>"
+        f"<value>{value}</value></t_text></MasterDataSet>",
+        encoding="utf-8",
+    )
+
+    db = PlexosDB.from_xml(source)
+    assert db.query("SELECT value FROM t_text") == [(expected,)]
+    target = tmp_path / "export.xml"
+    db.to_xml(target)
+
+    root = ET.parse(target).getroot()
+    assert root.findtext(f"{{{NAMESPACE}}}t_text/{{{NAMESPACE}}}value") == expected
+    imported = PlexosDB.from_xml(target)
+    assert imported.query("SELECT value FROM t_text") == [(expected,)]
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
         ("-1", "-1"),
         ("1001", "1001"),
         ("0", "0"),
