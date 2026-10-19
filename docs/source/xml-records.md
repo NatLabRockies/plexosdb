@@ -33,6 +33,9 @@ records, whose field names are case-sensitive.
 
 Optional BIN period offsets containing only whitespace decode as zero. This
 conversion happens in the BIN decoder and preserves the imported offset text.
+Optional `phase_id`, `is_summary`, and fallback `period_type_id` values treat
+blank text as missing during materialization. Stored XML fields remain
+unchanged.
 
 Report timestamp conversion trims surrounding XML whitespace (space, tab,
 carriage return, and newline) before converting ISO or day/month/year dates. The

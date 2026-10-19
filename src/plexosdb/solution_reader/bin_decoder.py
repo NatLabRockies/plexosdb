@@ -8,6 +8,8 @@ from collections import defaultdict
 from typing import Any
 from zipfile import ZipFile
 
+from .utils import parse_optional_integer
+
 
 def _read_all_bin_entries(zf: ZipFile) -> dict[int, bytes]:
     """Read all binary data entries keyed by period type id."""
@@ -64,9 +66,7 @@ def _group_key_rows_by_period(
             period_type = int(period_type_id)
             num_values = int(length)
             byte_pos = int(position)
-            offset = (
-                int(period_offset.strip() or "0") if isinstance(period_offset, str) else int(period_offset)
-            )
+            offset = parse_optional_integer(period_offset) or 0
             key_id_int = int(key_id)
         except (TypeError, ValueError):
             continue

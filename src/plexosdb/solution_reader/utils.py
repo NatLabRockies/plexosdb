@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
+from ..types import SQLiteValue
 from ..xml_records import local_name as _local_name
 
-__all__ = ["_coerce_value", "_local_name", "_quote_ident"]
+__all__ = ["_coerce_value", "_local_name", "_quote_ident", "parse_optional_integer"]
+
+
+def parse_optional_integer(value: SQLiteValue, /) -> int | None:
+    """Parse optional numeric metadata, treating NULL and blank text as absent."""
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
+    return int(value)
 
 
 def _quote_ident(identifier: str) -> str:

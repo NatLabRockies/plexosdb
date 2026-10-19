@@ -7,7 +7,7 @@ from collections import defaultdict
 from typing import Any
 from zipfile import ZipFile
 
-from .utils import _quote_ident
+from .utils import _quote_ident, parse_optional_integer
 
 
 def _sanitize_name(value: str | None) -> str:
@@ -309,18 +309,17 @@ def _build_derived_table_map(con: sqlite3.Connection) -> dict[tuple[str, str], s
         key_id = int(row[0])
         property_id = int(row[1])
         membership_id = int(row[2])
-        phase_id = int(row[3]) if row[3] is not None else -1
+        phase_id = parse_optional_integer(row[3])
 
         # Prefer explicit key.is_summary when present; otherwise infer from key.period_type_id.
-        if row[4] is not None:
-            is_summary = bool(int(row[4]))
-        elif row[5] is not None:
-            is_summary = int(row[5]) == 1
+        summary_flag = parse_optional_integer(row[4])
+        if summary_flag is not None:
+            is_summary = bool(summary_flag)
         else:
-            is_summary = False
+            is_summary = parse_optional_integer(row[5]) == 1
 
         period_name = _period_type_name(key_period.get(key_id))
-        phase_name = _phase_name(phase_id, phase_ids) if phase_id != -1 else "ST"
+        phase_name = _phase_name(phase_id, phase_ids) if phase_id is not None and phase_id != -1 else "ST"
         collection_name = collection_map.get(membership_collection.get(membership_id, -1), "Collection")
         prop_name, summary_name = property_map.get(property_id, ("Property", ""))
 
