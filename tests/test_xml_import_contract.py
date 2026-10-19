@@ -274,13 +274,24 @@ def test_numeric_looking_object_names_remain_distinct(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("key_id", ["000100", " 100 "])
 @pytest.mark.parametrize("materialize", ["all", "single"])
-@pytest.mark.parametrize("date_format", ["%Y-%m-%dT%H:%M:%S", "%d/%m/%Y %H:%M:%S"])
+@pytest.mark.parametrize("date_format", [None, "%Y-%m-%dT%H:%M:%S", "%d/%m/%Y %H:%M:%S"])
 @pytest.mark.parametrize("padding", ["", " \t\n", "\u00a0"])
 @pytest.mark.parametrize("blank_key_field", [None, "phase_id", "is_summary", "period_type_id"])
 def test_solution_materialization_matches_numeric_ids(
-    tmp_path: Path, key_id: str, materialize: str, date_format: str, padding: str, blank_key_field: str | None
+    tmp_path: Path,
+    key_id: str,
+    materialize: str,
+    date_format: str | None,
+    padding: str,
+    blank_key_field: str | None,
 ) -> None:
-    dates = [padding + datetime(2026, 1, 1, hour).strftime(date_format) + padding for hour in (0, 1)]
+    dates = [
+        padding + datetime(2026, 1, 1, hour).strftime(date_format) + padding if date_format else padding
+        for hour in (0, 1)
+    ]
+    expected_timestamps = (
+        [("2026-01-01 00:00:00",), ("2026-01-01 01:00:00",)] if date_format else [(None,), (None,)]
+    )
     rows: list[tuple[str, XMLRecord]] = [
         (
             "t_key_index",
@@ -335,20 +346,26 @@ def test_solution_materialization_matches_numeric_ids(
         assert solution.connection.execute(
             f"SELECT name, sample_name, band_id, datetime, value FROM data.{table} ORDER BY block_id"
         ).fetchall() == [
-            ("000123", "Mean", 1, dates[0], 10.5),
-            ("000123", "Mean", 1, dates[1], 20.5),
+            ("000123", "Mean", 1, dates[0] or None, 10.5),
+            ("000123", "Mean", 1, dates[1] or None, 20.5),
         ]
         assert solution.connection.execute(
             f"SELECT name, category, unit, Generation FROM report.{table} ORDER BY timestamp"
         ).fetchall() == [("000123", "None", "MW", 10.5), ("000123", "None", "MW", 20.5)]
-        assert solution.connection.execute(
-            f"SELECT timestamp FROM report.{table} ORDER BY timestamp"
-        ).fetchall() == [("2026-01-01 00:00:00",), ("2026-01-01 01:00:00",)]
+        assert (
+            solution.connection.execute(f"SELECT timestamp FROM report.{table} ORDER BY timestamp").fetchall()
+            == expected_timestamps
+        )
+        if date_format is None:
+            assert solution.connection.execute(
+                f"SELECT COUNT(*) FROM report.{table} WHERE timestamp < '2027-01-01'"
+            ).fetchone() == (0,)
     with PlexosSolution.from_sqlite(database) as solution:
         assert solution.materialize_table("ST__Interval__Generators__Generation").created
-        assert solution.connection.execute(
-            f"SELECT timestamp FROM report.{table} ORDER BY timestamp"
-        ).fetchall() == [("2026-01-01 00:00:00",), ("2026-01-01 01:00:00",)]
+        assert (
+            solution.connection.execute(f"SELECT timestamp FROM report.{table} ORDER BY timestamp").fetchall()
+            == expected_timestamps
+        )
 
 
 @pytest.mark.parametrize("offset, expected", [(None, 0), ("", 0), (" \t\n", 0), ("\u00a0", 0), (" 3 ", 3)])
