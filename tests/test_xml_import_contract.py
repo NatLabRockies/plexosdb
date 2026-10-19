@@ -267,7 +267,7 @@ def test_numeric_looking_object_names_remain_distinct(tmp_path: Path) -> None:
 @pytest.mark.parametrize("key_id", ["000100", " 100 "])
 @pytest.mark.parametrize("materialize", ["all", "single"])
 @pytest.mark.parametrize("date_format", ["%Y-%m-%dT%H:%M:%S", "%d/%m/%Y %H:%M:%S"])
-@pytest.mark.parametrize("padding", ["", " \t\n"])
+@pytest.mark.parametrize("padding", ["", " \t\n", "\u00a0"])
 @pytest.mark.parametrize("blank_key_field", [None, "phase_id", "is_summary", "period_type_id"])
 def test_solution_materialization_matches_numeric_ids(
     tmp_path: Path, key_id: str, materialize: str, date_format: str, padding: str, blank_key_field: str | None
