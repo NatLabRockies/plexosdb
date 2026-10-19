@@ -25,6 +25,12 @@ the table rather than failing at a batch boundary. Each source row is inserted
 once, including identical repeated rows, in source order per table. BIN decoding
 and derived table materialization remain separate operations.
 
+SQLite column names use ASCII case-insensitive identity. The solution loader
+retains the first spelling of each column and binds later ASCII case variants to
+it. If one row contains both spellings, the last field wins. Unicode names
+outside ASCII remain distinct. This destination policy does not alter raw XML
+records, whose field names are case-sensitive.
+
 Report timestamp conversion trims surrounding XML whitespace (space, tab,
 carriage return, and newline) before converting ISO or day/month/year dates. The
 imported XML and derived data datetime fields retain their original text. This

@@ -93,23 +93,31 @@ def _create_and_insert_rows(con: sqlite3.Connection, table: str, rows: list[XMLR
     if not rows:
         return
 
-    all_cols: list[str] = sorted({col for row in rows for col in row})
-    col_defs = ", ".join(f"{_quote_ident(col)} TEXT" for col in all_cols)
-    con.execute(f"CREATE TABLE IF NOT EXISTS {_quote_ident(table)} ({col_defs})")
-
-    existing = {
-        row[1].translate(SQLITE_ASCII_CASE_FOLD)
+    columns: dict[str, str] = {
+        row[1].translate(SQLITE_ASCII_CASE_FOLD): row[1]
         for row in con.execute(f"PRAGMA table_info({_quote_ident(table)})")
     }
-    for column in all_cols:
-        folded = column.translate(SQLITE_ASCII_CASE_FOLD)
-        if folded not in existing:
-            con.execute(f"ALTER TABLE {_quote_ident(table)} ADD COLUMN {_quote_ident(column)} TEXT")
-            existing.add(folded)
+    existing = set(columns.values())
+    normalized_rows: list[XMLRecord] = []
+    for row in rows:
+        normalized: XMLRecord = {}
+        for name, value in row.items():
+            canonical = columns.setdefault(name.translate(SQLITE_ASCII_CASE_FOLD), name)
+            normalized[canonical] = value
+        normalized_rows.append(normalized)
+
+    all_cols = sorted({col for row in normalized_rows for col in row})
+    if not existing:
+        col_defs = ", ".join(f"{_quote_ident(col)} TEXT" for col in all_cols)
+        con.execute(f"CREATE TABLE {_quote_ident(table)} ({col_defs})")
+    else:
+        for column in all_cols:
+            if column not in existing:
+                con.execute(f"ALTER TABLE {_quote_ident(table)} ADD COLUMN {_quote_ident(column)} TEXT")
 
     placeholders = ", ".join("?" for _ in all_cols)
     col_sql = ", ".join(_quote_ident(col) for col in all_cols)
-    values = [tuple(row.get(col) for col in all_cols) for row in rows]
+    values = [tuple(row.get(col) for col in all_cols) for row in normalized_rows]
     con.executemany(
         f"INSERT INTO {_quote_ident(table)} ({col_sql}) VALUES ({placeholders})",
         values,

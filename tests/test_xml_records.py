@@ -148,3 +148,22 @@ def test_late_columns_follow_sqlite_ascii_case_rules() -> None:
             (None, "lower", None),
             (None, None, "upper"),
         ]
+
+
+@pytest.mark.parametrize("batch_size", [1, 2, 3, 1000])
+def test_case_aliases_share_bindings_and_last_field_wins(batch_size: int) -> None:
+    xml = (
+        b"<root><t><id>1</id></t><t><id>2</id></t>"
+        b"<t><id>3</id><value>first</value></t>"
+        b"<t><id>4</id><VALUE>second</VALUE></t>"
+        b"<t><id>5</id><value>left</value><VALUE>right</VALUE></t></root>"
+    )
+    with closing(sqlite3.connect(":memory:")) as connection:
+        xml_parser._stream_xml_to_sqlite(connection, BytesIO(xml), batch_size=batch_size)
+        assert connection.execute("SELECT id, value FROM t ORDER BY rowid").fetchall() == [
+            ("1", None),
+            ("2", None),
+            ("3", "first"),
+            ("4", "second"),
+            ("5", "right"),
+        ]
