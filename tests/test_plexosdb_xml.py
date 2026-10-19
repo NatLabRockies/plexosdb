@@ -121,7 +121,7 @@ def test_iter(xml_handler):
 def test_get_records(xml_handler):
     elements = list(xml_handler.get_records(Schema.Objects))
     assert len(elements) > 0
-    assert elements[0]["class_id"] == 1
+    assert elements[0]["class_id"] == "1"
 
 
 def test_save_xml(tmp_path):
@@ -179,8 +179,8 @@ def test_numeric_object_names_remain_distinct(in_memory):
     handler = XMLHandler.parse(fpath="tests/data/numeric_object_names.xml", in_memory=in_memory)
     records = handler.get_records(Schema.Objects)
     assert [(record["name"], record["object_id"]) for record in records] == [
-        ("113_316_1", 1),
-        (1133161, 2),
+        ("113_316_1", "1"),
+        ("1133161", "2"),
     ]
 
 
@@ -208,7 +208,7 @@ def test_numeric_object_names_xml_round_trip(tmp_path):
 def test_complex_like_object_names(in_memory: bool) -> None:
     handler = XMLHandler.parse(fpath="tests/data/complex_object_names.xml", in_memory=in_memory)
     records = handler.get_records(Schema.Objects)
-    assert [(record["name"], record["object_id"]) for record in records] == [("7706j", 1), ("7999j", 2)]
+    assert [(record["name"], record["object_id"]) for record in records] == [("7706j", "1"), ("7999j", "2")]
 
 
 def test_complex_like_object_names_round_trip(tmp_path: Path) -> None:

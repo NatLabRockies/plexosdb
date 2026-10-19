@@ -11,6 +11,7 @@ installation
 tutorial
 howtos/index
 api/index
+xml-records
 CHANGELOG
 ```
 

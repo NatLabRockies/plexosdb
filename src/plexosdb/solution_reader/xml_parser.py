@@ -7,7 +7,10 @@ import xml.etree.ElementTree as ET
 from collections import defaultdict
 from typing import Any
 
-from .utils import _coerce_value, _local_name, _quote_ident
+from ..types import XMLRecord
+from ..utils import SQLITE_ASCII_CASE_FOLD
+from ..xml_records import element_to_record, local_name
+from .utils import _quote_ident
 
 
 class _BOMStripStream:
@@ -54,7 +57,10 @@ def _stream_xml_to_sqlite(
     processing, keeping peak memory proportional to the widest batch rather
     than the full XML size.
     """
-    buffers: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    if batch_size < 1:
+        msg = "batch_size must be positive"
+        raise ValueError(msg)
+    buffers: dict[str, list[XMLRecord]] = defaultdict(list)
     depth = 0
     root: ET.Element | None = None
 
@@ -66,10 +72,16 @@ def _stream_xml_to_sqlite(
         else:  # "end"
             if depth == 2 and root is not None:
                 # Direct child of root — this is a table-row element.
-                tag = _local_name(element.tag)
-                row: dict[str, Any] = {_local_name(col.tag): _coerce_value(col.text) for col in element}
+                tag = local_name(element.tag)
+                field_names: dict[str, str] = {}
+                aliases: dict[str, str] = {}
+                for field in element:
+                    name = local_name(field.tag)
+                    aliases[name] = field_names.setdefault(name.translate(SQLITE_ASCII_CASE_FOLD), name)
+                row = element_to_record(element, rename=aliases)
                 buffers[tag].append(row)
                 # Detach the processed element from root to free memory.
+                element.clear()
                 root.clear()
                 if len(buffers[tag]) >= batch_size:
                     _create_and_insert_rows(con, tag, buffers.pop(tag))
@@ -80,18 +92,36 @@ def _stream_xml_to_sqlite(
             _create_and_insert_rows(con, tag, rows)
 
 
-def _create_and_insert_rows(con: sqlite3.Connection, table: str, rows: list[dict[str, Any]]) -> None:
+def _create_and_insert_rows(con: sqlite3.Connection, table: str, rows: list[XMLRecord]) -> None:
     """Create a table if needed and insert row dictionaries as TEXT columns."""
     if not rows:
         return
 
-    all_cols: list[str] = sorted({col for row in rows for col in row})
-    col_defs = ", ".join(f"{_quote_ident(col)} TEXT" for col in all_cols)
-    con.execute(f"CREATE TABLE IF NOT EXISTS {_quote_ident(table)} ({col_defs})")
+    columns: dict[str, str] = {
+        row[1].translate(SQLITE_ASCII_CASE_FOLD): row[1]
+        for row in con.execute(f"PRAGMA table_info({_quote_ident(table)})")
+    }
+    existing = set(columns.values())
+    normalized_rows: list[XMLRecord] = []
+    for row in rows:
+        normalized: XMLRecord = {}
+        for name, value in row.items():
+            canonical = columns.setdefault(name.translate(SQLITE_ASCII_CASE_FOLD), name)
+            normalized[canonical] = value
+        normalized_rows.append(normalized)
+
+    all_cols = sorted({col for row in normalized_rows for col in row})
+    if not existing:
+        col_defs = ", ".join(f"{_quote_ident(col)} TEXT" for col in all_cols)
+        con.execute(f"CREATE TABLE {_quote_ident(table)} ({col_defs})")
+    else:
+        for column in all_cols:
+            if column not in existing:
+                con.execute(f"ALTER TABLE {_quote_ident(table)} ADD COLUMN {_quote_ident(column)} TEXT")
 
     placeholders = ", ".join("?" for _ in all_cols)
     col_sql = ", ".join(_quote_ident(col) for col in all_cols)
-    values = [tuple(row.get(col) for col in all_cols) for row in rows]
+    values = [tuple(row.get(col) for col in all_cols) for row in normalized_rows]
     con.executemany(
         f"INSERT INTO {_quote_ident(table)} ({col_sql}) VALUES ({placeholders})",
         values,
