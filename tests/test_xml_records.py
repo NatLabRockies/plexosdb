@@ -133,3 +133,18 @@ def test_invalid_batch_size(batch_size: int) -> None:
     with closing(sqlite3.connect(":memory:")) as connection:
         with pytest.raises(ValueError, match="batch_size must be positive"):
             xml_parser._stream_xml_to_sqlite(connection, BytesIO(b"<root/>"), batch_size=batch_size)
+
+
+def test_late_columns_follow_sqlite_ascii_case_rules() -> None:
+    xml = (
+        "<root><t><value>first</value></t><t><VALUE>second</VALUE></t>"
+        "<t><ä>lower</ä></t><t><Ä>upper</Ä></t></root>"
+    ).encode()
+    with closing(sqlite3.connect(":memory:")) as connection:
+        xml_parser._stream_xml_to_sqlite(connection, BytesIO(xml), batch_size=1)
+        assert connection.execute('SELECT value, "ä", "Ä" FROM t ORDER BY rowid').fetchall() == [
+            ("first", None, None),
+            ("second", None, None),
+            (None, "lower", None),
+            (None, None, "upper"),
+        ]
