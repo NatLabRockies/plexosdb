@@ -64,7 +64,9 @@ def _group_key_rows_by_period(
             period_type = int(period_type_id)
             num_values = int(length)
             byte_pos = int(position)
-            offset = int(period_offset)
+            offset = (
+                int(period_offset.strip() or "0") if isinstance(period_offset, str) else int(period_offset)
+            )
             key_id_int = int(key_id)
         except (TypeError, ValueError):
             continue

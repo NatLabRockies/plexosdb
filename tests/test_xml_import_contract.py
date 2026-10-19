@@ -333,3 +333,26 @@ def test_solution_materialization_matches_numeric_ids(
         assert solution.connection.execute(
             f"SELECT timestamp FROM report.{table} ORDER BY timestamp"
         ).fetchall() == [("2026-01-01 00:00:00",), ("2026-01-01 01:00:00",)]
+
+
+@pytest.mark.parametrize("offset, expected", [(None, 0), ("", 0), (" \t\n", 0), ("\u00a0", 0), (" 3 ", 3)])
+def test_optional_bin_offset_preserves_raw_text_and_decodes(
+    tmp_path: Path, offset: str | None, expected: int
+) -> None:
+    root = ET.Element("MasterDataSet")
+    row = ET.SubElement(root, "t_key_index")
+    record = {"key_id": "1", "period_type_id": "0", "length": "2", "position": "0", "period_offset": offset}
+    for name, value in record.items():
+        ET.SubElement(row, name).text = value
+    archive = tmp_path / "optional-offset.zip"
+    with ZipFile(archive, "w") as zipped:
+        zipped.writestr("solution.xml", ET.tostring(root, encoding="utf-8"))
+        zipped.writestr("t_data_0.BIN", struct.pack("<2d", 10.5, 20.5))
+    with PlexosSolution.from_zip(archive) as solution:
+        solution.to_sqlite()
+        assert solution.connection.execute("SELECT period_offset FROM t_key_index").fetchone() == (
+            offset or None,
+        )
+        assert solution.connection.execute(
+            "SELECT key_id, block_id, value FROM t_data_values ORDER BY block_id"
+        ).fetchall() == [(1, expected + 1, 10.5), (1, expected + 2, 20.5)]
