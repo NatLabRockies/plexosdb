@@ -88,12 +88,12 @@ def _ensure_join_indexes(con: sqlite3.Connection, table_names: set[str]) -> None
     ]:
         if tbl in table_names:
             con.execute(
-                f"CREATE INDEX IF NOT EXISTS idx_{tbl}_{col}_integer ON {tbl}({integer_reference_sql(col)})"
+                f"CREATE INDEX IF NOT EXISTS idx_{tbl}_{col}_identity ON {tbl}({integer_reference_sql(col)})"
             )
     for period_table, id_col, _ in _PERIOD_TABLE_META.values():
         if period_table in table_names:
             con.execute(
-                f"CREATE INDEX IF NOT EXISTS idx_{period_table}_{id_col}_integer "
+                f"CREATE INDEX IF NOT EXISTS idx_{period_table}_{id_col}_identity "
                 f"ON {period_table}({integer_reference_sql(id_col)})"
             )
 
@@ -109,7 +109,7 @@ def _build_period_join(table_name: str, table_names: set[str]) -> tuple[str, str
             period_table, id_col, dt_col = meta
             if period_table in table_names:
                 reference = integer_reference_sql(f"p.{id_col}")
-                join = f"LEFT JOIN main.{period_table} p ON {reference} = dv.block_id"
+                join = f"LEFT JOIN main.{period_table} p ON {reference} = CAST(dv.block_id AS TEXT)"
                 return join, f"p.{dt_col} AS datetime"
     return "", "NULL AS datetime"
 
@@ -131,12 +131,12 @@ def _build_rich_create_sql(
             o.name AS name,
             CASE WHEN TRIM(s.sample_name, '{STRIP_CHARACTERS}') <> ''
                  THEN s.sample_name ELSE 'Mean' END AS sample_name,
-            {integer_reference_sql("k.band_id")} AS band_id,
+            CAST({integer_reference_sql("k.band_id")} AS INTEGER) AS band_id,
             dv.block_id,
             {datetime_expr},
             dv.value
         FROM {dv_source} dv
-        JOIN main.t_key k ON {integer_reference_sql("k.key_id")} = dv.key_id
+        JOIN main.t_key k ON {integer_reference_sql("k.key_id")} = CAST(dv.key_id AS TEXT)
         LEFT JOIN main.t_sample s
             ON {integer_reference_sql("s.sample_id")} = {integer_reference_sql("k.sample_id")}
         LEFT JOIN main.t_membership m
@@ -381,14 +381,14 @@ def _resolve_report_unit(
 
     key_cols = set(_table_columns(con, "t_key"))
     has_is_summary = "is_summary" in key_cols
-    key_ids_sql = ",".join(str(int(k)) for k in sorted(key_ids))
+    key_ids_sql = ",".join(f"'{int(k)}'" for k in sorted(key_ids))
     regular_unit = f"CASE WHEN TRIM(pu.value, '{STRIP_CHARACTERS}') <> '' THEN pu.value END"
     summary_unit = f"CASE WHEN TRIM(pu_summary.value, '{STRIP_CHARACTERS}') <> '' THEN pu_summary.value END"
     if has_is_summary:
         unit_expr = f"""
             COALESCE(
                 CASE
-                    WHEN COALESCE({integer_reference_sql("k.is_summary")}, 0) = 1
+                    WHEN COALESCE({integer_reference_sql("k.is_summary")}, '0') = '1'
                     THEN {summary_unit}
                     ELSE {regular_unit}
                 END,

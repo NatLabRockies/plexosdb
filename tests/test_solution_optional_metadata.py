@@ -1,6 +1,8 @@
 """Optional numeric metadata defaults at solution-consumer boundaries."""
 
+import sqlite3
 import xml.etree.ElementTree as ET
+from contextlib import closing
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -9,7 +11,7 @@ import pytest
 from plexosdb import XMLRecord
 from plexosdb.solution_reader import PlexosSolution, _build_key_period_map, _resolve_report_unit
 from plexosdb.solution_reader import _build_derived_table_map
-from plexosdb.solution_reader.utils import integer_reference_sql
+from plexosdb.solution_reader.utils import integer_reference_sql, register_integer_references
 
 
 def write_metadata_zip(tables: dict[str, list[XMLRecord]], /, *, destination: Path) -> Path:
@@ -103,6 +105,7 @@ def test_blank_unit_references_do_not_match_unit_zero(
 )
 @pytest.mark.parametrize("sample_label", ["Peak", " \t\n", "\u00a0", " Peak "])
 @pytest.mark.parametrize("padded_ids", [False, True])
+@pytest.mark.parametrize("large_sample_ids", [False, True])
 @pytest.mark.parametrize("variable_child", [False, True])
 def test_optional_references_preserve_defaults_and_explicit_zero(
     tmp_path: Path,
@@ -112,11 +115,17 @@ def test_optional_references_preserve_defaults_and_explicit_zero(
     child_name: str | None,
     padded_ids: bool,
     sample_label: str,
+    large_sample_ids: bool,
     variable_child: bool,
 ) -> None:
     if sample == "Peak":
         sample = sample_label if sample_label.strip() else "Mean"
     one = "\u00a01\u00a0" if padded_ids else "1"
+    sample_one = "9223372036854775808" if large_sample_ids else one
+    sample_zero = "9223372036854775809" if large_sample_ids else "0"
+    sample_reference = reference
+    if large_sample_ids and reference is not None and reference.strip():
+        sample_reference = sample_zero if reference == "0" else sample_one
     child_reference = reference if variable_child else "1"
     expected_name = child_name if variable_child else "Generator"
     archive = write_metadata_zip(
@@ -127,7 +136,7 @@ def test_optional_references_preserve_defaults_and_explicit_zero(
                     "key_id": one,
                     "membership_id": "1",
                     "property_id": "1",
-                    "sample_id": reference,
+                    "sample_id": sample_reference,
                     "band_id": "1",
                     "phase_id": "4",
                     "is_summary": "0",
@@ -145,8 +154,8 @@ def test_optional_references_preserve_defaults_and_explicit_zero(
                 {"object_id": one, "name": "Generator", "category_id": reference},
             ],
             "t_sample": [
-                {"sample_id": "0", "sample_name": "Zero"},
-                {"sample_id": one, "sample_name": sample_label},
+                {"sample_id": sample_zero, "sample_name": "Zero"},
+                {"sample_id": sample_one, "sample_name": sample_label},
             ],
             "t_category": [
                 {"category_id": "0", "name": "Zero category"},
@@ -165,12 +174,16 @@ def test_optional_references_preserve_defaults_and_explicit_zero(
         solution.connection.execute(
             "CREATE INDEX idx_t_sample_sample_id_numeric ON t_sample(CAST(sample_id AS INTEGER))"
         )
+        cursor = solution.connection.execute("SELECT sample_name FROM t_sample")
+        assert cursor.fetchone() is not None
         assert solution.materialize_table("ST__Interval__Generators__Generation").created
+        assert cursor.fetchone() is not None
+        cursor.close()
         assert solution.connection.execute(
             "SELECT name, sample_name, category, Generation "
             'FROM report."ST__Interval__Generators__Generation"'
         ).fetchall() == [(expected_name, sample, category, 10.5)]
-        assert solution.connection.execute("SELECT sample_id FROM t_key").fetchone() == (reference,)
+        assert solution.connection.execute("SELECT sample_id FROM t_key").fetchone() == (sample_reference,)
         assert solution.connection.execute(
             "SELECT sample_name FROM t_sample WHERE sample_name IS NOT 'Zero'"
         ).fetchone() == (sample_label,)
@@ -182,9 +195,9 @@ def test_optional_references_preserve_defaults_and_explicit_zero(
         )
         plan = solution.connection.execute(
             f"EXPLAIN QUERY PLAN SELECT * FROM t_sample WHERE {integer_reference_sql('sample_id')} = ?",
-            (1,),
+            (sample_one if large_sample_ids else 1,),
         ).fetchall()
-        assert any("idx_t_sample_sample_id_integer" in row[3] for row in plan)
+        assert any("idx_t_sample_sample_id_identity" in row[3] for row in plan)
 
 
 @pytest.mark.parametrize("summary_name", [" \t\n", "\u00a0"])
@@ -245,3 +258,37 @@ def test_blank_unit_labels_keep_fallback(tmp_path: Path, blank: str | None, summ
             (regular or None,),
             (summary or None,),
         ]
+
+
+@pytest.mark.parametrize("sample_id", ["9223372036854775808", "9223372036854775809"])
+def test_oversized_unit_ids_remain_distinct(tmp_path: Path, sample_id: str) -> None:
+    archive = write_metadata_zip(
+        {
+            "t_key": [{"key_id": "1", "property_id": "1", "is_summary": "0"}],
+            "t_property": [{"property_id": "1", "unit_id": sample_id, "summary_unit_id": sample_id}],
+            "t_unit": [
+                {"unit_id": "9223372036854775808", "value": "MW"},
+                {"unit_id": "9223372036854775809", "value": "GW"},
+            ],
+        },
+        destination=tmp_path / "oversized.zip",
+    )
+    with PlexosSolution.from_zip(archive) as solution:
+        solution.to_sqlite(decode_bin_values=False)
+        assert _resolve_report_unit(solution.connection, key_ids={1}) == (
+            "MW" if sample_id.endswith("8") else "GW"
+        )
+        assert solution.connection.execute("SELECT unit_id FROM t_unit ORDER BY unit_id").fetchall() == [
+            ("9223372036854775808",),
+            ("9223372036854775809",),
+        ]
+
+
+def test_integer_registration_preserves_standalone_unread_cursor() -> None:
+    with closing(sqlite3.connect(":memory:")) as connection:
+        register_integer_references(connection)
+        cursor = connection.execute("SELECT plexos_integer_reference(column1) FROM (VALUES ('1'), ('2'))")
+        assert cursor.fetchone() == (1,)
+        register_integer_references(connection)
+        assert cursor.fetchone() == (2,)
+        cursor.close()
