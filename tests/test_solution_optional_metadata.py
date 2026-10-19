@@ -101,6 +101,7 @@ def test_blank_unit_references_do_not_match_unit_zero(
         ("\u00a01\u00a0", "Peak", "Category", "Generator"),
     ],
 )
+@pytest.mark.parametrize("sample_label", ["Peak", " \t\n", "\u00a0", " Peak "])
 @pytest.mark.parametrize("padded_ids", [False, True])
 @pytest.mark.parametrize("variable_child", [False, True])
 def test_optional_references_preserve_defaults_and_explicit_zero(
@@ -110,8 +111,11 @@ def test_optional_references_preserve_defaults_and_explicit_zero(
     category: str | None,
     child_name: str | None,
     padded_ids: bool,
+    sample_label: str,
     variable_child: bool,
 ) -> None:
+    if sample == "Peak":
+        sample = sample_label if sample_label.strip() else "Mean"
     one = "\u00a01\u00a0" if padded_ids else "1"
     child_reference = reference if variable_child else "1"
     expected_name = child_name if variable_child else "Generator"
@@ -142,7 +146,7 @@ def test_optional_references_preserve_defaults_and_explicit_zero(
             ],
             "t_sample": [
                 {"sample_id": "0", "sample_name": "Zero"},
-                {"sample_id": one, "sample_name": "Peak"},
+                {"sample_id": one, "sample_name": sample_label},
             ],
             "t_category": [
                 {"category_id": "0", "name": "Zero category"},
@@ -167,6 +171,9 @@ def test_optional_references_preserve_defaults_and_explicit_zero(
             'FROM report."ST__Interval__Generators__Generation"'
         ).fetchall() == [(expected_name, sample, category, 10.5)]
         assert solution.connection.execute("SELECT sample_id FROM t_key").fetchone() == (reference,)
+        assert solution.connection.execute(
+            "SELECT sample_name FROM t_sample WHERE sample_name IS NOT 'Zero'"
+        ).fetchone() == (sample_label,)
         assert solution.connection.execute(
             "SELECT category_id FROM t_object WHERE name='Generator'"
         ).fetchone() == (reference,)
@@ -213,3 +220,28 @@ def test_blank_summary_names_keep_distinct_property_tables(tmp_path: Path, summa
         assert solution.connection.execute(
             "SELECT summary_name FROM t_property ORDER BY rowid"
         ).fetchall() == [(summary_name,), (summary_name,)]
+
+
+@pytest.mark.parametrize("blank", [None, "", " \t\n", "\u00a0"])
+@pytest.mark.parametrize("summary_flag", [None, "1"])
+def test_blank_unit_labels_keep_fallback(tmp_path: Path, blank: str | None, summary_flag: str | None) -> None:
+    key: XMLRecord = {"key_id": "1", "property_id": "1"}
+    if summary_flag is not None:
+        key["is_summary"] = summary_flag
+    regular = " MW " if summary_flag else blank
+    summary = blank if summary_flag else " GW "
+    archive = write_metadata_zip(
+        {
+            "t_key": [key],
+            "t_property": [{"property_id": "1", "unit_id": "70", "summary_unit_id": "71"}],
+            "t_unit": [{"unit_id": "70", "value": regular}, {"unit_id": "71", "value": summary}],
+        },
+        destination=tmp_path / "blank-labels.zip",
+    )
+    with PlexosSolution.from_zip(archive) as solution:
+        solution.to_sqlite(decode_bin_values=False)
+        assert _resolve_report_unit(solution.connection, key_ids={1}) == (" MW " if summary_flag else " GW ")
+        assert solution.connection.execute("SELECT value FROM t_unit ORDER BY unit_id").fetchall() == [
+            (regular or None,),
+            (summary or None,),
+        ]
