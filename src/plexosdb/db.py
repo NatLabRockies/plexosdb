@@ -15,6 +15,7 @@ from loguru import logger
 
 from . import checks as checks_module
 from .db_manager import SQLiteManager
+from .types import SQLiteRecord
 from .enums import (
     ClassEnum,
     CollectionEnum,
@@ -193,33 +194,23 @@ class PlexosDB:
                 if not schema_enum:
                     continue
 
-                bit_columns = {
+                xml_records = xml_handler.get_records(schema_enum)
+                if not xml_records:
+                    continue
+
+                bit_columns: set[str] = {
                     name
                     for (name,) in self.query(
                         "SELECT name FROM pragma_table_info(?) WHERE upper(type) = 'BIT'", (tag,)
                     )
                 }
-                record_dict: list[dict[str, str | int | None]] = []
-                for element in xml_handler.iter(schema_enum):
-                    record: dict[str, str | int | None] = {}
-                    for child in element:
-                        value = child.text
-                        if (
-                            child.tag in bit_columns
-                            and value is not None
-                            and value.strip().lower() in {"true", "false"}
-                        ):
-                            record[child.tag] = int(value.strip().lower() == "true")
-                        else:
-                            # Bind XML text directly: SQLite affinity owns numeric conversion.
-                            record[child.tag] = value
-                    record_dict.append(record)
-                if not record_dict:  # Skip if no records
-                    continue
-
-                # Group records by column structure to avoid mismatches
-                column_groups: dict[frozenset[str], list[dict[str, Any]]] = {}
-                for record in record_dict:
+                column_groups: dict[frozenset[str], list[SQLiteRecord]] = {}
+                for xml_record in xml_records:
+                    record: SQLiteRecord = dict(xml_record)
+                    for column in bit_columns:
+                        value = xml_record.get(column)
+                        if value is not None and value.strip().lower() in {"true", "false"}:
+                            record[column] = int(value.strip().lower() == "true")
                     # Create a hashable key from the record's column names
                     column_key = frozenset(record.keys())
                     if column_key not in column_groups:

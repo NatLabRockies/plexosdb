@@ -8,7 +8,7 @@ from zipfile import ZipFile
 
 import pytest
 
-from plexosdb import PlexosDB
+from plexosdb import PlexosDB, XMLHandler, XMLRecord
 from plexosdb.enums import Schema
 from plexosdb.solution_reader import PlexosSolution
 
@@ -53,6 +53,21 @@ TEXT_VALUES = [
     "a & b < c",
     "électricité",
 ]
+
+
+@pytest.mark.parametrize("in_memory", [True, False])
+@pytest.mark.parametrize("value", [*TEXT_VALUES, None])
+def test_xml_records_preserve_raw_values(tmp_path: Path, value: str | None, in_memory: bool) -> None:
+    root = ET.Element("MasterDataSet")
+    row = ET.SubElement(root, "t_text")
+    ET.SubElement(row, "data_id").text = "0001"
+    ET.SubElement(row, "value").text = value
+    source = tmp_path / "source.xml"
+    ET.ElementTree(root).write(source, encoding="utf-8")
+
+    handler = XMLHandler.parse(source, in_memory=in_memory)
+    records: list[XMLRecord] = handler.get_records(Schema.Text, rename_dict={"data_id": "record_id"})
+    assert records == [{"record_id": "0001", "value": value}]
 
 
 @pytest.mark.parametrize("value", TEXT_VALUES)

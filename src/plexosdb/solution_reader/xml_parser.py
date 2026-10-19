@@ -7,6 +7,7 @@ import xml.etree.ElementTree as ET
 from collections import defaultdict
 from typing import Any
 
+from ..types import XMLRecord
 from .utils import _local_name, _quote_ident
 
 
@@ -54,7 +55,7 @@ def _stream_xml_to_sqlite(
     processing, keeping peak memory proportional to the widest batch rather
     than the full XML size.
     """
-    buffers: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    buffers: dict[str, list[XMLRecord]] = defaultdict(list)
     depth = 0
     root: ET.Element | None = None
 
@@ -67,7 +68,7 @@ def _stream_xml_to_sqlite(
             if depth == 2 and root is not None:
                 # Direct child of root — this is a table-row element.
                 tag = _local_name(element.tag)
-                row: dict[str, Any] = {_local_name(col.tag): col.text for col in element}
+                row: XMLRecord = {_local_name(col.tag): col.text for col in element}
                 buffers[tag].append(row)
                 # Detach the processed element from root to free memory.
                 root.clear()
@@ -80,7 +81,7 @@ def _stream_xml_to_sqlite(
             _create_and_insert_rows(con, tag, rows)
 
 
-def _create_and_insert_rows(con: sqlite3.Connection, table: str, rows: list[dict[str, Any]]) -> None:
+def _create_and_insert_rows(con: sqlite3.Connection, table: str, rows: list[XMLRecord]) -> None:
     """Create a table if needed and insert row dictionaries as TEXT columns."""
     if not rows:
         return
