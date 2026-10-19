@@ -130,19 +130,17 @@ class XMLHandler:
             rename_dict = {}
         element_list = self.iter(element_enum, *elements, **tag_elements)
 
-        records: list[dict[str, Any]] = []
-        for element in element_list:
-            record = {}
-            for child in element.iter():
-                if child.tag == element_enum.name:
-                    continue
-                value = validate_string(child.text) if child.text is not None else None
-                # Container-looking XML text must remain bindable without changing its spelling.
-                if not isinstance(value, (str, int, float, bytes, type(None))):
-                    value = child.text
-                record[rename_dict.get(child.tag, child.tag)] = value
-            records.append(record)
-        return records
+        # Return a dict version of the elements
+        return list(
+            map(
+                lambda element: {
+                    rename_dict.get(e.tag, e.tag): validate_string(e.text)  # type: ignore
+                    for e in element.iter()
+                    if e.tag != element_enum.name
+                },
+                element_list,
+            )
+        )
 
     def iter(
         self,

@@ -7,7 +7,7 @@ import xml.etree.ElementTree as ET
 from collections import defaultdict
 from typing import Any
 
-from .utils import _coerce_value, _local_name, _quote_ident
+from .utils import _local_name, _quote_ident
 
 
 class _BOMStripStream:
@@ -67,7 +67,7 @@ def _stream_xml_to_sqlite(
             if depth == 2 and root is not None:
                 # Direct child of root — this is a table-row element.
                 tag = _local_name(element.tag)
-                row: dict[str, Any] = {_local_name(col.tag): _coerce_value(col.text) for col in element}
+                row: dict[str, Any] = {_local_name(col.tag): col.text for col in element}
                 buffers[tag].append(row)
                 # Detach the processed element from root to free memory.
                 root.clear()

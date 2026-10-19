@@ -193,7 +193,27 @@ class PlexosDB:
                 if not schema_enum:
                     continue
 
-                record_dict = xml_handler.get_records(schema_enum)
+                bit_columns = {
+                    name
+                    for (name,) in self.query(
+                        "SELECT name FROM pragma_table_info(?) WHERE upper(type) = 'BIT'", (tag,)
+                    )
+                }
+                record_dict: list[dict[str, str | int | None]] = []
+                for element in xml_handler.iter(schema_enum):
+                    record: dict[str, str | int | None] = {}
+                    for child in element:
+                        value = child.text
+                        if (
+                            child.tag in bit_columns
+                            and value is not None
+                            and value.lower() in {"true", "false"}
+                        ):
+                            record[child.tag] = int(value.lower() == "true")
+                        else:
+                            # Bind XML text directly: SQLite affinity owns numeric conversion.
+                            record[child.tag] = value
+                    record_dict.append(record)
                 if not record_dict:  # Skip if no records
                     continue
 
@@ -257,6 +277,12 @@ class PlexosDB:
 
         Notes
         -----
+        XML text is bound without Python literal evaluation. Text columns preserve
+        their XML content; numeric columns use SQLite's affinity and precision
+        rules. In particular, integers outside SQLite's signed 64-bit range may
+        be stored as REAL and lose precision. Boolean words are converted to 0/1
+        only for columns declared as BIT. Empty XML elements bind as NULL.
+
         This method groups records by their column structure to handle varying record
         formats in the XML data. Each group of records with consistent structure is
         processed separately to avoid SQL errors from column mismatches.
