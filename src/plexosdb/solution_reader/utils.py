@@ -16,17 +16,23 @@ STRIP_CHARACTERS = (
 def integer_reference_sql(column: str, /) -> str:
     """Build an integer reference using the same conversion as BIN metadata."""
     identifier = ".".join(_quote_ident(part) for part in column.split("."))
-    return f"CAST(plexos_integer_reference({identifier}) AS INTEGER)"
+    return f"CAST(plexos_integer_reference({identifier}) AS TEXT)"
 
 
-def _integer_reference(value: SQLiteValue, /) -> str | None:
-    """Return canonical integer text without SQLite's callback integer-size limit."""
+def _integer_reference(value: SQLiteValue, /) -> int | str | None:
+    """Return an exact canonical identity within SQLite's integer-size limit."""
     integer = parse_optional_integer(value)
-    return str(integer) if integer is not None else None
+    if integer is None or -(2**63) <= integer < 2**63:
+        return integer
+    return str(integer)
 
 
 def register_integer_references(con: sqlite3.Connection, /) -> None:
     """Install the deterministic conversion used by materialization and its indexes."""
+    if any(
+        row[0] == "plexos_integer_reference" and row[4] == 1 for row in con.execute("PRAGMA function_list")
+    ):
+        return
     con.create_function("plexos_integer_reference", 1, _integer_reference, deterministic=True)
 
 
