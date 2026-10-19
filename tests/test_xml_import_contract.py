@@ -1,6 +1,7 @@
 """XML import preserves text; the database schema owns numeric conversion."""
 
 import sqlite3
+import struct
 import xml.etree.ElementTree as ET
 from contextlib import closing
 from pathlib import Path
@@ -257,3 +258,63 @@ def test_numeric_looking_object_names_remain_distinct(tmp_path: Path) -> None:
                 assert db.get_object_id("Generator", name) == object_id
             if path == source:
                 db.to_xml(target)
+
+
+@pytest.mark.parametrize("key_id", ["000100", " 100 "])
+@pytest.mark.parametrize("materialize", ["all", "single"])
+def test_solution_materialization_matches_numeric_ids(tmp_path: Path, key_id: str, materialize: str) -> None:
+    rows: list[tuple[str, XMLRecord]] = [
+        (
+            "t_key_index",
+            {"key_id": key_id, "period_type_id": "0", "length": "2", "position": "0", "period_offset": "0"},
+        ),
+        (
+            "t_key",
+            {
+                "key_id": key_id,
+                "membership_id": "0010",
+                "property_id": "0020",
+                "sample_id": "0030",
+                "band_id": "01",
+                "phase_id": "4",
+                "is_summary": "0",
+            },
+        ),
+        ("t_membership", {"membership_id": "10", "child_object_id": "0040", "collection_id": "0050"}),
+        ("t_object", {"object_id": "40", "name": "000123", "category_id": "0060"}),
+        ("t_category", {"category_id": "60", "name": "None"}),
+        ("t_collection", {"collection_id": "50", "name": "Generators"}),
+        (
+            "t_property",
+            {"property_id": "20", "name": "Generation", "unit_id": "0070", "summary_unit_id": "0070"},
+        ),
+        ("t_unit", {"unit_id": "70", "value": "MW"}),
+        ("t_sample", {"sample_id": "30", "sample_name": "Mean"}),
+        ("t_period_0", {"interval_id": "0001", "datetime": "2026-01-01 00:00:00"}),
+        ("t_period_0", {"interval_id": " 2 ", "datetime": "2026-01-01 01:00:00"}),
+    ]
+    root = ET.Element("MasterDataSet")
+    for table, record in rows:
+        row = ET.SubElement(root, table)
+        for column, value in record.items():
+            ET.SubElement(row, column).text = value
+    archive = tmp_path / "solution.zip"
+    with ZipFile(archive, "w") as zipped:
+        zipped.writestr("solution.xml", ET.tostring(root))
+        zipped.writestr("t_data_0.BIN", struct.pack("<2d", 10.5, 20.5))
+
+    table = '"ST__Interval__Generators__Generation"'
+    with PlexosSolution.from_zip(archive) as solution:
+        solution.to_sqlite(materialize="all" if materialize == "all" else "none")
+        if materialize == "single":
+            assert solution.materialize_table("ST__Interval__Generators__Generation").created
+        assert solution.connection.execute("SELECT key_id FROM t_key").fetchall() == [(key_id,)]
+        assert solution.connection.execute(
+            f"SELECT name, sample_name, band_id, datetime, value FROM data.{table} ORDER BY block_id"
+        ).fetchall() == [
+            ("000123", "Mean", 1, "2026-01-01 00:00:00", 10.5),
+            ("000123", "Mean", 1, "2026-01-01 01:00:00", 20.5),
+        ]
+        assert solution.connection.execute(
+            f"SELECT name, category, unit, Generation FROM report.{table} ORDER BY timestamp"
+        ).fetchall() == [("000123", "None", "MW", 10.5), ("000123", "None", "MW", 20.5)]
