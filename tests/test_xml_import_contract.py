@@ -272,7 +272,7 @@ def test_numeric_looking_object_names_remain_distinct(tmp_path: Path) -> None:
                 db.to_xml(target)
 
 
-@pytest.mark.parametrize("key_id", ["000100", " 100 "])
+@pytest.mark.parametrize("key_id", ["000100", " 100 ", "1_00", "١٠٠", "1٠_0"])
 @pytest.mark.parametrize("materialize", ["all", "single"])
 @pytest.mark.parametrize("date_format", [None, "%Y-%m-%dT%H:%M:%S", "%d/%m/%Y %H:%M:%S"])
 @pytest.mark.parametrize("padding", ["", " \t\n", "\u00a0"])

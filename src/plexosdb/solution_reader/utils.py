@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sqlite3
+
 from ..types import SQLiteValue
 from ..xml_records import local_name as _local_name
 
@@ -15,14 +17,20 @@ STRIP_CHARACTERS = (
 
 
 def integer_reference_sql(column: str, /) -> str:
-    """Build a native SQLite integer reference, preserving NULL and blank IDs."""
+    """Build an integer reference using the same conversion as BIN metadata."""
     identifier = ".".join(_quote_ident(part) for part in column.split("."))
-    text = (
-        f"CASE WHEN {identifier} GLOB '[0-9]*' THEN {identifier} "
-        f"ELSE TRIM({identifier}, '{STRIP_CHARACTERS}') END"
-    )
-    # The outer CAST retains integer affinity for expression-index lookups.
-    return f"CAST(NULLIF({text}, '') AS INTEGER)"
+    return f"CAST(plexos_integer_reference({identifier}) AS INTEGER)"
+
+
+def _integer_reference(value: SQLiteValue, /) -> str | None:
+    """Return canonical integer text without SQLite's callback integer-size limit."""
+    integer = parse_optional_integer(value)
+    return str(integer) if integer is not None else None
+
+
+def register_integer_references(con: sqlite3.Connection, /) -> None:
+    """Install the deterministic conversion used by materialization and its indexes."""
+    con.create_function("plexos_integer_reference", 1, _integer_reference, deterministic=True)
 
 
 def parse_optional_integer(value: SQLiteValue, /) -> int | None:

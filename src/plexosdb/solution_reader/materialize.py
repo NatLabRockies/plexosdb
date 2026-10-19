@@ -7,7 +7,13 @@ from collections import defaultdict
 from typing import Any
 from zipfile import ZipFile
 
-from .utils import STRIP_CHARACTERS, _quote_ident, integer_reference_sql, parse_optional_integer
+from .utils import (
+    STRIP_CHARACTERS,
+    _quote_ident,
+    integer_reference_sql,
+    parse_optional_integer,
+    register_integer_references,
+)
 
 
 def _sanitize_name(value: str | None) -> str:
@@ -68,6 +74,7 @@ _PERIOD_TABLE_META: dict[str, tuple[str, str, str]] = {
 
 def _ensure_join_indexes(con: sqlite3.Connection, table_names: set[str]) -> None:
     """Index numeric identities while preserving the imported XML spellings."""
+    register_integer_references(con)
     if "t_data_values" in table_names:
         con.execute("CREATE INDEX IF NOT EXISTS idx_t_data_values_key_id ON t_data_values(key_id)")
     for tbl, col in [
@@ -81,12 +88,12 @@ def _ensure_join_indexes(con: sqlite3.Connection, table_names: set[str]) -> None
     ]:
         if tbl in table_names:
             con.execute(
-                f"CREATE INDEX IF NOT EXISTS idx_{tbl}_{col}_reference ON {tbl}({integer_reference_sql(col)})"
+                f"CREATE INDEX IF NOT EXISTS idx_{tbl}_{col}_integer ON {tbl}({integer_reference_sql(col)})"
             )
     for period_table, id_col, _ in _PERIOD_TABLE_META.values():
         if period_table in table_names:
             con.execute(
-                f"CREATE INDEX IF NOT EXISTS idx_{period_table}_{id_col}_reference "
+                f"CREATE INDEX IF NOT EXISTS idx_{period_table}_{id_col}_integer "
                 f"ON {period_table}({integer_reference_sql(id_col)})"
             )
 
@@ -364,6 +371,7 @@ def _resolve_report_unit(
     key_ids: set[int],
 ) -> str | None:
     """Resolve display unit text for a report table from key/property metadata."""
+    register_integer_references(con)
     if not key_ids:
         return None
     table_names = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
@@ -412,6 +420,7 @@ def _resolve_report_unit(
 
 def _copy_data_table_to_report(con: sqlite3.Connection, table_name: str, *, key_ids: set[int]) -> None:
     """Create report-style table from data table, with fallback to plain mirror."""
+    register_integer_references(con)
     tq = _quote_ident(table_name)
     value_col = _quote_ident(table_name.split("__")[-1] if "__" in table_name else "value")
     interval_length = _report_interval_length(table_name)
