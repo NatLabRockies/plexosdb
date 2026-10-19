@@ -42,13 +42,14 @@ explicit zero valid. Matching expression indexes use the same Python `int`
 normalization as BIN decoding, including underscores and Unicode decimal digits.
 Materialization explicitly registers the deterministic
 `plexos_integer_reference` SQLite function before using these indexes, including
-when reopening a saved database. Reading materialized report tables needs no
-custom function; external clients updating indexed metadata must register it
-through `register_integer_references` from `plexosdb.solution_reader.utils`
-first. Blank summary names fall back to property names so distinct properties
-retain distinct result tables. Blank sample labels retain the `Mean` default,
-and blank unit labels retain the regular/summary unit fallback. Nonblank labels
-keep their original whitespace.
+when reopening a saved database. Registration is idempotent with active cursors,
+and IDs outside SQLite's signed 64-bit range retain lossless text identities.
+Reading materialized report tables needs no custom function; external clients
+updating indexed metadata must register it through `register_integer_references`
+from `plexosdb.solution_reader.utils` first. Blank summary names fall back to
+property names so distinct properties retain distinct result tables. Blank
+sample labels retain the `Mean` default, and blank unit labels retain the
+regular/summary unit fallback. Nonblank labels keep their original whitespace.
 
 Report timestamp conversion trims surrounding Unicode whitespace before
 converting ISO or day/month/year dates. The imported XML and derived data
