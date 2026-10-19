@@ -40,7 +40,9 @@ unchanged.
 Numeric reference joins treat Unicode-whitespace-only values as missing and keep
 explicit zero valid. Matching expression indexes use the same native SQLite
 normalization. Blank summary names fall back to property names so distinct
-properties retain distinct result tables.
+properties retain distinct result tables. Blank sample labels retain the `Mean`
+default, and blank unit labels retain the regular/summary unit fallback.
+Nonblank labels keep their original whitespace.
 
 Report timestamp conversion trims surrounding Unicode whitespace before
 converting ISO or day/month/year dates. The imported XML and derived data

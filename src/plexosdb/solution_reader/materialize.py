@@ -122,7 +122,8 @@ def _build_rich_create_sql(
         CREATE TABLE {sq}.{tq} AS
         SELECT
             o.name AS name,
-            COALESCE(s.sample_name, 'Mean') AS sample_name,
+            CASE WHEN TRIM(s.sample_name, '{STRIP_CHARACTERS}') <> ''
+                 THEN s.sample_name ELSE 'Mean' END AS sample_name,
             {integer_reference_sql("k.band_id")} AS band_id,
             dv.block_id,
             {datetime_expr},
@@ -373,19 +374,21 @@ def _resolve_report_unit(
     key_cols = set(_table_columns(con, "t_key"))
     has_is_summary = "is_summary" in key_cols
     key_ids_sql = ",".join(str(int(k)) for k in sorted(key_ids))
+    regular_unit = f"CASE WHEN TRIM(pu.value, '{STRIP_CHARACTERS}') <> '' THEN pu.value END"
+    summary_unit = f"CASE WHEN TRIM(pu_summary.value, '{STRIP_CHARACTERS}') <> '' THEN pu_summary.value END"
     if has_is_summary:
         unit_expr = f"""
             COALESCE(
                 CASE
                     WHEN COALESCE({integer_reference_sql("k.is_summary")}, 0) = 1
-                    THEN pu_summary.value
-                    ELSE pu.value
+                    THEN {summary_unit}
+                    ELSE {regular_unit}
                 END,
-                pu.value
+                {regular_unit}
             )
         """
     else:
-        unit_expr = "COALESCE(pu.value, pu_summary.value)"
+        unit_expr = f"COALESCE({regular_unit}, {summary_unit})"
 
     row = con.execute(
         f"""
