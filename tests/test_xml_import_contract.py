@@ -130,7 +130,18 @@ def test_numeric_model_columns_use_schema_affinity(tmp_path: Path, value: str, e
 
 @pytest.mark.parametrize(
     "value, expected",
-    [("true", 1), ("TRUE", 1), ("True", 1), ("false", 0), ("FALSE", 0), ("False", 0), ("1", 1), ("0", 0)],
+    [
+        ("true", 1),
+        ("TRUE", 1),
+        ("True", 1),
+        ("false", 0),
+        ("FALSE", 0),
+        ("False", 0),
+        ("1", 1),
+        ("0", 0),
+        ("  TRUE  ", 1),
+        ("\tFalse\n", 0),
+    ],
 )
 def test_boolean_conversion_is_limited_to_bit_columns(tmp_path: Path, value: str, expected: int) -> None:
     source = tmp_path / "source.xml"

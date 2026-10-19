@@ -207,9 +207,9 @@ class PlexosDB:
                         if (
                             child.tag in bit_columns
                             and value is not None
-                            and value.lower() in {"true", "false"}
+                            and value.strip().lower() in {"true", "false"}
                         ):
-                            record[child.tag] = int(value.lower() == "true")
+                            record[child.tag] = int(value.strip().lower() == "true")
                         else:
                             # Bind XML text directly: SQLite affinity owns numeric conversion.
                             record[child.tag] = value
