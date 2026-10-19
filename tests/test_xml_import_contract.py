@@ -4,6 +4,7 @@ import sqlite3
 import struct
 import xml.etree.ElementTree as ET
 from contextlib import closing
+from datetime import datetime
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -262,7 +263,12 @@ def test_numeric_looking_object_names_remain_distinct(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("key_id", ["000100", " 100 "])
 @pytest.mark.parametrize("materialize", ["all", "single"])
-def test_solution_materialization_matches_numeric_ids(tmp_path: Path, key_id: str, materialize: str) -> None:
+@pytest.mark.parametrize("date_format", ["%Y-%m-%dT%H:%M:%S", "%d/%m/%Y %H:%M:%S"])
+@pytest.mark.parametrize("padding", ["", " \t\n"])
+def test_solution_materialization_matches_numeric_ids(
+    tmp_path: Path, key_id: str, materialize: str, date_format: str, padding: str
+) -> None:
+    dates = [padding + datetime(2026, 1, 1, hour).strftime(date_format) + padding for hour in (0, 1)]
     rows: list[tuple[str, XMLRecord]] = [
         (
             "t_key_index",
@@ -290,8 +296,8 @@ def test_solution_materialization_matches_numeric_ids(tmp_path: Path, key_id: st
         ),
         ("t_unit", {"unit_id": "70", "value": "MW"}),
         ("t_sample", {"sample_id": "30", "sample_name": "Mean"}),
-        ("t_period_0", {"interval_id": "0001", "datetime": "2026-01-01 00:00:00"}),
-        ("t_period_0", {"interval_id": " 2 ", "datetime": "2026-01-01 01:00:00"}),
+        ("t_period_0", {"interval_id": "0001", "datetime": dates[0]}),
+        ("t_period_0", {"interval_id": " 2 ", "datetime": dates[1]}),
     ]
     root = ET.Element("MasterDataSet")
     for table, record in rows:
@@ -304,17 +310,26 @@ def test_solution_materialization_matches_numeric_ids(tmp_path: Path, key_id: st
         zipped.writestr("t_data_0.BIN", struct.pack("<2d", 10.5, 20.5))
 
     table = '"ST__Interval__Generators__Generation"'
+    database = tmp_path / "solution.sqlite"
     with PlexosSolution.from_zip(archive) as solution:
-        solution.to_sqlite(materialize="all" if materialize == "all" else "none")
+        solution.to_sqlite(database, materialize="all" if materialize == "all" else "none")
         if materialize == "single":
             assert solution.materialize_table("ST__Interval__Generators__Generation").created
         assert solution.connection.execute("SELECT key_id FROM t_key").fetchall() == [(key_id,)]
         assert solution.connection.execute(
             f"SELECT name, sample_name, band_id, datetime, value FROM data.{table} ORDER BY block_id"
         ).fetchall() == [
-            ("000123", "Mean", 1, "2026-01-01 00:00:00", 10.5),
-            ("000123", "Mean", 1, "2026-01-01 01:00:00", 20.5),
+            ("000123", "Mean", 1, dates[0], 10.5),
+            ("000123", "Mean", 1, dates[1], 20.5),
         ]
         assert solution.connection.execute(
             f"SELECT name, category, unit, Generation FROM report.{table} ORDER BY timestamp"
         ).fetchall() == [("000123", "None", "MW", 10.5), ("000123", "None", "MW", 20.5)]
+        assert solution.connection.execute(
+            f"SELECT timestamp FROM report.{table} ORDER BY timestamp"
+        ).fetchall() == [("2026-01-01 00:00:00",), ("2026-01-01 01:00:00",)]
+    with PlexosSolution.from_sqlite(database) as solution:
+        assert solution.materialize_table("ST__Interval__Generators__Generation").created
+        assert solution.connection.execute(
+            f"SELECT timestamp FROM report.{table} ORDER BY timestamp"
+        ).fetchall() == [("2026-01-01 00:00:00",), ("2026-01-01 01:00:00",)]
