@@ -31,6 +31,9 @@ it. If one row contains both spellings, the last field wins. Unicode names
 outside ASCII remain distinct. This destination policy does not alter raw XML
 records, whose field names are case-sensitive.
 
+Optional BIN period offsets containing only whitespace decode as zero. This
+conversion happens in the BIN decoder and preserves the imported offset text.
+
 Report timestamp conversion trims surrounding XML whitespace (space, tab,
 carriage return, and newline) before converting ISO or day/month/year dates. The
 imported XML and derived data datetime fields retain their original text. This
