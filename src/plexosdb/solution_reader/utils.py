@@ -2,18 +2,15 @@
 
 from __future__ import annotations
 
+from ..xml_records import local_name as _local_name
+
+__all__ = ["_coerce_value", "_local_name", "_quote_ident"]
+
 
 def _quote_ident(identifier: str) -> str:
     """Return a safely quoted SQLite identifier."""
     escaped = identifier.replace('"', '""')
     return f'"{escaped}"'
-
-
-def _local_name(tag: str) -> str:
-    """Return the local XML tag name without namespace prefix."""
-    if "}" in tag:
-        return tag.rsplit("}", 1)[1]
-    return tag
 
 
 def _coerce_value(value: str | None) -> int | float | str | None:

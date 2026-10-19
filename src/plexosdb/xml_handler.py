@@ -9,7 +9,8 @@ from typing import TYPE_CHECKING, Any
 from loguru import logger
 
 from .enums import Schema
-from .utils import validate_string
+from .types import XMLRecord
+from .xml_records import element_to_record
 
 PLEXOS_NAMESPACE = "http://tempuri.org/MasterDataSet.xsd"
 
@@ -124,23 +125,16 @@ class XMLHandler:
         *elements: Iterable[str | int],
         rename_dict: dict[str, str] | None = None,
         **tag_elements: Any,
-    ) -> list[dict[str, Any]]:
-        """Return a given element(s) as list of dictionaries."""
-        if rename_dict is None:
-            rename_dict = {}
-        element_list = self.iter(element_enum, *elements, **tag_elements)
+    ) -> list[XMLRecord]:
+        """Return XML text records without evaluating or coercing their contents.
 
-        # Return a dict version of the elements
-        return list(
-            map(
-                lambda element: {
-                    rename_dict.get(e.tag, e.tag): validate_string(e.text)  # type: ignore
-                    for e in element.iter()
-                    if e.tag != element_enum.name
-                },
-                element_list,
-            )
-        )
+        Values are strings or None for empty elements. Schema-specific conversion
+        belongs to the importer so numeric-looking text retains its spelling.
+        """
+        return [
+            element_to_record(element, rename=rename_dict)
+            for element in self.iter(element_enum, *elements, **tag_elements)
+        ]
 
     def iter(
         self,

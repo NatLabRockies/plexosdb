@@ -67,7 +67,7 @@ _PERIOD_TABLE_META: dict[str, tuple[str, str, str]] = {
 
 
 def _ensure_join_indexes(con: sqlite3.Connection, table_names: set[str]) -> None:
-    """Create indexes required for fast JOIN-based rich materialization."""
+    """Index numeric identities while preserving the imported XML spellings."""
     if "t_data_values" in table_names:
         con.execute("CREATE INDEX IF NOT EXISTS idx_t_data_values_key_id ON t_data_values(key_id)")
     for tbl, col in [
@@ -75,12 +75,20 @@ def _ensure_join_indexes(con: sqlite3.Connection, table_names: set[str]) -> None
         ("t_membership", "membership_id"),
         ("t_object", "object_id"),
         ("t_sample", "sample_id"),
+        ("t_property", "property_id"),
+        ("t_unit", "unit_id"),
+        ("t_category", "category_id"),
     ]:
         if tbl in table_names:
-            con.execute(f"CREATE INDEX IF NOT EXISTS idx_{tbl}_{col} ON {tbl}({col})")
+            con.execute(
+                f"CREATE INDEX IF NOT EXISTS idx_{tbl}_{col}_numeric ON {tbl}(CAST({col} AS INTEGER))"
+            )
     for period_table, id_col, _ in _PERIOD_TABLE_META.values():
         if period_table in table_names:
-            con.execute(f"CREATE INDEX IF NOT EXISTS idx_{period_table}_{id_col} ON {period_table}({id_col})")
+            con.execute(
+                f"CREATE INDEX IF NOT EXISTS idx_{period_table}_{id_col}_numeric "
+                f"ON {period_table}(CAST({id_col} AS INTEGER))"
+            )
 
 
 def _build_period_join(table_name: str, table_names: set[str]) -> tuple[str, str]:
@@ -93,7 +101,7 @@ def _build_period_join(table_name: str, table_names: set[str]) -> tuple[str, str
         if meta:
             period_table, id_col, dt_col = meta
             if period_table in table_names:
-                join = f"LEFT JOIN main.{period_table} p ON p.{id_col} = CAST(dv.block_id AS TEXT)"
+                join = f"LEFT JOIN main.{period_table} p ON CAST(p.{id_col} AS INTEGER) = dv.block_id"
                 return join, f"p.{dt_col} AS datetime"
     return "", "NULL AS datetime"
 
@@ -119,10 +127,10 @@ def _build_rich_create_sql(
             {datetime_expr},
             dv.value
         FROM {dv_source} dv
-        JOIN main.t_key k ON k.key_id = CAST(dv.key_id AS TEXT)
-        LEFT JOIN main.t_sample s ON s.sample_id = k.sample_id
-        LEFT JOIN main.t_membership m ON m.membership_id = k.membership_id
-        LEFT JOIN main.t_object o ON o.object_id = m.child_object_id
+        JOIN main.t_key k ON CAST(k.key_id AS INTEGER) = dv.key_id
+        LEFT JOIN main.t_sample s ON CAST(s.sample_id AS INTEGER) = CAST(k.sample_id AS INTEGER)
+        LEFT JOIN main.t_membership m ON CAST(m.membership_id AS INTEGER) = CAST(k.membership_id AS INTEGER)
+        LEFT JOIN main.t_object o ON CAST(o.object_id AS INTEGER) = CAST(m.child_object_id AS INTEGER)
         {period_join}
         WHERE dv.key_id IN ({key_ids_sql})
     """
@@ -381,10 +389,11 @@ def _resolve_report_unit(
         SELECT
             {unit_expr} AS unit_text
         FROM t_key k
-        JOIN t_property p ON p.property_id = k.property_id
-        LEFT JOIN t_unit pu ON pu.unit_id = p.unit_id
-        LEFT JOIN t_unit pu_summary ON pu_summary.unit_id = p.summary_unit_id
-        WHERE k.key_id IN ({key_ids_sql})
+        JOIN t_property p ON CAST(p.property_id AS INTEGER) = CAST(k.property_id AS INTEGER)
+        LEFT JOIN t_unit pu ON CAST(pu.unit_id AS INTEGER) = CAST(p.unit_id AS INTEGER)
+        LEFT JOIN t_unit pu_summary
+            ON CAST(pu_summary.unit_id AS INTEGER) = CAST(p.summary_unit_id AS INTEGER)
+        WHERE CAST(k.key_id AS INTEGER) IN ({key_ids_sql})
         LIMIT 1
         """
     ).fetchone()
@@ -422,18 +431,23 @@ def _copy_data_table_to_report(con: sqlite3.Connection, table_name: str, *, key_
                 c.name AS category,
                 CASE
                     WHEN d.datetime IS NULL THEN NULL
-                    WHEN INSTR(d.datetime, '/') > 0
-                        THEN SUBSTR(d.datetime, 7, 4) || '-' || SUBSTR(d.datetime, 4, 2) || '-' ||
-                             SUBSTR(d.datetime, 1, 2) || ' ' || SUBSTR(d.datetime, 12, 8)
-                    WHEN INSTR(d.datetime, 'T') > 0 THEN REPLACE(SUBSTR(d.datetime, 1, 19), 'T', ' ')
-                    ELSE d.datetime
+                    WHEN INSTR(d.report_datetime, '/') > 0
+                        THEN SUBSTR(d.report_datetime, 7, 4) || '-' ||
+                             SUBSTR(d.report_datetime, 4, 2) || '-' ||
+                             SUBSTR(d.report_datetime, 1, 2) || ' ' || SUBSTR(d.report_datetime, 12, 8)
+                    WHEN INSTR(d.report_datetime, 'T') > 0
+                        THEN REPLACE(SUBSTR(d.report_datetime, 1, 19), 'T', ' ')
+                    ELSE d.report_datetime
                 END AS timestamp,
                 {interval_sql} AS interval_length,
                 d.value AS {value_col},
                 {unit_sql} AS unit
-            FROM data.{tq} d
+            FROM (
+                SELECT *, TRIM(datetime, CHAR(32, 9, 10, 13)) AS report_datetime
+                FROM data.{tq}
+            ) d
             LEFT JOIN t_object o ON o.name = d.name
-            LEFT JOIN t_category c ON c.category_id = o.category_id
+            LEFT JOIN t_category c ON CAST(c.category_id AS INTEGER) = CAST(o.category_id AS INTEGER)
             """
         )
         return
