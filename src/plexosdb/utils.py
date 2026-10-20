@@ -17,6 +17,7 @@ from .exceptions import NotFoundError
 
 SQLITE_INT64_MIN = -(2**63)
 SQLITE_INT64_MAX = 2**63 - 1
+SQLITE_ASCII_CASE_FOLD = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
 
 if TYPE_CHECKING:
     from plexosdb import CollectionEnum, PlexosDB

@@ -17,6 +17,7 @@ from .db_solution_models import (
     TableInfo,
 )
 from .enums import ClassEnum, CollectionEnum, PeriodEnum, PhaseEnum, TableTypeEnum
+from .types import SQLiteRecord, SQLiteValue, XMLRecord, XMLValue
 from .xml_handler import XMLHandler
 
 __version__ = version("plexosdb")
@@ -37,7 +38,11 @@ __all__ = (
     "PropertyRecord",
     "ResultSchema",
     "ResultTable",
+    "SQLiteRecord",
+    "SQLiteValue",
     "TableInfo",
     "TableTypeEnum",
     "XMLHandler",
+    "XMLRecord",
+    "XMLValue",
 )
