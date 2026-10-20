@@ -3382,7 +3382,7 @@ class PlexosDB:
         if scenario_category:
             scenario_categories = normalize_names(scenario_category)
             placeholders = ", ".join("?" for _ in scenario_categories)
-            conditions.append(f"scenario.category_name IN ({placeholders})")
+            conditions.append(f"scenario_category.name IN ({placeholders})")
             query_params.extend(scenario_categories)
 
         where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""

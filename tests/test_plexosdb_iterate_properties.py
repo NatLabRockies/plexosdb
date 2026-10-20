@@ -263,3 +263,18 @@ def test_get_object_properties_filters_by_scenario_and_category(
 
     assert len(props) == 1
     assert props[0]["scenario_name"] == "ScenarioC"
+
+
+def test_iterate_properties_query_plan_has_no_per_row_scans(db_with_topology: PlexosDB) -> None:
+    """Data and scenario lookups must use indexes; a full scan per membership is quadratic."""
+    import re
+    from string import Template
+
+    from plexosdb.db import PROPERTY_QUERY
+
+    _setup_scenario_tagged_generator_properties(db_with_topology)
+    query = Template(PROPERTY_QUERY).safe_substitute(where_clause="")
+    plan = [row[3] for row in db_with_topology._db.connection.execute(f"EXPLAIN QUERY PLAN {query}")]
+
+    assert any(step.startswith("SEARCH data USING INDEX") for step in plan), plan
+    assert not any(re.match(r"SCAN (data|scenario)\b", step) for step in plan), plan
