@@ -2,6 +2,39 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.0](https://github.com/NatLabRockies/plexosdb/compare/v1.6.1...v1.7.0) (2026-10-15)
+
+
+### 🚀 Features
+
+* integrate update_property non implemented functions on main db ([#170](https://github.com/NatLabRockies/plexosdb/issues/170)) ([96c0334](https://github.com/NatLabRockies/plexosdb/commit/96c03345d82d583556a07526c0edb36e9a81e237))
+
+
+### 🐛 Bug Fixes
+
+* **ci:** avoid duplicate pull request test runs ([#195](https://github.com/NatLabRockies/plexosdb/issues/195)) ([065a594](https://github.com/NatLabRockies/plexosdb/commit/065a594e4ffe645494deb558e99eb692c8c873bd))
+* export integral attribute values as integers ([#193](https://github.com/NatLabRockies/plexosdb/issues/193)) ([e71b551](https://github.com/NatLabRockies/plexosdb/commit/e71b551983020fceaf6f55e2cc1b417ef8edec4c))
+* preserve complex-like XML object names ([#194](https://github.com/NatLabRockies/plexosdb/issues/194)) ([dd1dded](https://github.com/NatLabRockies/plexosdb/commit/dd1dded65c5c0d9a4719935513487e8701a8e8df))
+* preserve underscore-containing numeric identifiers ([#192](https://github.com/NatLabRockies/plexosdb/issues/192)) ([acbe9fa](https://github.com/NatLabRockies/plexosdb/commit/acbe9fa3bb118e582844eae994560df7c4d9121a))
+* update docstring for explicit function behavior description ([#176](https://github.com/NatLabRockies/plexosdb/issues/176)) ([57f70b9](https://github.com/NatLabRockies/plexosdb/commit/57f70b96c68f09cd281666841a80897beff5f16b))
+
+
+### 📚 Documentation
+
+* update documentation reference for phase mapping on simulation objects ([#178](https://github.com/NatLabRockies/plexosdb/issues/178)) ([f949472](https://github.com/NatLabRockies/plexosdb/commit/f9494728a5a194cba18f8f8216cdd3a0df3b97e2))
+* update documentation to match latest codebase state ([#180](https://github.com/NatLabRockies/plexosdb/issues/180)) ([6caf473](https://github.com/NatLabRockies/plexosdb/commit/6caf473cc2dd88f742f75433f497834b978a11ff))
+
+
+### 📦 Build
+
+* **deps-dev:** bump ipython from 9.13.0 to 9.16.1 ([#174](https://github.com/NatLabRockies/plexosdb/issues/174)) ([234e971](https://github.com/NatLabRockies/plexosdb/commit/234e971da3adb93eee819faee55eb551efae52e9))
+* **deps-dev:** bump sphinx-tabs from 3.4.7 to 3.5.0 ([#173](https://github.com/NatLabRockies/plexosdb/issues/173)) ([2c7b837](https://github.com/NatLabRockies/plexosdb/commit/2c7b837be879e69c980a87fd163d79f5c2564b47))
+* **deps:** bump actions/labeler from 6.2.0 to 7.0.0 ([#171](https://github.com/NatLabRockies/plexosdb/issues/171)) ([4525bd0](https://github.com/NatLabRockies/plexosdb/commit/4525bd0e928316ecc2a7885117359a31b2bebdaf))
+* **deps:** bump actions/upload-artifact from 7.0.1 to 7.0.2 ([#189](https://github.com/NatLabRockies/plexosdb/issues/189)) ([8e871aa](https://github.com/NatLabRockies/plexosdb/commit/8e871aa617603dcb72e3eb902b0fef5e1632ec49))
+* **deps:** bump astral-sh/setup-uv from 9.0.0 to 10.3.0 ([#190](https://github.com/NatLabRockies/plexosdb/issues/190)) ([31dcc1f](https://github.com/NatLabRockies/plexosdb/commit/31dcc1fa60962371b88a999a566cc663dc067e69))
+* **deps:** bump benchmark-action/github-action-benchmark from 1.22.1 to 1.22.2 ([#183](https://github.com/NatLabRockies/plexosdb/issues/183)) ([96f9920](https://github.com/NatLabRockies/plexosdb/commit/96f9920339d1c1cd901a9e63fa59f56b915fd07f))
+* **deps:** bump codecov/codecov-action from 6.0.0 to 7.1.1 ([#182](https://github.com/NatLabRockies/plexosdb/issues/182)) ([9564247](https://github.com/NatLabRockies/plexosdb/commit/95642475ba65c85429db4397d1c27b81b69dc10f))
+
 ## [1.6.1](https://github.com/NatLabRockies/plexosdb/compare/v1.6.0...v1.6.1) (2026-08-11)
 
 

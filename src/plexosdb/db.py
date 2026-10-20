@@ -15,6 +15,7 @@ from loguru import logger
 
 from . import checks as checks_module
 from .db_manager import SQLiteManager
+from .types import SQLiteRecord
 from .enums import (
     ClassEnum,
     CollectionEnum,
@@ -32,6 +33,7 @@ from .exceptions import (
     NotFoundError,
 )
 from .utils import (
+    SQLITE_ASCII_CASE_FOLD,
     apply_scenario_tags,
     batched,
     create_membership_record,
@@ -195,13 +197,24 @@ class PlexosDB:
                 if not schema_enum:
                     continue
 
-                record_dict = xml_handler.get_records(schema_enum)
-                if not record_dict:  # Skip if no records
+                xml_records = xml_handler.get_records(schema_enum)
+                if not xml_records:
                     continue
 
-                # Group records by column structure to avoid mismatches
-                column_groups: dict[frozenset[str], list[dict[str, Any]]] = {}
-                for record in record_dict:
+                bit_columns: set[str] = {
+                    name.translate(SQLITE_ASCII_CASE_FOLD)
+                    for (name,) in self.query(
+                        "SELECT name FROM pragma_table_info(?) WHERE upper(type) = 'BIT'", (tag,)
+                    )
+                }
+                column_groups: dict[frozenset[str], list[SQLiteRecord]] = {}
+                for xml_record in xml_records:
+                    record: SQLiteRecord = dict(xml_record)
+                    for column, value in xml_record.items():
+                        if column.translate(SQLITE_ASCII_CASE_FOLD) in bit_columns and value is not None:
+                            normalized = value.strip().lower()
+                            if normalized in {"true", "false"}:
+                                record[column] = int(normalized == "true")
                     # Create a hashable key from the record's column names
                     column_key = frozenset(record.keys())
                     if column_key not in column_groups:
@@ -259,6 +272,12 @@ class PlexosDB:
 
         Notes
         -----
+        XML text is bound without Python literal evaluation. Text columns preserve
+        their XML content; numeric columns use SQLite's affinity and precision
+        rules. In particular, integers outside SQLite's signed 64-bit range may
+        be stored as REAL and lose precision. Boolean words are converted to 0/1
+        only for columns declared as BIT. Empty XML elements bind as NULL.
+
         This method groups records by their column structure to handle varying record
         formats in the XML data. Each group of records with consistent structure is
         processed separately to avoid SQL errors from column mismatches.

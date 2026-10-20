@@ -7,7 +7,13 @@ from collections import defaultdict
 from typing import Any
 from zipfile import ZipFile
 
-from .utils import _quote_ident
+from .utils import (
+    STRIP_CHARACTERS,
+    _quote_ident,
+    integer_reference_sql,
+    parse_optional_integer,
+    register_integer_references,
+)
 
 
 def _sanitize_name(value: str | None) -> str:
@@ -67,7 +73,8 @@ _PERIOD_TABLE_META: dict[str, tuple[str, str, str]] = {
 
 
 def _ensure_join_indexes(con: sqlite3.Connection, table_names: set[str]) -> None:
-    """Create indexes required for fast JOIN-based rich materialization."""
+    """Index numeric identities while preserving the imported XML spellings."""
+    register_integer_references(con)
     if "t_data_values" in table_names:
         con.execute("CREATE INDEX IF NOT EXISTS idx_t_data_values_key_id ON t_data_values(key_id)")
     for tbl, col in [
@@ -75,12 +82,20 @@ def _ensure_join_indexes(con: sqlite3.Connection, table_names: set[str]) -> None
         ("t_membership", "membership_id"),
         ("t_object", "object_id"),
         ("t_sample", "sample_id"),
+        ("t_property", "property_id"),
+        ("t_unit", "unit_id"),
+        ("t_category", "category_id"),
     ]:
         if tbl in table_names:
-            con.execute(f"CREATE INDEX IF NOT EXISTS idx_{tbl}_{col} ON {tbl}({col})")
+            con.execute(
+                f"CREATE INDEX IF NOT EXISTS idx_{tbl}_{col}_identity ON {tbl}({integer_reference_sql(col)})"
+            )
     for period_table, id_col, _ in _PERIOD_TABLE_META.values():
         if period_table in table_names:
-            con.execute(f"CREATE INDEX IF NOT EXISTS idx_{period_table}_{id_col} ON {period_table}({id_col})")
+            con.execute(
+                f"CREATE INDEX IF NOT EXISTS idx_{period_table}_{id_col}_identity "
+                f"ON {period_table}({integer_reference_sql(id_col)})"
+            )
 
 
 def _build_period_join(table_name: str, table_names: set[str]) -> tuple[str, str]:
@@ -93,7 +108,8 @@ def _build_period_join(table_name: str, table_names: set[str]) -> tuple[str, str
         if meta:
             period_table, id_col, dt_col = meta
             if period_table in table_names:
-                join = f"LEFT JOIN main.{period_table} p ON p.{id_col} = CAST(dv.block_id AS TEXT)"
+                reference = integer_reference_sql(f"p.{id_col}")
+                join = f"LEFT JOIN main.{period_table} p ON {reference} = CAST(dv.block_id AS TEXT)"
                 return join, f"p.{dt_col} AS datetime"
     return "", "NULL AS datetime"
 
@@ -113,16 +129,20 @@ def _build_rich_create_sql(
         CREATE TABLE {sq}.{tq} AS
         SELECT
             o.name AS name,
-            COALESCE(s.sample_name, 'Mean') AS sample_name,
-            CAST(k.band_id AS INTEGER) AS band_id,
+            CASE WHEN TRIM(s.sample_name, '{STRIP_CHARACTERS}') <> ''
+                 THEN s.sample_name ELSE 'Mean' END AS sample_name,
+            CAST({integer_reference_sql("k.band_id")} AS INTEGER) AS band_id,
             dv.block_id,
             {datetime_expr},
             dv.value
         FROM {dv_source} dv
-        JOIN main.t_key k ON k.key_id = CAST(dv.key_id AS TEXT)
-        LEFT JOIN main.t_sample s ON s.sample_id = k.sample_id
-        LEFT JOIN main.t_membership m ON m.membership_id = k.membership_id
-        LEFT JOIN main.t_object o ON o.object_id = m.child_object_id
+        JOIN main.t_key k ON {integer_reference_sql("k.key_id")} = CAST(dv.key_id AS TEXT)
+        LEFT JOIN main.t_sample s
+            ON {integer_reference_sql("s.sample_id")} = {integer_reference_sql("k.sample_id")}
+        LEFT JOIN main.t_membership m
+            ON {integer_reference_sql("m.membership_id")} = {integer_reference_sql("k.membership_id")}
+        LEFT JOIN main.t_object o
+            ON {integer_reference_sql("o.object_id")} = {integer_reference_sql("m.child_object_id")}
         {period_join}
         WHERE dv.key_id IN ({key_ids_sql})
     """
@@ -200,7 +220,7 @@ def _build_key_period_map(
         key_id_int = int(key_id)
         if key_id_int in key_period:
             continue
-        key_period[key_id_int] = int(period_type_id) if period_type_id is not None else None
+        key_period[key_id_int] = parse_optional_integer(period_type_id)
     return key_period
 
 
@@ -301,22 +321,21 @@ def _build_derived_table_map(con: sqlite3.Connection) -> dict[tuple[str, str], s
         key_id = int(row[0])
         property_id = int(row[1])
         membership_id = int(row[2])
-        phase_id = int(row[3]) if row[3] is not None else -1
+        phase_id = parse_optional_integer(row[3])
 
         # Prefer explicit key.is_summary when present; otherwise infer from key.period_type_id.
-        if row[4] is not None:
-            is_summary = bool(int(row[4]))
-        elif row[5] is not None:
-            is_summary = int(row[5]) == 1
+        summary_flag = parse_optional_integer(row[4])
+        if summary_flag is not None:
+            is_summary = bool(summary_flag)
         else:
-            is_summary = False
+            is_summary = parse_optional_integer(row[5]) == 1
 
         period_name = _period_type_name(key_period.get(key_id))
-        phase_name = _phase_name(phase_id, phase_ids) if phase_id != -1 else "ST"
+        phase_name = _phase_name(phase_id, phase_ids) if phase_id is not None and phase_id != -1 else "ST"
         collection_name = collection_map.get(membership_collection.get(membership_id, -1), "Collection")
         prop_name, summary_name = property_map.get(property_id, ("Property", ""))
 
-        selected_prop = summary_name if is_summary and summary_name else prop_name
+        selected_prop = summary_name if is_summary and summary_name.strip() else prop_name
         table_name = "__".join(
             [
                 _table_label_part(phase_name),
@@ -352,6 +371,7 @@ def _resolve_report_unit(
     key_ids: set[int],
 ) -> str | None:
     """Resolve display unit text for a report table from key/property metadata."""
+    register_integer_references(con)
     if not key_ids:
         return None
     table_names = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
@@ -361,30 +381,34 @@ def _resolve_report_unit(
 
     key_cols = set(_table_columns(con, "t_key"))
     has_is_summary = "is_summary" in key_cols
-    key_ids_sql = ",".join(str(int(k)) for k in sorted(key_ids))
+    key_ids_sql = ",".join(f"'{int(k)}'" for k in sorted(key_ids))
+    regular_unit = f"CASE WHEN TRIM(pu.value, '{STRIP_CHARACTERS}') <> '' THEN pu.value END"
+    summary_unit = f"CASE WHEN TRIM(pu_summary.value, '{STRIP_CHARACTERS}') <> '' THEN pu_summary.value END"
     if has_is_summary:
-        unit_expr = """
+        unit_expr = f"""
             COALESCE(
                 CASE
-                    WHEN COALESCE(CAST(k.is_summary AS INTEGER), 0) = 1
-                    THEN pu_summary.value
-                    ELSE pu.value
+                    WHEN COALESCE({integer_reference_sql("k.is_summary")}, '0') = '1'
+                    THEN {summary_unit}
+                    ELSE {regular_unit}
                 END,
-                pu.value
+                {regular_unit}
             )
         """
     else:
-        unit_expr = "COALESCE(pu.value, pu_summary.value)"
+        unit_expr = f"COALESCE({regular_unit}, {summary_unit})"
 
     row = con.execute(
         f"""
         SELECT
             {unit_expr} AS unit_text
         FROM t_key k
-        JOIN t_property p ON p.property_id = k.property_id
-        LEFT JOIN t_unit pu ON pu.unit_id = p.unit_id
-        LEFT JOIN t_unit pu_summary ON pu_summary.unit_id = p.summary_unit_id
-        WHERE k.key_id IN ({key_ids_sql})
+        JOIN t_property p
+            ON {integer_reference_sql("p.property_id")} = {integer_reference_sql("k.property_id")}
+        LEFT JOIN t_unit pu ON {integer_reference_sql("pu.unit_id")} = {integer_reference_sql("p.unit_id")}
+        LEFT JOIN t_unit pu_summary
+            ON {integer_reference_sql("pu_summary.unit_id")} = {integer_reference_sql("p.summary_unit_id")}
+        WHERE {integer_reference_sql("k.key_id")} IN ({key_ids_sql})
         LIMIT 1
         """
     ).fetchone()
@@ -396,6 +420,7 @@ def _resolve_report_unit(
 
 def _copy_data_table_to_report(con: sqlite3.Connection, table_name: str, *, key_ids: set[int]) -> None:
     """Create report-style table from data table, with fallback to plain mirror."""
+    register_integer_references(con)
     tq = _quote_ident(table_name)
     value_col = _quote_ident(table_name.split("__")[-1] if "__" in table_name else "value")
     interval_length = _report_interval_length(table_name)
@@ -422,18 +447,24 @@ def _copy_data_table_to_report(con: sqlite3.Connection, table_name: str, *, key_
                 c.name AS category,
                 CASE
                     WHEN d.datetime IS NULL THEN NULL
-                    WHEN INSTR(d.datetime, '/') > 0
-                        THEN SUBSTR(d.datetime, 7, 4) || '-' || SUBSTR(d.datetime, 4, 2) || '-' ||
-                             SUBSTR(d.datetime, 1, 2) || ' ' || SUBSTR(d.datetime, 12, 8)
-                    WHEN INSTR(d.datetime, 'T') > 0 THEN REPLACE(SUBSTR(d.datetime, 1, 19), 'T', ' ')
-                    ELSE d.datetime
+                    WHEN INSTR(d.report_datetime, '/') > 0
+                        THEN SUBSTR(d.report_datetime, 7, 4) || '-' ||
+                             SUBSTR(d.report_datetime, 4, 2) || '-' ||
+                             SUBSTR(d.report_datetime, 1, 2) || ' ' || SUBSTR(d.report_datetime, 12, 8)
+                    WHEN INSTR(d.report_datetime, 'T') > 0
+                        THEN REPLACE(SUBSTR(d.report_datetime, 1, 19), 'T', ' ')
+                    ELSE d.report_datetime
                 END AS timestamp,
                 {interval_sql} AS interval_length,
                 d.value AS {value_col},
                 {unit_sql} AS unit
-            FROM data.{tq} d
+            FROM (
+                SELECT *, NULLIF(TRIM(datetime, '{STRIP_CHARACTERS}'), '') AS report_datetime
+                FROM data.{tq}
+            ) d
             LEFT JOIN t_object o ON o.name = d.name
-            LEFT JOIN t_category c ON c.category_id = o.category_id
+            LEFT JOIN t_category c
+                ON {integer_reference_sql("c.category_id")} = {integer_reference_sql("o.category_id")}
             """
         )
         return

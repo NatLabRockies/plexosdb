@@ -17,6 +17,7 @@ from .exceptions import NotFoundError
 
 SQLITE_INT64_MIN = -(2**63)
 SQLITE_INT64_MAX = 2**63 - 1
+SQLITE_ASCII_CASE_FOLD = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
 
 if TYPE_CHECKING:
     from plexosdb import CollectionEnum, PlexosDB
@@ -46,7 +47,9 @@ def batched(iterable: Iterable[Any], n: int) -> Iterator[tuple[Any, ...]]:
 def validate_string(value: str) -> Any:
     """Validate string and convert it to python object.
 
-    This function also tries to parse floats or ints.
+    This function also tries to parse floats or ints. Numeric strings containing
+    underscores and complex-looking strings are kept unchanged because they may
+    be PLEXOS identifiers.
 
     Parameters
     ----------
@@ -62,6 +65,8 @@ def validate_string(value: str) -> Any:
         return None
     try:
         parsed_int = int(value)
+        if "_" in value:
+            return value
         if SQLITE_INT64_MIN <= parsed_int <= SQLITE_INT64_MAX:
             return parsed_int
         # Keep oversized integers as strings to avoid sqlite3 OverflowError
@@ -70,7 +75,8 @@ def validate_string(value: str) -> Any:
     except ValueError:
         pass
     try:
-        return float(value)
+        parsed_float = float(value)
+        return value if "_" in value else parsed_float
     except ValueError:
         pass
     if value == "true" or value == "TRUE":
@@ -78,7 +84,10 @@ def validate_string(value: str) -> Any:
     if value == "false" or value == "FALSE":
         return False
     try:
-        value = ast.literal_eval(value)
+        parsed_value = ast.literal_eval(value)
+        if isinstance(parsed_value, complex) or ("_" in value and isinstance(parsed_value, (int, float))):
+            return value
+        return parsed_value
     except (ValueError, SyntaxError):
         logger.trace("Could not parse {}", value)
     return value
