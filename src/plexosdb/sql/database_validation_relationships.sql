@@ -1,6 +1,7 @@
 SELECT
     'objects' AS category,
     't_object.object_id=' || obj.object_id || ' is missing required class_id.' AS message,
+    NULL AS class_id,
     NULL AS object_id,
     NULL AS attribute_id,
     NULL AS value
@@ -13,6 +14,7 @@ SELECT
     'objects',
     't_object.object_id=' || obj.object_id || ' has class_id=' || obj.class_id ||
         ', but category_id=' || category.category_id || ' belongs to class_id=' || category.class_id || '.',
+    NULL,
     NULL,
     NULL,
     NULL
@@ -28,6 +30,7 @@ SELECT
     't_membership.membership_id=' || membership_id || ' is missing required parent_class_id.',
     NULL,
     NULL,
+    NULL,
     NULL
 FROM t_membership
 WHERE parent_class_id IS NULL
@@ -37,6 +40,7 @@ UNION ALL
 SELECT
     'memberships',
     't_membership.membership_id=' || membership_id || ' is missing required parent_object_id.',
+    NULL,
     NULL,
     NULL,
     NULL
@@ -50,6 +54,7 @@ SELECT
     't_membership.membership_id=' || membership_id || ' is missing required collection_id.',
     NULL,
     NULL,
+    NULL,
     NULL
 FROM t_membership
 WHERE collection_id IS NULL
@@ -59,6 +64,7 @@ UNION ALL
 SELECT
     'memberships',
     't_membership.membership_id=' || membership_id || ' is missing required child_class_id.',
+    NULL,
     NULL,
     NULL,
     NULL
@@ -72,6 +78,7 @@ SELECT
     't_membership.membership_id=' || membership_id || ' is missing required child_object_id.',
     NULL,
     NULL,
+    NULL,
     NULL
 FROM t_membership
 WHERE child_object_id IS NULL
@@ -83,6 +90,7 @@ SELECT
     't_membership.membership_id=' || membership.membership_id || ' has parent_class_id=' ||
         membership.parent_class_id || ', but the parent object class_id is ' ||
         COALESCE(CAST(parent.class_id AS TEXT), 'NULL') || '.',
+    NULL,
     NULL,
     NULL,
     NULL
@@ -100,6 +108,7 @@ SELECT
         COALESCE(CAST(child.class_id AS TEXT), 'NULL') || '.',
     NULL,
     NULL,
+    NULL,
     NULL
 FROM t_membership AS membership
 JOIN t_object AS child ON child.object_id = membership.child_object_id
@@ -113,6 +122,7 @@ SELECT
     't_membership.membership_id=' || membership.membership_id || ' has parent_class_id=' ||
         membership.parent_class_id || ', but the collection parent class_id is ' ||
         COALESCE(CAST(collection.parent_class_id AS TEXT), 'NULL') || '.',
+    NULL,
     NULL,
     NULL,
     NULL
@@ -130,6 +140,7 @@ SELECT
         COALESCE(CAST(collection.child_class_id AS TEXT), 'NULL') || '.',
     NULL,
     NULL,
+    NULL,
     NULL
 FROM t_membership AS membership
 JOIN t_collection AS collection ON collection.collection_id = membership.collection_id
@@ -143,6 +154,7 @@ SELECT
     't_attribute_data for object_id=' || data.object_id || ' and attribute_id=' || data.attribute_id ||
         ' connects class_id=' || COALESCE(CAST(obj.class_id AS TEXT), 'NULL') ||
         ' to an attribute for class_id=' || COALESCE(CAST(attribute.class_id AS TEXT), 'NULL') || '.',
+    NULL,
     NULL,
     NULL,
     NULL
@@ -159,6 +171,7 @@ SELECT
     't_data.data_id=' || data_id || ' is missing required membership_id.',
     NULL,
     NULL,
+    NULL,
     NULL
 FROM t_data
 WHERE membership_id IS NULL
@@ -168,6 +181,7 @@ UNION ALL
 SELECT
     'properties',
     't_data.data_id=' || data_id || ' is missing required property_id.',
+    NULL,
     NULL,
     NULL,
     NULL
@@ -183,6 +197,7 @@ SELECT
         data.membership_id || ' uses collection_id=' || COALESCE(CAST(membership.collection_id AS TEXT), 'NULL') || '.',
     NULL,
     NULL,
+    NULL,
     NULL
 FROM t_data AS data
 JOIN t_property AS property ON property.property_id = data.property_id
@@ -193,11 +208,19 @@ UNION ALL
 
 SELECT
     'types',
-    NULL,
+    't_attribute_data for class=' || quote(COALESCE(class.name, CAST(object.class_id AS TEXT), 'NULL')) ||
+        ' (class_id=' || COALESCE(CAST(object.class_id AS TEXT), 'NULL') || '), object=' ||
+        quote(COALESCE(object.name, CAST(data.object_id AS TEXT), 'NULL')) ||
+        ' (object_id=' || data.object_id || '), property=' ||
+        quote(COALESCE(attribute.name, CAST(data.attribute_id AS TEXT), 'NULL')) ||
+        ' (attribute_id=' || data.attribute_id || ') has non-integer value ' || quote(data.value) || '.',
+    object.class_id,
     data.object_id,
     data.attribute_id,
     data.value
 FROM t_attribute_data AS data
 JOIN t_attribute AS attribute ON attribute.attribute_id = data.attribute_id
+JOIN t_object AS object ON object.object_id = data.object_id
+LEFT JOIN t_class AS class ON class.class_id = object.class_id
 WHERE attribute.is_integer = 1
   AND data.value IS NOT NULL;

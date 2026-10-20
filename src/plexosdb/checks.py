@@ -596,15 +596,13 @@ def find_foreign_key_issues(db: SQLiteManager, /) -> list[DatabaseValidationFind
 def find_database_relationship_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
     """Return model relationship and integer-attribute findings from shared SQL."""
     findings: list[DatabaseValidationFinding] = []
-    for category_value, message, object_id, attribute_id, value in db.iter_query(RELATIONSHIP_FINDINGS_QUERY):
+    for category_value, message, class_id, object_id, attribute_id, value in db.iter_query(
+        RELATIONSHIP_FINDINGS_QUERY
+    ):
         category = DatabaseValidationCategory(category_value)
         if category is DatabaseValidationCategory.TYPES:
             if isinstance(value, int) or (isinstance(value, float) and value.is_integer()):
                 continue
-            message = (
-                f"t_attribute_data for object_id={object_id} and attribute_id={attribute_id} "
-                f"has non-integer value {value!r}."
-            )
         elif not isinstance(message, str):
             raise TypeError(f"Validation SQL returned no message for category {category.value!r}.")
         findings.append(DatabaseValidationFinding(category=category, message=message))

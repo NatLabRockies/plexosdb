@@ -107,7 +107,13 @@ def test_validate_database_raises_with_model_consistency_findings(
         if finding.category is DatabaseValidationCategory.PROPERTIES
     )
     assert any(
-        "non-integer value 1.5" in finding.message
+        "class='Node'" in finding.message
+        and "class_id=3" in finding.message
+        and "object='Generator1'" in finding.message
+        and "object_id=2" in finding.message
+        and "property='Latitude'" in finding.message
+        and "attribute_id=1" in finding.message
+        and "non-integer value 1.5" in finding.message
         for finding in findings
         if finding.category is DatabaseValidationCategory.TYPES
     )
