@@ -422,6 +422,8 @@ CREATE TABLE `t_data`
                FOREIGN KEY (`property_id`) REFERENCES `t_property`(`property_id`)
 );
 
+CREATE INDEX `IX_t_data_membership` ON `t_data` (`membership_id`);
+
 CREATE TABLE `t_date_from`
 (
     `data_id` INT NOT NULL,
