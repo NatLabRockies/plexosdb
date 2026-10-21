@@ -234,6 +234,56 @@ def test_validate_database_reports_duplicate_data_graphs_without_deleting(
 
 
 @pytest.mark.parametrize(
+    ("uids", "duplicate_counts"),
+    (
+        ((None, None, None), ()),
+        ((0, 1, 2), ()),
+        ((None, 1, 2), ()),
+        ((0, 0, None), ((0, 2),)),
+        ((123, 123, 123), ((123, 3),)),
+        ((5, 5, 9, 9, None), ((5, 2), (9, 2))),
+    ),
+)
+@pytest.mark.parametrize("fix_issues", (False, True))
+def test_validate_database_checks_duplicate_uids_without_reassigning(
+    db_with_validation_records: PlexosDB,
+    uids: tuple[int | None, ...],
+    duplicate_counts: tuple[tuple[int, int], ...],
+    fix_issues: bool,
+) -> None:
+    db = db_with_validation_records
+    db._db.execute("UPDATE t_property SET is_dynamic = 1 WHERE property_id = 1")
+    db._db.execute("UPDATE t_data SET uid = ? WHERE data_id = 1", (uids[0],))
+    for data_id, uid in enumerate(uids[1:], start=2):
+        db._db.execute(
+            "INSERT INTO t_data (data_id, membership_id, property_id, value, uid) VALUES (?, 1, 1, ?, ?)",
+            (data_id, float(data_id + 1), uid),
+        )
+    original_data = db.query("SELECT * FROM t_data")
+    total_changes = db._db.connection.total_changes
+    expected_findings = [
+        DatabaseValidationFinding(
+            category=DatabaseValidationCategory.PROPERTIES,
+            message=(
+                f"Duplicate UID: uid={uid} appears {count} times in t_data. "
+                "Fix: assign new unique UIDs to the duplicate rows."
+            ),
+        )
+        for uid, count in duplicate_counts
+    ]
+
+    assert checks_module._find_duplicate_uids_issues(db._db) == expected_findings
+    if expected_findings:
+        with pytest.raises(DatabaseValidationError) as exc_info:
+            db.validate_database(fix_issues=fix_issues)
+        assert exc_info.value.findings == tuple(expected_findings)
+    else:
+        assert db.validate_database(fix_issues=fix_issues) is True
+    assert db._db.connection.total_changes == total_changes
+    assert db.query("SELECT * FROM t_data") == original_data
+
+
+@pytest.mark.parametrize(
     "statement",
     (
         "UPDATE t_data SET value = 3 WHERE data_id = 2",

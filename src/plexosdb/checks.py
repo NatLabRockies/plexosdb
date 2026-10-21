@@ -42,6 +42,7 @@ DUPLICATE_STATIC_DATA_QUERY = get_sql_query("database_validation_duplicate_stati
 DATA_GRAPHS_QUERY = get_sql_query("database_validation_data_graphs.sql")
 DATA_GRAPH_TAGS_QUERY = get_sql_query("database_validation_data_graph_tags.sql")
 DATA_GRAPH_TEXTS_QUERY = get_sql_query("database_validation_data_graph_texts.sql")
+DUPLICATE_UIDS_QUERY = get_sql_query("database_validation_duplicate_uids.sql")
 REPAIR_MEMBERSHIP_CLASS_IDS_SCRIPT = get_sql_query("database_validation_repair_memberships.sql")
 
 
@@ -632,7 +633,7 @@ def _find_property_collection_mismatch_issues(db: SQLiteManager, /) -> list[Data
 
 
 def _find_static_property_artifacts_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
-    """Validate static properties must not have tags, texts, dates, or memo."""
+    """Validate that static properties must not have tags, texts, dates, or memo."""
     findings: list[DatabaseValidationFinding] = []
     for table_name, artifact_type in (
         ("t_tag", "tag"),
@@ -656,7 +657,7 @@ def _find_static_property_artifacts_issues(db: SQLiteManager, /) -> list[Databas
 
 
 def _find_duplicate_static_data_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
-    """Validate static properties allow one data row per membership, property, and band."""
+    """Validate that static properties allow one data row per membership, property, and band."""
     return [
         DatabaseValidationFinding(
             category=DatabaseValidationCategory.PROPERTIES,
@@ -671,7 +672,7 @@ def _find_duplicate_static_data_issues(db: SQLiteManager, /) -> list[DatabaseVal
 
 
 def _find_duplicate_data_graphs_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
-    """V-9: Detect data rows with identical full property graphs."""
+    """Validate that data rows with identical full property graphs are detected."""
     tags: dict[int, set[tuple[SQLiteValue, SQLiteValue]]] = defaultdict(set)
     for data_id, object_id, action_id in db.iter_query(DATA_GRAPH_TAGS_QUERY):
         tags[data_id].add((object_id, action_id or 0))
@@ -712,9 +713,18 @@ def _find_duplicate_data_graphs_issues(db: SQLiteManager, /) -> list[DatabaseVal
     ]
 
 
-def _find_duplicate_uids_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:
-    """Find duplicate UIDs (not implemented yet)."""
-    pass
+def _find_duplicate_uids_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
+    """Validate that every non-NULL t_data.uid must be unique."""
+    return [
+        DatabaseValidationFinding(
+            category=DatabaseValidationCategory.PROPERTIES,
+            message=(
+                f"Duplicate UID: uid={uid} appears {count} times in t_data. "
+                "Fix: assign new unique UIDs to the duplicate rows."
+            ),
+        )
+        for uid, count in db.query(DUPLICATE_UIDS_QUERY)
+    ]
 
 
 def _find_orphaned_child_rows_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:

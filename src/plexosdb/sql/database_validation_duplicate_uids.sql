@@ -1,0 +1,5 @@
+SELECT uid, COUNT(*)
+FROM t_data
+WHERE uid IS NOT NULL
+GROUP BY uid
+HAVING COUNT(*) > 1

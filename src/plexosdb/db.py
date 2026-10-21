@@ -4839,6 +4839,7 @@ class PlexosDB:
         treating missing bands as band 1; validation does not remove duplicates.
         Identical data graphs are also reported for static and dynamic properties,
         comparing values, bands, tag/text sets, dates, and memos without removing rows.
+        Duplicate non-NULL data UIDs are reported but not reassigned.
         Additional model checks in ``checks.py`` are placeholders until implemented.
 
         Parameters
