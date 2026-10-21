@@ -4,6 +4,8 @@ from pathlib import Path
 import pytest
 
 from plexosdb import ClassEnum, DatabaseValidationCategory, DatabaseValidationError, PlexosDB
+from plexosdb import checks as checks_module
+from plexosdb.exceptions import DatabaseValidationFinding
 
 
 @pytest.fixture
@@ -38,6 +40,83 @@ def test_validate_database_returns_true_without_mutating_valid_database(
 
     assert db.validate_database() is True
     assert db._db.connection.total_changes == total_changes
+
+
+def test_find_category_class_issues_accepts_matching_categories(
+    db_with_validation_records: PlexosDB,
+) -> None:
+    assert checks_module._find_category_class_issues(db_with_validation_records._db) == []
+
+
+@pytest.mark.parametrize("fix_issues", (False, True))
+def test_validate_database_reports_category_class_mismatch_without_repairing(
+    db_with_validation_records: PlexosDB,
+    fix_issues: bool,
+) -> None:
+    db = db_with_validation_records
+    object_id = db.get_object_id(ClassEnum.Generator, "Generator1")
+    node_class_id = db.get_class_id(ClassEnum.Node)
+    category_id = db.add_category(ClassEnum.Node, "nodes")
+    db._db.execute("UPDATE t_object SET category_id = ? WHERE object_id = ?", (category_id, object_id))
+    total_changes = db._db.connection.total_changes
+
+    with pytest.raises(DatabaseValidationError) as exc_info:
+        db.validate_database(fix_issues=fix_issues)
+
+    assert exc_info.value.findings == (
+        DatabaseValidationFinding(
+            category=DatabaseValidationCategory.OBJECTS,
+            message=(
+                f"Category mismatch: Object 'Generator1' (object_id={object_id}) "
+                f"has class_id=2 but category 'nodes' has class_id={node_class_id}. "
+                "Fix: reset category to the default '-' category for this class."
+            ),
+        ),
+    )
+    assert db._db.connection.total_changes == total_changes
+    assert db.query("SELECT category_id FROM t_object WHERE object_id = ?", (object_id,)) == [(category_id,)]
+
+
+@pytest.mark.parametrize(
+    "finder_name",
+    (
+        "_find_category_class_issues",
+        "_find_property_collection_mismatch_issues",
+        "_find_static_property_artifacts_issues",
+        "_find_duplicate_static_data_issues",
+        "_find_duplicate_data_graphs_issues",
+        "_find_duplicate_uids_issues",
+        "_find_orphaned_child_rows_issues",
+        "_find_attribute_class_issues",
+        "_find_system_membership_existence_issues",
+        "_find_membership_count_bounds_issues",
+        "_find_tag_object_class_issues",
+        "_find_action_only_on_variables_issues",
+        "_find_band_count_issues",
+        "_find_property_values_issues",
+        "_find_attribute_values_issues",
+        "_find_case_insensitive_name_collisions_issues",
+        "_find_custom_column_class_issues",
+    ),
+)
+def test_validate_database_collects_each_model_check(
+    db_with_validation_records: PlexosDB,
+    monkeypatch: pytest.MonkeyPatch,
+    finder_name: str,
+) -> None:
+    db = db_with_validation_records
+    finding = DatabaseValidationFinding(category=DatabaseValidationCategory.OBJECTS, message=finder_name)
+
+    def find_issues(manager: object) -> list[DatabaseValidationFinding]:
+        assert manager is db._db
+        return [finding]
+
+    monkeypatch.setattr(checks_module, finder_name, find_issues)
+
+    with pytest.raises(DatabaseValidationError) as exc_info:
+        db.validate_database()
+
+    assert exc_info.value.findings == (finding,)
 
 
 def test_validate_database_raises_with_foreign_key_findings(

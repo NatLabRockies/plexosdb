@@ -4829,6 +4829,9 @@ class PlexosDB:
         marked with ``is_integer``. By default, validation does not modify the
         database. Findings are ``DatabaseValidationFinding`` instances with a
         ``DatabaseValidationCategory`` and a message.
+        Category/class mismatches include guidance to reset the category to the
+        class's default ``-`` category; these are reported but not repaired.
+        Additional model checks in ``checks.py`` are placeholders until implemented.
 
         Parameters
         ----------

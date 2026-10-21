@@ -11,21 +11,6 @@ WHERE obj.class_id IS NULL
 UNION ALL
 
 SELECT
-    'objects',
-    't_object.object_id=' || obj.object_id || ' has class_id=' || obj.class_id ||
-        ', but category_id=' || category.category_id || ' belongs to class_id=' || category.class_id || '.',
-    NULL,
-    NULL,
-    NULL,
-    NULL
-FROM t_object AS obj
-JOIN t_category AS category ON category.category_id = obj.category_id
-WHERE obj.class_id IS NOT NULL
-  AND obj.class_id != category.class_id
-
-UNION ALL
-
-SELECT
     'memberships',
     't_membership.membership_id=' || membership_id || ' is missing required parent_class_id.',
     NULL,

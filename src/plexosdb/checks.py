@@ -33,6 +33,7 @@ FOREIGN_KEY_CHECK_QUERY = get_sql_query("database_validation_foreign_keys.sql")
 TABLE_NAMES_QUERY = get_sql_query("database_validation_table_names.sql")
 TABLE_INFO_QUERY = Template(get_sql_query("database_validation_table_info.sql"))
 RELATIONSHIP_FINDINGS_QUERY = get_sql_query("database_validation_relationships.sql")
+CATEGORY_CLASS_FINDINGS_QUERY = get_sql_query("database_validation_category_class.sql")
 REPAIR_MEMBERSHIP_CLASS_IDS_SCRIPT = get_sql_query("database_validation_repair_memberships.sql")
 
 
@@ -567,7 +568,126 @@ def find_database_validation_issues(db: SQLiteManager, /) -> list[DatabaseValida
 
     findings.extend(find_foreign_key_issues(db))
     findings.extend(find_database_relationship_issues(db))
+    for find_issues in (
+        _find_category_class_issues,
+        _find_property_collection_mismatch_issues,
+        _find_static_property_artifacts_issues,
+        _find_duplicate_static_data_issues,
+        _find_duplicate_data_graphs_issues,
+        _find_duplicate_uids_issues,
+        _find_orphaned_child_rows_issues,
+        _find_attribute_class_issues,
+        _find_system_membership_existence_issues,
+        _find_membership_count_bounds_issues,
+        _find_tag_object_class_issues,
+        _find_action_only_on_variables_issues,
+        _find_band_count_issues,
+        _find_property_values_issues,
+        _find_attribute_values_issues,
+        _find_case_insensitive_name_collisions_issues,
+        _find_custom_column_class_issues,
+    ):
+        issues = find_issues(db)
+        if issues is not None:
+            findings.extend(issues)
     return findings
+
+
+def _find_category_class_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
+    """Validate that t_object.class_id matches t_category.class_id."""
+    return [
+        DatabaseValidationFinding(
+            category=DatabaseValidationCategory.OBJECTS,
+            message=(
+                f"Category mismatch: Object '{name}' (object_id={oid}) "
+                f"has class_id={obj_cid} but category '{cname}' has class_id={cat_cid}. "
+                "Fix: reset category to the default '-' category for this class."
+            ),
+        )
+        for oid, name, obj_cid, cat_cid, cname in db.query(CATEGORY_CLASS_FINDINGS_QUERY)
+    ]
+
+
+def _find_property_collection_mismatch_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:
+    """Find property and collection mismatches (not implemented yet)."""
+    pass
+
+
+def _find_static_property_artifacts_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:
+    """Find artifacts on static properties (not implemented yet)."""
+    pass
+
+
+def _find_duplicate_static_data_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:
+    """Find duplicate static data (not implemented yet)."""
+    pass
+
+
+def _find_duplicate_data_graphs_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:
+    """Find duplicate data graphs (not implemented yet)."""
+    pass
+
+
+def _find_duplicate_uids_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:
+    """Find duplicate UIDs (not implemented yet)."""
+    pass
+
+
+def _find_orphaned_child_rows_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:
+    """Find orphaned child rows (not implemented yet)."""
+    pass
+
+
+def _find_attribute_class_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:
+    """Find attribute and object class inconsistencies (not implemented yet)."""
+    pass
+
+
+def _find_system_membership_existence_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:
+    """Find missing System memberships (not implemented yet)."""
+    pass
+
+
+def _find_membership_count_bounds_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:
+    """Find membership counts outside their bounds (not implemented yet)."""
+    pass
+
+
+def _find_tag_object_class_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:
+    """Find tag object class inconsistencies (not implemented yet)."""
+    pass
+
+
+def _find_action_only_on_variables_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:
+    """Find actions assigned to non-variable objects (not implemented yet)."""
+    pass
+
+
+def _find_band_count_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:
+    """Find invalid band counts (not implemented yet)."""
+    pass
+
+
+def _find_property_values_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:
+    """Find invalid property values (not implemented yet)."""
+    pass
+
+
+def _find_attribute_values_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:
+    """Find invalid attribute values (not implemented yet)."""
+    pass
+
+
+def _find_case_insensitive_name_collisions_issues(
+    db: SQLiteManager, /
+) -> list[DatabaseValidationFinding] | None:
+    """Find case-insensitive name collisions (not implemented yet)."""
+    pass
+
+
+def _find_custom_column_class_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:
+    """Find custom column class inconsistencies (not implemented yet)."""
+    pass
 
 
 def find_sqlite_integrity_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
