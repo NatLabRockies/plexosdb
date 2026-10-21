@@ -200,9 +200,9 @@ SELECT
         ' (object_id=' || data.object_id || '), property=' ||
         quote(COALESCE(attribute.name, CAST(data.attribute_id AS TEXT), 'NULL')) ||
         ' (attribute_id=' || data.attribute_id || ') has non-integer value ' || quote(data.value) || '.',
-    object.class_id,
+    class.name,
     data.object_id,
-    data.attribute_id,
+    attribute.name,
     data.value
 FROM t_attribute_data AS data
 JOIN t_attribute AS attribute ON attribute.attribute_id = data.attribute_id

@@ -43,6 +43,8 @@ from .db_constants import (
     ATTRIBUTE_VALUES_QUERY,
     NAME_COLLISIONS_QUERY,
     CUSTOM_COLUMN_CLASS_QUERY,
+    SIMULATION_ATTRIBUTE_RULE_OVERRIDES,
+    INTEGER_ATTRIBUTE_EXEMPTIONS,
     REPAIR_MEMBERSHIP_CLASS_IDS_SCRIPT,
 )
 from .enums import ClassEnum, CollectionEnum, Schema
@@ -1021,24 +1023,30 @@ def _find_attribute_values_issues(db: SQLiteManager, /) -> list[DatabaseValidati
     Non-NULL attribute values must satisfy nonempty ``validation_rule``
     expressions. Invalid values and malformed or unsupported rules are
     reported without changing the data; NULL attribute values are skipped.
+    Selected Transmission, Production, and Performance float attributes also
+    enforce bounds from r2x-plexos simulation configuration Field definitions,
+    independently of potentially incorrect integer metadata.
     """
     findings: list[DatabaseValidationFinding] = []
-    for value, aname, rule, oname in db.iter_query(ATTRIBUTE_VALUES_QUERY):
+    for value, aname, rule, oname, class_name in db.iter_query(ATTRIBUTE_VALUES_QUERY):
         if value is None:
             continue
-        result = validate_value_by_rule(value, rule)
-        if not result.is_valid:
-            findings.append(
-                DatabaseValidationFinding(
-                    category=DatabaseValidationCategory.ATTRIBUTES,
-                    message=(
-                        f"Attribute value invalid: object '{oname}', "
-                        f"attribute '{aname}' value={value} fails rule '{rule}': "
-                        f"{result.error_message}. "
-                        "Fix: correct the value to satisfy the validation rule."
-                    ),
+        override = SIMULATION_ATTRIBUTE_RULE_OVERRIDES.get((class_name, aname))
+        rules = dict.fromkeys(candidate for candidate in (rule, override) if candidate)
+        for validation_rule in rules:
+            result = validate_value_by_rule(value, validation_rule)
+            if not result.is_valid:
+                findings.append(
+                    DatabaseValidationFinding(
+                        category=DatabaseValidationCategory.ATTRIBUTES,
+                        message=(
+                            f"Attribute value invalid: object '{oname}', "
+                            f"attribute '{aname}' value={value} fails rule '{validation_rule}': "
+                            f"{result.error_message}. "
+                            "Fix: correct the value to satisfy the validation rule."
+                        ),
+                    )
                 )
-            )
     return findings
 
 
@@ -1112,13 +1120,20 @@ def _find_foreign_key_issues(db: SQLiteManager, /) -> list[DatabaseValidationFin
 
 
 def _find_database_relationship_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
-    """Return model relationship and integer-attribute findings from shared SQL."""
+    """Return model relationship and integer-attribute findings from shared SQL.
+
+    Known simulation float attributes bypass incorrect integer metadata.
+    Transmission's Loss Function Precision also skips integer validation.
+    Attribute validation rules still apply to all of these fields.
+    """
     findings: list[DatabaseValidationFinding] = []
-    for category_value, message, class_id, object_id, attribute_id, value in db.iter_query(
+    for category_value, message, class_name, object_id, attribute_name, value in db.iter_query(
         RELATIONSHIP_FINDINGS_QUERY
     ):
         category = DatabaseValidationCategory(category_value)
         if category is DatabaseValidationCategory.TYPES:
+            if (class_name, attribute_name) in INTEGER_ATTRIBUTE_EXEMPTIONS:
+                continue
             if isinstance(value, int) or (isinstance(value, float) and value.is_integer()):
                 continue
         elif not isinstance(message, str):

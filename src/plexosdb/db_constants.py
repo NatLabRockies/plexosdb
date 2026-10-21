@@ -73,4 +73,14 @@ PROPERTY_VALUES_QUERY = get_sql_query("database_validation_property_values.sql")
 ATTRIBUTE_VALUES_QUERY = get_sql_query("database_validation_attribute_values.sql")
 NAME_COLLISIONS_QUERY = get_sql_query("database_validation_name_collisions.sql")
 CUSTOM_COLUMN_CLASS_QUERY = get_sql_query("database_validation_custom_column_class.sql")
+SIMULATION_ATTRIBUTE_RULE_OVERRIDES = {
+    ("Transmission", "Loss Tolerance"): ">=0",
+    ("Transmission", "Flow PTDF Threshold"): ">=0",
+    ("Production", "Fuel Use Function Precision"): ">=0",
+    ("Production", "Rounding Up Threshold"): "Between 0 And 1",
+    ("Performance", "MIP Relative Gap"): ">=0",
+}
+INTEGER_ATTRIBUTE_EXEMPTIONS = frozenset(
+    (*SIMULATION_ATTRIBUTE_RULE_OVERRIDES, ("Transmission", "Loss Function Precision"))
+)
 REPAIR_MEMBERSHIP_CLASS_IDS_SCRIPT = get_sql_query("database_validation_repair_memberships.sql")

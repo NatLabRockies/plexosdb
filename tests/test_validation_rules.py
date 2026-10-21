@@ -131,3 +131,61 @@ def test_attribute_rule_validation_without_mutating(
         assert checks_module._find_attribute_values_issues(db._db) == []
     assert db._db.connection.total_changes == total_changes
     assert db.query("SELECT * FROM t_attribute_data") == original_data
+
+
+@pytest.mark.parametrize(
+    ("class_name", "attribute_name", "value", "invalid_value"),
+    (
+        ("Transmission", "Loss Tolerance", 0.01, -0.01),
+        ("Transmission", "Flow PTDF Threshold", 1e-6, -1e-6),
+        ("Production", "Rounding Up Threshold", 0.3, 1.1),
+        ("Production", "Fuel Use Function Precision", 0.001, -0.001),
+        ("Performance", "MIP Relative Gap", 0.0025, -0.0025),
+        ("Transmission", "Loss Function Precision", 0.01, None),
+    ),
+)
+def test_simulation_float_attributes_override_integer_metadata(
+    db_instance_with_schema: PlexosDB,
+    class_name: str,
+    attribute_name: str,
+    value: float,
+    invalid_value: float | None,
+) -> None:
+    db = db_instance_with_schema
+    db.add_object(ClassEnum.Generator, "Config")
+    db.add_attribute(ClassEnum.Generator, "Config", attribute_name="Latitude", attribute_value=value)
+    db._db.execute("UPDATE t_class SET name = ? WHERE class_id = 2", (class_name,))
+    db._db.execute(
+        "UPDATE t_attribute SET name = ?, is_integer = 1, validation_rule = NULL WHERE attribute_id = 1",
+        (attribute_name,),
+    )
+    total_changes = db._db.connection.total_changes
+
+    assert db.validate_database() is True
+    assert db._db.connection.total_changes == total_changes
+    if invalid_value is not None:
+        db._db.execute("UPDATE t_attribute_data SET value = ?", (invalid_value,))
+        with pytest.raises(DatabaseValidationError) as exc_info:
+            db.validate_database()
+        assert len(exc_info.value.findings) == 1
+        assert exc_info.value.findings[0].category is DatabaseValidationCategory.ATTRIBUTES
+        db._db.execute("UPDATE t_attribute SET is_integer = 0")
+        with pytest.raises(DatabaseValidationError):
+            db.validate_database()
+
+    db._db.execute("UPDATE t_attribute_data SET value = ?", (value,))
+    db._db.execute("UPDATE t_attribute SET validation_rule = '<0'")
+    with pytest.raises(DatabaseValidationError) as exc_info:
+        db.validate_database()
+    assert any("fails rule '<0'" in finding.message for finding in exc_info.value.findings)
+
+
+def test_simulation_integer_exemption_is_class_scoped(db_instance_with_schema: PlexosDB) -> None:
+    db = db_instance_with_schema
+    db.add_object(ClassEnum.Generator, "Generator1")
+    db.add_attribute(ClassEnum.Generator, "Generator1", attribute_name="Latitude", attribute_value=0.01)
+    db._db.execute("UPDATE t_attribute SET name = 'Loss Tolerance', is_integer = 1")
+
+    with pytest.raises(DatabaseValidationError) as exc_info:
+        db.validate_database()
+    assert any(finding.category is DatabaseValidationCategory.TYPES for finding in exc_info.value.findings)
