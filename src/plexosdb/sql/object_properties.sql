@@ -1,34 +1,5 @@
 -- Query to get all the objects and nested objects
 -- We do not include scenario tags on nested objects.
-WITH scenario_cte AS (
-SELECT
-	object.name,
-	object.object_id,
-	tag.data_id,
-	mem.collection_id,
-	cat.name AS category_name
-FROM
-	t_membership AS mem
-LEFT JOIN t_tag AS tag ON
-	tag.object_id = mem.child_object_id
-LEFT JOIN t_object AS object ON
-	mem.child_object_id = object.object_id
-LEFT JOIN t_category AS cat ON
-	object.category_id = cat.category_id
-LEFT JOIN t_class AS class ON
-	class.class_id = object.class_id
-WHERE
-	mem.collection_id in
-        (
-	SELECT
-		collection_id
-	FROM
-		t_collection
-	LEFT JOIN t_class ON
-		t_class.class_id = t_collection.parent_class_id
-        )
-    and class.name = 'Scenario'
- )
 SELECT
 	parent_class.name AS parent_class,
 	child_class.name AS child_class,
@@ -88,9 +59,32 @@ LEFT JOIN t_object AS tag_object ON
 	tag_object.object_id = tag.object_id
 LEFT JOIN t_class AS tag_class ON
 	tag_class.class_id = tag_object.class_id
-LEFT JOIN scenario_cte AS scenario ON
-	scenario.data_id = data.data_id
-	and tag.data_id = scenario.data_id
+-- Join scenario tags through the t_tag primary key so each data row is an index lookup.
+LEFT JOIN t_tag AS scenario_tag ON
+	scenario_tag.data_id = data.data_id
+	AND tag.data_id = scenario_tag.data_id
+	AND scenario_tag.object_id IN (
+	SELECT
+		scenario_object.object_id
+	FROM
+		t_object AS scenario_object
+	JOIN t_class AS scenario_class ON
+		scenario_class.class_id = scenario_object.class_id
+	WHERE
+		scenario_class.name = 'Scenario'
+		AND EXISTS (
+		SELECT
+			1
+		FROM
+			t_membership AS mem
+		WHERE
+			mem.child_object_id = scenario_object.object_id
+		)
+	)
+LEFT JOIN t_object AS scenario ON
+	scenario.object_id = scenario_tag.object_id
+LEFT JOIN t_category AS scenario_category ON
+	scenario.category_id = scenario_category.category_id
 ${where_clause}
 GROUP BY
 	membership.membership_id,
