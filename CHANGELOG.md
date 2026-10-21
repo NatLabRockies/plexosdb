@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.1](https://github.com/NatLabRockies/plexosdb/compare/v1.7.0...v1.7.1) (2026-10-21)
+
+
+### 🐛 Bug Fixes
+
+* make iterate_properties query scale linearly ([#203](https://github.com/NatLabRockies/plexosdb/issues/203)) ([1e1c040](https://github.com/NatLabRockies/plexosdb/commit/1e1c04031e483371adbf6862e2164b4b9a4e9b5e))
+* preserve XML text with schema-driven value conversion ([#200](https://github.com/NatLabRockies/plexosdb/issues/200)) ([84967c5](https://github.com/NatLabRockies/plexosdb/commit/84967c50e254d5fd8ef89f4277c22083196bb7bb))
+
 ## [1.7.0](https://github.com/NatLabRockies/plexosdb/compare/v1.6.1...v1.7.0) (2026-10-15)
 
 
