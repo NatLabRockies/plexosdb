@@ -65,4 +65,7 @@ VALID_TAG_CLASS_LANG_IDS = (29, 31, 34, 35)  # Data File, Variable, Timeslice, S
 TAG_OBJECT_CLASS_QUERY = Template(get_sql_query("database_validation_tag_object_class.sql")).substitute(
     placeholders=",".join("?" * len(VALID_TAG_CLASS_LANG_IDS))
 )
+VARIABLE_CLASS_LANG_ID = 31
+ACTION_TAG_FINDINGS_QUERY = get_sql_query("database_validation_action_tags.sql")
+ACTION_TEXT_FINDINGS_QUERY = get_sql_query("database_validation_action_texts.sql")
 REPAIR_MEMBERSHIP_CLASS_IDS_SCRIPT = get_sql_query("database_validation_repair_memberships.sql")

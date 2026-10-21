@@ -33,6 +33,9 @@ from .db_constants import (
     MEMBERSHIP_COUNT_BOUNDS_QUERY,
     VALID_TAG_CLASS_LANG_IDS,
     TAG_OBJECT_CLASS_QUERY,
+    VARIABLE_CLASS_LANG_ID,
+    ACTION_TAG_FINDINGS_QUERY,
+    ACTION_TEXT_FINDINGS_QUERY,
     REPAIR_MEMBERSHIP_CLASS_IDS_SCRIPT,
 )
 from .enums import ClassEnum, CollectionEnum, Schema
@@ -830,9 +833,31 @@ def _find_tag_object_class_issues(db: SQLiteManager, /) -> list[DatabaseValidati
     ]
 
 
-def _find_action_only_on_variables_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:
-    """Find actions assigned to non-variable objects (not implemented yet)."""
-    pass
+def _find_action_only_on_variables_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
+    """Validate that action_id is only valid on Variable class tags/texts."""
+    findings = [
+        DatabaseValidationFinding(
+            category=DatabaseValidationCategory.PROPERTIES,
+            message=(
+                f"Action on non-Variable tag: data_id={did}, "
+                f"object '{oname}' is class '{cname}' (lang_id={lid}), not Variable. "
+                "Fix: set action_id to NULL on this tag."
+            ),
+        )
+        for did, oname, cname, lid in db.query(ACTION_TAG_FINDINGS_QUERY, (VARIABLE_CLASS_LANG_ID,))
+    ]
+    findings.extend(
+        DatabaseValidationFinding(
+            category=DatabaseValidationCategory.PROPERTIES,
+            message=(
+                f"Action on non-Variable text: data_id={did}, "
+                f"class '{cname}' (lang_id={lid}), not Variable. "
+                "Fix: set action_id to NULL on this text."
+            ),
+        )
+        for did, cname, lid in db.query(ACTION_TEXT_FINDINGS_QUERY, (VARIABLE_CLASS_LANG_ID,))
+    )
+    return findings
 
 
 def _find_band_count_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:

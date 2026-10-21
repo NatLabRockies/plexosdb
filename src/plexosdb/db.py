@@ -4847,6 +4847,9 @@ class PlexosDB:
         - Tags must reference Data File, Variable, Timeslice, or Scenario objects,
           identified by class language IDs 29, 31, 34, and 35. Invalid tag rows are
           reported with removal guidance but are not deleted.
+        - Actions on tags and texts are only valid for the Variable class
+          (language ID 31). Invalid actions are reported with guidance to clear
+          ``action_id`` but are not modified.
 
         Additional model checks in ``checks.py`` are placeholders until implemented.
 

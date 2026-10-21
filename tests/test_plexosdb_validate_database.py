@@ -100,6 +100,57 @@ def test_find_tag_object_class_issues_accepts_no_tags(
     assert checks_module._find_tag_object_class_issues(db_with_validation_records._db) == []
 
 
+@pytest.mark.parametrize("lang_id", (29, 31, 34, 35, None))
+@pytest.mark.parametrize("action_id", (None, 0, 1))
+@pytest.mark.parametrize("fix_issues", (False, True))
+def test_validate_database_checks_actions_only_on_variables_without_mutating(
+    db_with_validation_records: PlexosDB,
+    lang_id: int | None,
+    action_id: int | None,
+    fix_issues: bool,
+) -> None:
+    db = db_with_validation_records
+    db._db.execute("UPDATE t_property SET is_dynamic = 1 WHERE property_id = 1")
+    db._db.execute("UPDATE t_class SET lang_id = ? WHERE class_id = 2", (lang_id,))
+    db._db.execute("INSERT INTO t_action (action_id) VALUES (0), (1)")
+    db._db.execute("INSERT INTO t_tag (data_id, object_id, action_id) VALUES (1, 2, ?)", (action_id,))
+    db._db.execute("INSERT INTO t_text (data_id, class_id, action_id) VALUES (1, 2, ?)", (action_id,))
+    original_tags = db.query("SELECT * FROM t_tag")
+    original_texts = db.query("SELECT * FROM t_text")
+    total_changes = db._db.connection.total_changes
+    expected_findings = []
+    if action_id is not None and lang_id in (29, 34, 35):
+        expected_findings = [
+            DatabaseValidationFinding(
+                category=DatabaseValidationCategory.PROPERTIES,
+                message=(
+                    "Action on non-Variable tag: data_id=1, "
+                    f"object 'Generator1' is class 'Generator' (lang_id={lang_id}), not Variable. "
+                    "Fix: set action_id to NULL on this tag."
+                ),
+            ),
+            DatabaseValidationFinding(
+                category=DatabaseValidationCategory.PROPERTIES,
+                message=(
+                    "Action on non-Variable text: data_id=1, "
+                    f"class 'Generator' (lang_id={lang_id}), not Variable. "
+                    "Fix: set action_id to NULL on this text."
+                ),
+            ),
+        ]
+
+    assert checks_module._find_action_only_on_variables_issues(db._db) == expected_findings
+    if expected_findings:
+        with pytest.raises(DatabaseValidationError) as exc_info:
+            db.validate_database(fix_issues=fix_issues)
+        assert exc_info.value.findings == tuple(expected_findings)
+    else:
+        assert db.validate_database(fix_issues=fix_issues) is True
+    assert db._db.connection.total_changes == total_changes
+    assert db.query("SELECT * FROM t_tag") == original_tags
+    assert db.query("SELECT * FROM t_text") == original_texts
+
+
 @pytest.mark.parametrize(
     ("max_count", "is_one_to_many", "max_allowed"),
     (
