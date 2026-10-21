@@ -284,6 +284,108 @@ def test_validate_database_checks_duplicate_uids_without_reassigning(
 
 
 @pytest.mark.parametrize(
+    ("table", "label", "extra_columns", "extra_values"),
+    (
+        ("t_tag", "tag", ", object_id", ", 1"),
+        ("t_text", "text", ", class_id", ", 1"),
+        ("t_date_from", "date_from", "", ""),
+        ("t_date_to", "date_to", "", ""),
+        ("t_band", "band", "", ""),
+        ("t_memo_data", "memo", "", ""),
+    ),
+)
+@pytest.mark.parametrize("orphan_count", (0, 1, 10, 12))
+@pytest.mark.parametrize("fix_issues", (False, True))
+def test_validate_database_reports_orphaned_child_rows_without_deleting(
+    db_with_validation_records: PlexosDB,
+    table: str,
+    label: str,
+    extra_columns: str,
+    extra_values: str,
+    orphan_count: int,
+    fix_issues: bool,
+) -> None:
+    db = db_with_validation_records
+    db._db.execute("UPDATE t_property SET is_dynamic = 1 WHERE property_id = 1")
+    db._db.execute(f"INSERT INTO {table} (data_id{extra_columns}) VALUES (1{extra_values})")
+    db._db.execute("PRAGMA foreign_keys = OFF")
+    try:
+        for data_id in reversed(range(100, 100 + orphan_count)):
+            db._db.execute(
+                f"INSERT INTO {table} (data_id{extra_columns}) VALUES (?{extra_values})", (data_id,)
+            )
+    finally:
+        db._db.execute("PRAGMA foreign_keys = ON")
+    original_rows = db.query(f"SELECT * FROM {table}")
+    total_changes = db._db.connection.total_changes
+    expected_findings = []
+    if orphan_count:
+        sample = list(range(100, 100 + min(orphan_count, 10)))
+        more = f" (+{orphan_count - 10} more)" if orphan_count > 10 else ""
+        expected_findings.append(
+            DatabaseValidationFinding(
+                category=DatabaseValidationCategory.PROPERTIES,
+                message=(
+                    f"Orphaned {label} rows: {orphan_count} row(s) in {table} "
+                    f"reference non-existent data_ids {sample}{more}. "
+                    f"Fix: DELETE FROM {table} WHERE data_id NOT IN (SELECT data_id FROM t_data)."
+                ),
+            )
+        )
+
+    assert checks_module._find_orphaned_child_rows_issues(db._db) == expected_findings
+    if expected_findings:
+        with pytest.raises(DatabaseValidationError) as exc_info:
+            db.validate_database(fix_issues=fix_issues)
+        assert [
+            finding
+            for finding in exc_info.value.findings
+            if finding.category is DatabaseValidationCategory.PROPERTIES
+        ] == expected_findings
+        assert (
+            sum(
+                finding.category is DatabaseValidationCategory.FOREIGN_KEYS
+                for finding in exc_info.value.findings
+            )
+            == orphan_count
+        )
+    else:
+        assert db.validate_database(fix_issues=fix_issues) is True
+    assert db._db.connection.total_changes == total_changes
+    assert db.query(f"SELECT * FROM {table}") == original_rows
+
+
+@pytest.mark.parametrize(
+    ("table", "label", "column"),
+    (("t_tag", "tag", "object_id"), ("t_text", "text", "class_id")),
+)
+def test_find_orphaned_child_rows_issues_counts_rows_not_distinct_data_ids(
+    db_with_validation_records: PlexosDB,
+    table: str,
+    label: str,
+    column: str,
+) -> None:
+    db = db_with_validation_records
+    db._db.execute(f"INSERT INTO {table} (data_id, {column}) VALUES (1, 1), (1, 2)")
+    db._db.execute("PRAGMA foreign_keys = OFF")
+    try:
+        db._db.execute("DELETE FROM t_data WHERE data_id = 1")
+    finally:
+        db._db.execute("PRAGMA foreign_keys = ON")
+
+    assert checks_module._find_orphaned_child_rows_issues(db._db) == [
+        DatabaseValidationFinding(
+            category=DatabaseValidationCategory.PROPERTIES,
+            message=(
+                f"Orphaned {label} rows: 2 row(s) in {table} "
+                "reference non-existent data_ids [1, 1]. "
+                f"Fix: DELETE FROM {table} WHERE data_id NOT IN (SELECT data_id FROM t_data)."
+            ),
+        )
+    ]
+
+
+@pytest.mark.parametrize(
     "statement",
     (
         "UPDATE t_data SET value = 3 WHERE data_id = 2",

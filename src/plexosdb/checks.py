@@ -43,6 +43,7 @@ DATA_GRAPHS_QUERY = get_sql_query("database_validation_data_graphs.sql")
 DATA_GRAPH_TAGS_QUERY = get_sql_query("database_validation_data_graph_tags.sql")
 DATA_GRAPH_TEXTS_QUERY = get_sql_query("database_validation_data_graph_texts.sql")
 DUPLICATE_UIDS_QUERY = get_sql_query("database_validation_duplicate_uids.sql")
+ORPHANED_CHILD_ROWS_QUERY = Template(get_sql_query("database_validation_orphaned_child_rows.sql"))
 REPAIR_MEMBERSHIP_CLASS_IDS_SCRIPT = get_sql_query("database_validation_repair_memberships.sql")
 
 
@@ -727,9 +728,42 @@ def _find_duplicate_uids_issues(db: SQLiteManager, /) -> list[DatabaseValidation
     ]
 
 
-def _find_orphaned_child_rows_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:
-    """Find orphaned child rows (not implemented yet)."""
-    pass
+def _find_orphaned_child_rows_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
+    """Detect child rows pointing to non-existent t_data rows.
+
+    Deleting data with foreign-key enforcement disabled can leave child rows
+    behind because ON DELETE CASCADE does not fire. Report these orphans without
+    deleting them.
+    """
+    findings: list[DatabaseValidationFinding] = []
+    for table_name, label in (
+        ("t_tag", "tag"),
+        ("t_text", "text"),
+        ("t_date_from", "date_from"),
+        ("t_date_to", "date_to"),
+        ("t_band", "band"),
+        ("t_memo_data", "memo"),
+    ):
+        count = 0
+        sample: list[int] = []
+        for (data_id,) in db.iter_query(ORPHANED_CHILD_ROWS_QUERY.substitute(table=table_name)):
+            count += 1
+            if count <= 10:
+                sample.append(data_id)
+        if not count:
+            continue
+        more = f" (+{count - 10} more)" if count > 10 else ""
+        findings.append(
+            DatabaseValidationFinding(
+                category=DatabaseValidationCategory.PROPERTIES,
+                message=(
+                    f"Orphaned {label} rows: {count} row(s) in {table_name} "
+                    f"reference non-existent data_ids {sample}{more}. "
+                    f"Fix: DELETE FROM {table_name} WHERE data_id NOT IN (SELECT data_id FROM t_data)."
+                ),
+            )
+        )
+    return findings
 
 
 def _find_attribute_class_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:

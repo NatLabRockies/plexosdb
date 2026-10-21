@@ -4829,17 +4829,21 @@ class PlexosDB:
         marked with ``is_integer``. By default, validation does not modify the
         database. Findings are ``DatabaseValidationFinding`` instances with a
         ``DatabaseValidationCategory`` and a message.
-        Category/class mismatches include guidance to reset the category to the
-        class's default ``-`` category; these are reported but not repaired.
-        Property/collection mismatches include guidance to remove the invalid data
-        row; validation does not delete these rows.
-        Static properties with tags, texts, dates, or memos are reported with
-        guidance to enable dynamic behavior or remove the artifacts, but not repaired.
-        Duplicate static data is reported per membership, property, and band,
-        treating missing bands as band 1; validation does not remove duplicates.
-        Identical data graphs are also reported for static and dynamic properties,
-        comparing values, bands, tag/text sets, dates, and memos without removing rows.
-        Duplicate non-NULL data UIDs are reported but not reassigned.
+
+        - Category/class mismatches include guidance to reset the category to the
+          class's default ``-`` category; these are reported but not repaired.
+        - Property/collection mismatches include guidance to remove the invalid data
+          row; validation does not delete these rows.
+        - Static properties with tags, texts, dates, or memos are reported with
+          guidance to enable dynamic behavior or remove the artifacts, but not repaired.
+        - Duplicate static data is reported per membership, property, and band,
+          treating missing bands as band 1; validation does not remove duplicates.
+        - Identical data graphs are also reported for static and dynamic properties,
+          comparing values, bands, tag/text sets, dates, and memos without removing rows.
+        - Duplicate non-NULL data UIDs are reported but not reassigned.
+        - Orphaned tag, text, date, band, and memo rows are reported with a sample
+          of up to ten data IDs and deletion guidance; validation does not delete them.
+
         Additional model checks in ``checks.py`` are placeholders until implemented.
 
         Parameters
