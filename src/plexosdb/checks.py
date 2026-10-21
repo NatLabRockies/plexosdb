@@ -682,17 +682,19 @@ def _find_duplicate_static_data_issues(db: SQLiteManager, /) -> list[DatabaseVal
 
     Duplicate static data is reported per membership, property, and band,
     treating missing bands as band 1; validation does not remove duplicates.
+    Findings include the property name and child object's name, class, and ID.
     """
     return [
         DatabaseValidationFinding(
             category=DatabaseValidationCategory.PROPERTIES,
             message=(
-                f"Duplicated static data: membership_id={mid}, property_id={pid}, "
+                f"Duplicated static data: property '{pname}' (property_id={pid}) "
+                f"on object '{oname}' (object_id={oid}, class='{cname}'), membership_id={mid}, "
                 f"band_id={bid}, count={count}. "
                 "Fix: remove duplicate data rows, keeping only the last."
             ),
         )
-        for mid, pid, bid, count in db.query(DUPLICATE_STATIC_DATA_QUERY)
+        for mid, pid, bid, count, pname, oname, oid, cname in db.query(DUPLICATE_STATIC_DATA_QUERY)
     ]
 
 

@@ -629,7 +629,8 @@ def test_validate_database_checks_duplicate_static_data_without_deleting(
             DatabaseValidationFinding(
                 category=DatabaseValidationCategory.PROPERTIES,
                 message=(
-                    "Duplicated static data: membership_id=1, property_id=1, "
+                    "Duplicated static data: property 'Max Capacity' (property_id=1) "
+                    "on object 'Generator1' (object_id=2, class='Generator'), membership_id=1, "
                     f"band_id={expected_band}, count=2. "
                     "Fix: remove duplicate data rows, keeping only the last."
                 ),
@@ -1340,7 +1341,8 @@ def test_validate_database_reports_static_property_issues_in_populated_xml_model
         DatabaseValidationFinding(
             category=DatabaseValidationCategory.PROPERTIES,
             message=(
-                "Duplicated static data: membership_id=6, property_id=585, band_id=1, count=3. "
+                "Duplicated static data: property 'Price' (property_id=585) "
+                "on object 'Gas' (object_id=7, class='Fuel'), membership_id=6, band_id=1, count=3. "
                 "Fix: remove duplicate data rows, keeping only the last."
             ),
         )

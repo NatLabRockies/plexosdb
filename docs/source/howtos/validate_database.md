@@ -1,8 +1,9 @@
 # Validating a Database
 
-Use `PlexosDB.validate_database()` after importing a model or modifying its data.
-It returns `True` when all checks pass and raises `DatabaseValidationError` when
-issues are found. Validation does not modify the database by default.
+Use `PlexosDB.validate_database()` after importing a model or modifying its
+data. It returns `True` when all checks pass and raises
+`DatabaseValidationError` when issues are found. Validation does not modify the
+database by default.
 
 ```python
 from plexosdb import DatabaseValidationError, PlexosDB
@@ -25,8 +26,8 @@ checks are skipped to avoid querying an incomplete schema.
 
 Model checks cover:
 
-- Object/category, attribute/object, property/collection, and custom-column class
-  consistency.
+- Object/category, attribute/object, property/collection, and custom-column
+  class consistency.
 - Artifacts on static properties, duplicate static data, identical data graphs,
   duplicate non-NULL UIDs, and orphaned child rows.
 - Missing System memberships and collection membership-count limits.
@@ -58,9 +59,9 @@ The suggested fixes are guidance, not actions performed automatically.
 
 ## Writing a text report
 
-Use the following pattern to write every finding to `validation_issues.txt`.
-The report is UTF-8 plain text and does not contain terminal color codes.
-An existing report is overwritten on each run.
+Use the following pattern to write every finding to `validation_issues.txt`. The
+report is UTF-8 plain text and does not contain terminal color codes. An
+existing report is overwritten on each run.
 
 ```python
 from pathlib import Path
@@ -108,10 +109,9 @@ Download the script:
 ## Limited automatic repairs
 
 `db.validate_database(fix_issues=True)` only repairs membership class IDs when
-the referenced object and collection agree and membership findings are the
-only category of findings. Repairs run in a transaction and are committed only
-if revalidation passes; otherwise they are rolled back and an exception is
-raised.
+the referenced object and collection agree and membership findings are the only
+category of findings. Repairs run in a transaction and are committed only if
+revalidation passes; otherwise they are rolled back and an exception is raised.
 
 It does not create missing memberships, remove excess memberships or duplicate
 rows, delete artifacts or orphans, change values or UIDs, rename objects, or
