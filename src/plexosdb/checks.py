@@ -7,6 +7,7 @@ from collections.abc import Hashable, Iterable
 from contextlib import closing
 from functools import cache
 from importlib.resources import files
+from itertools import groupby
 import sqlite3
 import operator
 from typing import TYPE_CHECKING
@@ -40,6 +41,7 @@ from .db_constants import (
     BAND_COUNT_FINDINGS_QUERY,
     PROPERTY_VALUES_QUERY,
     ATTRIBUTE_VALUES_QUERY,
+    NAME_COLLISIONS_QUERY,
     REPAIR_MEMBERSHIP_CLASS_IDS_SCRIPT,
 )
 from .enums import ClassEnum, CollectionEnum, Schema
@@ -976,11 +978,25 @@ def _find_attribute_values_issues(db: SQLiteManager, /) -> list[DatabaseValidati
     return findings
 
 
-def _find_case_insensitive_name_collisions_issues(
-    db: SQLiteManager, /
-) -> list[DatabaseValidationFinding] | None:
-    """Find case-insensitive name collisions (not implemented yet)."""
-    pass
+def _find_case_insensitive_name_collisions_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
+    """Detect objects in the same class with names differing only by case."""
+    findings: list[DatabaseValidationFinding] = []
+    for _, rows in groupby(db.iter_query(NAME_COLLISIONS_QUERY), key=lambda row: (row[0], row[1])):
+        first = next(rows)
+        class_name = first[2]
+        names = [f"'{first[3]}' (id={first[4]})"]
+        names.extend(f"'{name}' (id={oid})" for _, _, _, name, oid in rows)
+        findings.append(
+            DatabaseValidationFinding(
+                category=DatabaseValidationCategory.OBJECTS,
+                message=(
+                    f"Case-insensitive name collision in class '{class_name}': "
+                    f"{', '.join(names)}. "
+                    "Fix: rename one of the colliding objects to be unique."
+                ),
+            )
+        )
+    return findings
 
 
 def _find_custom_column_class_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:

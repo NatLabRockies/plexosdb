@@ -71,4 +71,5 @@ ACTION_TEXT_FINDINGS_QUERY = get_sql_query("database_validation_action_texts.sql
 BAND_COUNT_FINDINGS_QUERY = get_sql_query("database_validation_band_count.sql")
 PROPERTY_VALUES_QUERY = get_sql_query("database_validation_property_values.sql")
 ATTRIBUTE_VALUES_QUERY = get_sql_query("database_validation_attribute_values.sql")
+NAME_COLLISIONS_QUERY = get_sql_query("database_validation_name_collisions.sql")
 REPAIR_MEMBERSHIP_CLASS_IDS_SCRIPT = get_sql_query("database_validation_repair_memberships.sql")

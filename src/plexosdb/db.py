@@ -4878,6 +4878,9 @@ class PlexosDB:
         - Non-NULL attribute values must satisfy nonempty ``validation_rule``
           expressions. Invalid values and malformed or unsupported rules are
           reported without changing the data; NULL attribute values are skipped.
+        - Objects in the same class must have case-insensitively unique names,
+          using SQLite's ASCII ``LOWER`` semantics. Collisions are reported with
+          rename guidance but names are not modified.
 
         Additional model checks in ``checks.py`` are placeholders until implemented.
 
