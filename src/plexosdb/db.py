@@ -23,7 +23,7 @@ from .db_constants import (
     MASTER_TEMPLATE_FILES,
 )
 from .db_manager import SQLiteManager
-from .types import SQLiteRecord
+from .types import SQLiteRecord, SQLiteValue, ValidationResult
 from .enums import (
     ClassEnum,
     CollectionEnum,
@@ -4813,6 +4813,25 @@ class PlexosDB:
         """Update text data for a property data record."""
         raise NotImplementedError  # pragma: no cover
 
+    @staticmethod
+    def validate_value_by_rule(value: SQLiteValue, validation_rule: str) -> ValidationResult:
+        """Validate a numeric value against a PLEXOS validation rule.
+
+        Supports inclusive ``Between X And Y``, ``In (X,Y,Z)``, and comparisons
+        ``>=X``, ``<=X``, ``<X``, and ``>X``. Surrounding whitespace is ignored.
+        Empty rules accept any value. Non-numeric values, malformed rules, and
+        unsupported rules return an invalid ``ValidationResult`` with an error
+        message; valid results have an empty error message.
+
+        Examples
+        --------
+        >>> PlexosDB.validate_value_by_rule(50.0, "Between 1 And 100").is_valid
+        True
+        >>> PlexosDB.validate_value_by_rule(150.0, "Between 1 And 100").error_message
+        'Value 150.0 must be between 1.0 and 100.0'
+        """
+        return checks_module.validate_value_by_rule(value, validation_rule)
+
     def validate_database(self, /, *, fix_issues: bool = False) -> bool:
         """Validate the packaged PLEXOS schema and database relationships.
 
@@ -4853,6 +4872,9 @@ class PlexosDB:
         - The highest band ID used by a property must not exceed its non-NULL
           ``max_band_id``. Exceeded limits are reported with update guidance but
           are not modified.
+        - Property values must satisfy nonempty ``validation_rule`` expressions.
+          Invalid values and malformed or unsupported rules are reported without
+          changing the data.
 
         Additional model checks in ``checks.py`` are placeholders until implemented.
 
