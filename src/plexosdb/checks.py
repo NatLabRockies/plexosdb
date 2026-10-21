@@ -34,6 +34,7 @@ TABLE_NAMES_QUERY = get_sql_query("database_validation_table_names.sql")
 TABLE_INFO_QUERY = Template(get_sql_query("database_validation_table_info.sql"))
 RELATIONSHIP_FINDINGS_QUERY = get_sql_query("database_validation_relationships.sql")
 CATEGORY_CLASS_FINDINGS_QUERY = get_sql_query("database_validation_category_class.sql")
+PROPERTY_COLLECTION_FINDINGS_QUERY = get_sql_query("database_validation_property_collection.sql")
 REPAIR_MEMBERSHIP_CLASS_IDS_SCRIPT = get_sql_query("database_validation_repair_memberships.sql")
 
 
@@ -608,9 +609,19 @@ def _find_category_class_issues(db: SQLiteManager, /) -> list[DatabaseValidation
     ]
 
 
-def _find_property_collection_mismatch_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:
-    """Find property and collection mismatches (not implemented yet)."""
-    pass
+def _find_property_collection_mismatch_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
+    """Validate that property and membership collection IDs must match for t_data."""
+    return [
+        DatabaseValidationFinding(
+            category=DatabaseValidationCategory.PROPERTIES,
+            message=(
+                f"Property-collection mismatch: data_id={did}, "
+                f"property '{pname}' collection_id={pcid} != membership collection_id={mcid}. "
+                "Fix: remove the invalid data row."
+            ),
+        )
+        for did, pname, pcid, mcid in db.query(PROPERTY_COLLECTION_FINDINGS_QUERY)
+    ]
 
 
 def _find_static_property_artifacts_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:

@@ -4831,6 +4831,8 @@ class PlexosDB:
         ``DatabaseValidationCategory`` and a message.
         Category/class mismatches include guidance to reset the category to the
         class's default ``-`` category; these are reported but not repaired.
+        Property/collection mismatches include guidance to remove the invalid data
+        row; validation does not delete these rows.
         Additional model checks in ``checks.py`` are placeholders until implemented.
 
         Parameters

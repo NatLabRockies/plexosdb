@@ -188,6 +188,7 @@ FROM t_data AS data
 JOIN t_property AS property ON property.property_id = data.property_id
 JOIN t_membership AS membership ON membership.membership_id = data.membership_id
 WHERE property.collection_id IS NOT membership.collection_id
+  AND (property.collection_id IS NULL OR membership.collection_id IS NULL)
 
 UNION ALL
 

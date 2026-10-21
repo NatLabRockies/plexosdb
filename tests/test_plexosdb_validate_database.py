@@ -48,6 +48,59 @@ def test_find_category_class_issues_accepts_matching_categories(
     assert checks_module._find_category_class_issues(db_with_validation_records._db) == []
 
 
+def test_find_property_collection_mismatch_issues_accepts_matching_collections(
+    db_with_validation_records: PlexosDB,
+) -> None:
+    assert checks_module._find_property_collection_mismatch_issues(db_with_validation_records._db) == []
+
+
+@pytest.mark.parametrize("fix_issues", (False, True))
+def test_validate_database_reports_property_collection_mismatch_without_deleting(
+    db_with_validation_records: PlexosDB,
+    fix_issues: bool,
+) -> None:
+    db = db_with_validation_records
+    db._db.execute("UPDATE t_property SET collection_id = 2 WHERE property_id = 1")
+    original_data = db.query("SELECT * FROM t_data")
+    total_changes = db._db.connection.total_changes
+    expected_finding = DatabaseValidationFinding(
+        category=DatabaseValidationCategory.PROPERTIES,
+        message=(
+            "Property-collection mismatch: data_id=1, "
+            "property 'Max Capacity' collection_id=2 != membership collection_id=1. "
+            "Fix: remove the invalid data row."
+        ),
+    )
+
+    assert checks_module._find_property_collection_mismatch_issues(db._db) == [expected_finding]
+    with pytest.raises(DatabaseValidationError) as exc_info:
+        db.validate_database(fix_issues=fix_issues)
+
+    assert exc_info.value.findings == (expected_finding,)
+    assert db._db.connection.total_changes == total_changes
+    assert db.query("SELECT * FROM t_data") == original_data
+
+
+@pytest.mark.parametrize("table", ("t_property", "t_membership"))
+def test_validate_database_preserves_missing_collection_findings(
+    db_with_validation_records: PlexosDB,
+    table: str,
+) -> None:
+    db = db_with_validation_records
+    db._db.execute(f"UPDATE {table} SET collection_id = NULL")
+
+    assert checks_module._find_property_collection_mismatch_issues(db._db) == []
+    with pytest.raises(DatabaseValidationError) as exc_info:
+        db.validate_database()
+
+    assert any(
+        finding.category is DatabaseValidationCategory.PROPERTIES
+        and "t_data.data_id=1" in finding.message
+        and "NULL" in finding.message
+        for finding in exc_info.value.findings
+    )
+
+
 @pytest.mark.parametrize("fix_issues", (False, True))
 def test_validate_database_reports_category_class_mismatch_without_repairing(
     db_with_validation_records: PlexosDB,
