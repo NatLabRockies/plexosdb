@@ -1,5 +1,8 @@
 # PlexosDB Class
 
+See [Validating a Database](../howtos/validate_database.md) for
+`validate_database()`, structured findings, limited repairs, and text reports.
+
 The reference below includes the complete `PlexosDB` class surface. Some
 declared methods are reserved for future implementation and currently raise
 `NotImplementedError`; they are listed in the API for transparency but should

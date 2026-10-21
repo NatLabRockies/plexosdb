@@ -19,6 +19,7 @@ delete_objects
 query_database
 work_with_scenarios
 import_export
+validate_database
 manage_relationships
 copy_objects
 bulk_operations
