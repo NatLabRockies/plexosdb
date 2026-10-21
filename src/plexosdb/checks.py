@@ -1111,13 +1111,22 @@ def _find_sqlite_integrity_issues(db: SQLiteManager, /) -> list[DatabaseValidati
 
 
 def _find_foreign_key_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
-    """Return foreign-key violations reported by SQLite."""
+    """Return foreign-key violations or SQLite errors preventing the check."""
+    try:
+        rows = db.query(FOREIGN_KEY_CHECK_QUERY)
+    except sqlite3.Error as error:
+        return [
+            DatabaseValidationFinding(
+                category=DatabaseValidationCategory.FOREIGN_KEYS,
+                message=f"SQLite foreign key check could not complete: {error}",
+            )
+        ]
     return [
         DatabaseValidationFinding(
             category=DatabaseValidationCategory.FOREIGN_KEYS,
             message=f"{table} rowid={rowid} violates foreign key {foreign_key_id} to {parent_table}.",
         )
-        for table, rowid, parent_table, foreign_key_id in db.query(FOREIGN_KEY_CHECK_QUERY)
+        for table, rowid, parent_table, foreign_key_id in rows
     ]
 
 

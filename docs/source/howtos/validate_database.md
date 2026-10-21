@@ -24,6 +24,11 @@ Validation checks SQLite integrity, required schema tables and columns, foreign
 keys, and model consistency. If required tables or columns are missing, later
 checks are skipped to avoid querying an incomplete schema.
 
+If SQLite cannot run its foreign-key check, for example because a referenced
+parent key is missing a PRIMARY KEY or UNIQUE constraint, the SQLite error is
+included as a `foreign_keys` finding. It raises `DatabaseValidationError` and
+can be written to the same text report as other findings.
+
 Model checks cover:
 
 - Object/category, attribute/object, property/collection, and custom-column

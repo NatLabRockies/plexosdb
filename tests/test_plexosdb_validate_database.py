@@ -7,6 +7,7 @@ import pytest
 from plexosdb import ClassEnum, DatabaseValidationCategory, DatabaseValidationError, PlexosDB
 from plexosdb import checks as checks_module
 from plexosdb.exceptions import DatabaseValidationFinding
+from plexosdb.db_constants import PLEXOS_DEFAULT_SCHEMA
 
 
 def test_database_validation_error_formats_each_finding_as_warning(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -66,6 +67,32 @@ def db_with_validation_records(db_instance_with_schema: PlexosDB) -> PlexosDB:
     db._db.execute("UPDATE t_attribute SET is_integer = 1 WHERE attribute_id = 1")
     db.add_property(ClassEnum.Generator, "Generator1", "Max Capacity", 2.0)
     return db
+
+
+@pytest.mark.parametrize("fix_issues", (False, True))
+def test_validate_database_reports_malformed_parent_key(fix_issues: bool) -> None:
+    schema = PLEXOS_DEFAULT_SCHEMA.replace(
+        ",\n    CONSTRAINT PK_t_action\n               PRIMARY KEY (`action_id`)", ""
+    )
+    assert schema != PLEXOS_DEFAULT_SCHEMA
+    db = PlexosDB()
+    try:
+        db.create_schema(schema=schema)
+        assert db.query("PRAGMA integrity_check") == [("ok",)]
+        assert checks_module._find_database_schema_issues(db._db) == []
+        total_changes = db._db.connection.total_changes
+
+        with pytest.raises(DatabaseValidationError) as exc_info:
+            db.validate_database(fix_issues=fix_issues)
+
+        assert len(exc_info.value.findings) == 1
+        finding = exc_info.value.findings[0]
+        assert finding.category is DatabaseValidationCategory.FOREIGN_KEYS
+        assert "foreign key mismatch" in finding.message
+        assert "t_action" in finding.message
+        assert db._db.connection.total_changes == total_changes
+    finally:
+        db._db.close()
 
 
 @pytest.fixture
