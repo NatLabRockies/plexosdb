@@ -4835,6 +4835,8 @@ class PlexosDB:
         row; validation does not delete these rows.
         Static properties with tags, texts, dates, or memos are reported with
         guidance to enable dynamic behavior or remove the artifacts, but not repaired.
+        Duplicate static data is reported per membership, property, and band,
+        treating missing bands as band 1; validation does not remove duplicates.
         Additional model checks in ``checks.py`` are placeholders until implemented.
 
         Parameters

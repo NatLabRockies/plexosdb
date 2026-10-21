@@ -36,6 +36,7 @@ RELATIONSHIP_FINDINGS_QUERY = get_sql_query("database_validation_relationships.s
 CATEGORY_CLASS_FINDINGS_QUERY = get_sql_query("database_validation_category_class.sql")
 PROPERTY_COLLECTION_FINDINGS_QUERY = get_sql_query("database_validation_property_collection.sql")
 STATIC_PROPERTY_ARTIFACTS_QUERY = Template(get_sql_query("database_validation_static_property_artifacts.sql"))
+DUPLICATE_STATIC_DATA_QUERY = get_sql_query("database_validation_duplicate_static_data.sql")
 REPAIR_MEMBERSHIP_CLASS_IDS_SCRIPT = get_sql_query("database_validation_repair_memberships.sql")
 
 
@@ -649,9 +650,19 @@ def _find_static_property_artifacts_issues(db: SQLiteManager, /) -> list[Databas
     return findings
 
 
-def _find_duplicate_static_data_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:
-    """Find duplicate static data (not implemented yet)."""
-    pass
+def _find_duplicate_static_data_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
+    """Validate static properties allow one data row per membership, property, and band."""
+    return [
+        DatabaseValidationFinding(
+            category=DatabaseValidationCategory.PROPERTIES,
+            message=(
+                f"Duplicate static data: membership_id={mid}, property_id={pid}, "
+                f"band_id={bid}, count={count}. "
+                "Fix: remove duplicate data rows, keeping only the last."
+            ),
+        )
+        for mid, pid, bid, count in db.query(DUPLICATE_STATIC_DATA_QUERY)
+    ]
 
 
 def _find_duplicate_data_graphs_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:

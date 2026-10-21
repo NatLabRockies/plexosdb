@@ -90,6 +90,7 @@ def test_validate_database_checks_static_property_artifacts_without_mutating(
         "INSERT INTO t_data (data_id, membership_id, property_id, value) "
         "SELECT 2, membership_id, property_id, 3.0 FROM t_data WHERE data_id = 1"
     )
+    db._db.execute("INSERT INTO t_band (data_id, band_id) VALUES (2, 2)")
     db._db.execute(f"INSERT INTO {table} (data_id{extra_columns}) SELECT data_id{extra_values} FROM t_data")
     original_artifacts = db.query(f"SELECT * FROM {table}")
     total_changes = db._db.connection.total_changes
@@ -119,6 +120,76 @@ def test_validate_database_checks_static_property_artifacts_without_mutating(
     assert db._db.connection.total_changes == total_changes
     assert db.query(f"SELECT * FROM {table}") == original_artifacts
     assert db.query("SELECT is_dynamic FROM t_property WHERE property_id = 1") == [(is_dynamic,)]
+
+
+@pytest.mark.parametrize(
+    ("bands", "expected_band"),
+    (
+        ((), 1),
+        (((2, 1),), 1),
+        (((1, None), (2, 1)), 1),
+        (((1, 3), (2, 3)), 3),
+        (((2, 2),), None),
+    ),
+)
+@pytest.mark.parametrize("is_dynamic", (0, 1, None))
+@pytest.mark.parametrize("fix_issues", (False, True))
+def test_validate_database_checks_duplicate_static_data_without_deleting(
+    db_with_validation_records: PlexosDB,
+    bands: tuple[tuple[int, int | None], ...],
+    expected_band: int | None,
+    is_dynamic: int | None,
+    fix_issues: bool,
+) -> None:
+    db = db_with_validation_records
+    db._db.execute("UPDATE t_property SET is_dynamic = ? WHERE property_id = 1", (is_dynamic,))
+    db._db.execute(
+        "INSERT INTO t_data (data_id, membership_id, property_id, value) "
+        "SELECT 2, membership_id, property_id, value FROM t_data WHERE data_id = 1"
+    )
+    for data_id, band_id in bands:
+        db._db.execute("INSERT INTO t_band (data_id, band_id) VALUES (?, ?)", (data_id, band_id))
+    original_data = db.query("SELECT * FROM t_data")
+    original_bands = db.query("SELECT * FROM t_band")
+    total_changes = db._db.connection.total_changes
+    expected_findings = (
+        [
+            DatabaseValidationFinding(
+                category=DatabaseValidationCategory.PROPERTIES,
+                message=(
+                    "Duplicate static data: membership_id=1, property_id=1, "
+                    f"band_id={expected_band}, count=2. "
+                    "Fix: remove duplicate data rows, keeping only the last."
+                ),
+            ),
+        ]
+        if is_dynamic == 0 and expected_band is not None
+        else []
+    )
+
+    assert checks_module._find_duplicate_static_data_issues(db._db) == expected_findings
+    if expected_findings:
+        with pytest.raises(DatabaseValidationError) as exc_info:
+            db.validate_database(fix_issues=fix_issues)
+        assert exc_info.value.findings == tuple(expected_findings)
+    else:
+        assert db.validate_database(fix_issues=fix_issues) is True
+    assert db._db.connection.total_changes == total_changes
+    assert db.query("SELECT * FROM t_data") == original_data
+    assert db.query("SELECT * FROM t_band") == original_bands
+
+
+def test_find_duplicate_static_data_issues_accepts_distinct_memberships_and_properties(
+    db_with_validation_records: PlexosDB,
+) -> None:
+    db = db_with_validation_records
+    db.add_object(ClassEnum.Generator, "Generator2")
+    db.add_property(ClassEnum.Generator, "Generator2", "Max Capacity", 2.0)
+    db.add_property(ClassEnum.Generator, "Generator1", "Max Energy", 2.0)
+    db._db.execute("UPDATE t_property SET is_dynamic = 0")
+
+    assert checks_module._find_duplicate_static_data_issues(db._db) == []
+    assert db.validate_database() is True
 
 
 @pytest.mark.parametrize("fix_issues", (False, True))
@@ -491,7 +562,7 @@ def test_validate_database_rejects_non_boolean_fix_issues(
         db_instance_with_schema.validate_database(fix_issues=1)  # type: ignore[arg-type]
 
 
-def test_validate_database_reports_static_artifacts_in_populated_xml_model(
+def test_validate_database_reports_static_property_issues_in_populated_xml_model(
     db_from_model_xml: PlexosDB,
 ) -> None:
     total_changes = db_from_model_xml._db.connection.total_changes
@@ -499,7 +570,7 @@ def test_validate_database_reports_static_artifacts_in_populated_xml_model(
     with pytest.raises(DatabaseValidationError) as exc_info:
         db_from_model_xml.validate_database()
 
-    assert exc_info.value.findings == tuple(
+    expected_findings = [
         DatabaseValidationFinding(
             category=DatabaseValidationCategory.PROPERTIES,
             message=(
@@ -518,5 +589,15 @@ def test_validate_database_reports_static_artifacts_in_populated_xml_model(
             ("memo", "t_memo_data", 2043, "Resistance", 1),
             ("memo", "t_memo_data", 2044, "Reactance", 1),
         )
+    ]
+    expected_findings.append(
+        DatabaseValidationFinding(
+            category=DatabaseValidationCategory.PROPERTIES,
+            message=(
+                "Duplicate static data: membership_id=6, property_id=585, band_id=1, count=3. "
+                "Fix: remove duplicate data rows, keeping only the last."
+            ),
+        )
     )
+    assert exc_info.value.findings == tuple(expected_findings)
     assert db_from_model_xml._db.connection.total_changes == total_changes
