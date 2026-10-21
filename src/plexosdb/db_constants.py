@@ -69,4 +69,5 @@ VARIABLE_CLASS_LANG_ID = 31
 ACTION_TAG_FINDINGS_QUERY = get_sql_query("database_validation_action_tags.sql")
 ACTION_TEXT_FINDINGS_QUERY = get_sql_query("database_validation_action_texts.sql")
 BAND_COUNT_FINDINGS_QUERY = get_sql_query("database_validation_band_count.sql")
+PROPERTY_VALUES_QUERY = get_sql_query("database_validation_property_values.sql")
 REPAIR_MEMBERSHIP_CLASS_IDS_SCRIPT = get_sql_query("database_validation_repair_memberships.sql")

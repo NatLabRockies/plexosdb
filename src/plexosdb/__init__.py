@@ -18,7 +18,7 @@ from .db_solution_models import (
 )
 from .enums import ClassEnum, CollectionEnum, PeriodEnum, PhaseEnum, TableTypeEnum
 from .exceptions import DatabaseValidationCategory, DatabaseValidationError, DatabaseValidationFinding
-from .types import SQLiteRecord, SQLiteValue, XMLRecord, XMLValue
+from .types import SQLiteRecord, SQLiteValue, ValidationResult, XMLRecord, XMLValue
 from .xml_handler import XMLHandler
 
 __version__ = version("plexosdb")
@@ -46,6 +46,7 @@ __all__ = (
     "SQLiteValue",
     "TableInfo",
     "TableTypeEnum",
+    "ValidationResult",
     "XMLHandler",
     "XMLRecord",
     "XMLValue",

@@ -8,6 +8,7 @@ from contextlib import closing
 from functools import cache
 from importlib.resources import files
 import sqlite3
+import operator
 from typing import TYPE_CHECKING
 
 from loguru import logger
@@ -37,11 +38,12 @@ from .db_constants import (
     ACTION_TAG_FINDINGS_QUERY,
     ACTION_TEXT_FINDINGS_QUERY,
     BAND_COUNT_FINDINGS_QUERY,
+    PROPERTY_VALUES_QUERY,
     REPAIR_MEMBERSHIP_CLASS_IDS_SCRIPT,
 )
 from .enums import ClassEnum, CollectionEnum, Schema
 from .exceptions import DatabaseValidationCategory, DatabaseValidationFinding, NotFoundError
-from .types import SQLiteValue
+from .types import SQLiteValue, ValidationResult
 from .utils import no_space, normalize_names
 
 if TYPE_CHECKING:
@@ -876,9 +878,79 @@ def _find_band_count_issues(db: SQLiteManager, /) -> list[DatabaseValidationFind
     ]
 
 
-def _find_property_values_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:
-    """Find invalid property values (not implemented yet)."""
-    pass
+def validate_value_by_rule(value: SQLiteValue, validation_rule: str) -> ValidationResult:
+    """Validate a numeric value using Between, In, or comparison rules."""
+    rule = validation_rule.strip()
+    if not rule:
+        return ValidationResult(is_valid=True, error_message="")
+    if not isinstance(value, (int, float)):
+        return ValidationResult(is_valid=False, error_message=f"Value {value} must be numeric")
+
+    if rule.startswith("Between "):
+        parts = rule.removeprefix("Between ").split(" And ")
+        try:
+            if len(parts) != 2:
+                raise ValueError("Expected two range bounds")
+            minimum, maximum = (float(part.strip()) for part in parts)
+        except ValueError:
+            return ValidationResult(is_valid=False, error_message=f"Invalid range format in rule: {rule}")
+        valid = minimum <= value <= maximum
+        message = f"Value {value} must be between {minimum} and {maximum}"
+    elif rule.startswith("In ("):
+        try:
+            if not rule.endswith(")"):
+                raise ValueError("Expected closing parenthesis")
+            values = [float(part.strip()) for part in rule[4:-1].split(",")]
+        except ValueError:
+            return ValidationResult(is_valid=False, error_message=f"Invalid set format in rule: {rule}")
+        valid = value in values
+        message = f"Value {value} must be one of: {values}"
+    else:
+        return _validate_comparison_rule(value, rule)
+    return ValidationResult(is_valid=valid, error_message="" if valid else message)
+
+
+def _validate_comparison_rule(value: int | float, rule: str) -> ValidationResult:
+    """Validate a comparison expression or report an unsupported rule."""
+    for symbol, compare in (
+        (">=", operator.ge),
+        ("<=", operator.le),
+        ("<", operator.lt),
+        (">", operator.gt),
+    ):
+        if not rule.startswith(symbol):
+            continue
+        try:
+            threshold = float(rule[len(symbol) :].strip())
+        except ValueError:
+            return ValidationResult(
+                is_valid=False, error_message=f"Invalid comparison format in rule: {rule}"
+            )
+        valid = compare(value, threshold)
+        return ValidationResult(
+            is_valid=valid, error_message="" if valid else f"Value {value} must be {symbol} {threshold}"
+        )
+    return ValidationResult(is_valid=False, error_message=f"Unknown validation rule format: {rule}")
+
+
+def _find_property_values_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
+    """V-17 / Rule 16: t_data.value must pass t_property.validation_rule."""
+    findings: list[DatabaseValidationFinding] = []
+    for did, value, pname, rule in db.iter_query(PROPERTY_VALUES_QUERY):
+        result = validate_value_by_rule(value, rule)
+        if not result.is_valid:
+            findings.append(
+                DatabaseValidationFinding(
+                    category=DatabaseValidationCategory.PROPERTIES,
+                    message=(
+                        f"Property value invalid: data_id={did}, "
+                        f"property '{pname}' value={value} fails rule '{rule}': "
+                        f"{result.error_message}. "
+                        "Fix: correct the value to satisfy the validation rule."
+                    ),
+                )
+            )
+    return findings
 
 
 def _find_attribute_values_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:
