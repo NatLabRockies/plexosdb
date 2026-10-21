@@ -183,6 +183,8 @@ def test_find_custom_column_class_issues_ignores_unassigned_columns(
     (
         (1, (), None),
         (None, (5,), None),
+        (-1, (1, 5), None),
+        (-2, (1,), None),
         (1, (None,), None),
         (2, (1,), None),
         (2, (1, 2), None),
@@ -236,6 +238,24 @@ def test_validate_database_checks_band_count_without_updating(
     assert db._db.connection.total_changes == total_changes
     assert db.query("SELECT * FROM t_property") == original_properties
     assert db.query("SELECT * FROM t_band") == original_bands
+
+
+def test_find_band_count_issues_accepts_v12_unlimited_storage_property(db_instance: PlexosDB) -> None:
+    db = db_instance
+    db.create_schema(version=12)
+    assert db.query("SELECT name, is_multi_band, max_band_id FROM t_property WHERE property_id = 1263") == [
+        ("Volume Build Option", 1, -1)
+    ]
+    db.add_object(ClassEnum.Storage, "Storage1")
+    for band in (1, 5):
+        db.add_property(ClassEnum.Storage, "Storage1", "Volume Build Option", 10.0 + band, band=band)
+
+    assert db.query(
+        "SELECT band.band_id FROM t_band AS band "
+        "JOIN t_data AS data ON data.data_id = band.data_id "
+        "WHERE data.property_id = 1263 ORDER BY band.band_id"
+    ) == [(1,), (5,)]
+    assert checks_module._find_band_count_issues(db._db) == []
 
 
 def test_find_band_count_issues_groups_by_property(

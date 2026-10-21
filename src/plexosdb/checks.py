@@ -922,9 +922,9 @@ def _find_action_only_on_variables_issues(db: SQLiteManager, /) -> list[Database
 def _find_band_count_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
     """Validate that max band_id used must not exceed t_property.max_band_id.
 
-    The highest band ID used by a property must not exceed its non-NULL
-    ``max_band_id``. Exceeded limits are reported with update guidance but
-    are not modified.
+    The highest band ID used by a property must not exceed its nonnegative
+    ``max_band_id``. NULL and negative limits are not upper bounds.
+    Exceeded limits are reported with update guidance but are not modified.
     """
     return [
         DatabaseValidationFinding(

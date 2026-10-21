@@ -46,6 +46,10 @@ issue and, where available, suggested corrective action. Categories are
 `properties`, and `types`. The exception retains all findings in its `findings`
 tuple; reports can therefore be generated without parsing the exception text.
 
+Property band limits are enforced only for nonnegative `max_band_id` values.
+NULL and negative limits, including the v12 unlimited value `-1`, are not
+treated as upper bounds.
+
 Property and attribute rules support inclusive `Between X And Y`, `In (X,Y,Z)`,
 and `>=`, `<=`, `<`, and `>` comparisons. NULL attribute values are skipped.
 Selected Transmission, Production, and Performance floating-point attributes
