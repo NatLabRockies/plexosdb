@@ -45,6 +45,7 @@ DATA_GRAPH_TEXTS_QUERY = get_sql_query("database_validation_data_graph_texts.sql
 DUPLICATE_UIDS_QUERY = get_sql_query("database_validation_duplicate_uids.sql")
 ORPHANED_CHILD_ROWS_QUERY = Template(get_sql_query("database_validation_orphaned_child_rows.sql"))
 ATTRIBUTE_CLASS_FINDINGS_QUERY = get_sql_query("database_validation_attribute_class.sql")
+SYSTEM_MEMBERSHIP_FINDINGS_QUERY = get_sql_query("database_validation_system_membership.sql")
 REPAIR_MEMBERSHIP_CLASS_IDS_SCRIPT = get_sql_query("database_validation_repair_memberships.sql")
 
 
@@ -782,9 +783,23 @@ def _find_attribute_class_issues(db: SQLiteManager, /) -> list[DatabaseValidatio
     ]
 
 
-def _find_system_membership_existence_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:
-    """Find missing System memberships (not implemented yet)."""
-    pass
+def _find_system_membership_existence_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
+    """Validate that every object except object_id=1 needs a System membership."""
+    system_class = db.query("SELECT class_id FROM t_class WHERE lang_id = 1")
+    if not system_class:
+        return []
+
+    return [
+        DatabaseValidationFinding(
+            category=DatabaseValidationCategory.MEMBERSHIPS,
+            message=(
+                f"Missing system membership: Object '{name}' (object_id={oid}) "
+                "has no system membership. "
+                "Fix: create a system membership with the correct collection for this class."
+            ),
+        )
+        for oid, name in db.query(SYSTEM_MEMBERSHIP_FINDINGS_QUERY, (system_class[0][0],))
+    ]
 
 
 def _find_membership_count_bounds_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:

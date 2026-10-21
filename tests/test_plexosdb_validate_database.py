@@ -55,6 +55,74 @@ def test_find_attribute_class_issues_accepts_matching_classes(
 
 
 @pytest.mark.parametrize("fix_issues", (False, True))
+def test_validate_database_reports_missing_system_membership_without_creating(
+    db_with_validation_records: PlexosDB,
+    fix_issues: bool,
+) -> None:
+    db = db_with_validation_records
+    db._db.execute("UPDATE t_class SET lang_id = 1 WHERE class_id = 1")
+    object_id = db.add_object(ClassEnum.Generator, "Generator2")
+    db._db.execute("DELETE FROM t_membership WHERE child_object_id = ?", (object_id,))
+    original_memberships = db.query("SELECT * FROM t_membership")
+    total_changes = db._db.connection.total_changes
+    finding = DatabaseValidationFinding(
+        category=DatabaseValidationCategory.MEMBERSHIPS,
+        message=(
+            f"Missing system membership: Object 'Generator2' (object_id={object_id}) "
+            "has no system membership. "
+            "Fix: create a system membership with the correct collection for this class."
+        ),
+    )
+
+    assert checks_module._find_system_membership_existence_issues(db._db) == [finding]
+    with pytest.raises(DatabaseValidationError) as exc_info:
+        db.validate_database(fix_issues=fix_issues)
+    assert exc_info.value.findings == (finding,)
+    assert db._db.connection.total_changes == total_changes
+    assert db.query("SELECT * FROM t_membership") == original_memberships
+
+
+def test_find_system_membership_existence_issues_skips_missing_system_class(
+    db_with_validation_records: PlexosDB,
+) -> None:
+    db = db_with_validation_records
+    db.add_object(ClassEnum.Generator, "Generator2")
+    db._db.execute("DELETE FROM t_membership WHERE child_object_id = 3")
+    db._db.execute("UPDATE t_class SET lang_id = NULL")
+
+    assert checks_module._find_system_membership_existence_issues(db._db) == []
+
+
+def test_find_system_membership_existence_issues_accepts_memberships_and_exempts_system_object(
+    db_with_validation_records: PlexosDB,
+) -> None:
+    db = db_with_validation_records
+    db._db.execute("UPDATE t_class SET lang_id = 1 WHERE class_id = 1")
+
+    assert checks_module._find_system_membership_existence_issues(db._db) == []
+    assert db.validate_database() is True
+
+
+@pytest.mark.parametrize("child_object_id", (None, 1))
+def test_find_system_membership_existence_issues_uses_lang_id_and_ignores_unrelated_children(
+    db_with_validation_records: PlexosDB,
+    child_object_id: int | None,
+) -> None:
+    db = db_with_validation_records
+    db._db.execute("UPDATE t_class SET lang_id = 1 WHERE class_id = 3")
+    db._db.execute(
+        "INSERT INTO t_membership (membership_id, parent_class_id, child_object_id) VALUES (99, 3, ?)",
+        (child_object_id,),
+    )
+    findings = checks_module._find_system_membership_existence_issues(db._db)
+
+    assert len(findings) == 1
+    assert "Object 'Generator1' (object_id=2)" in findings[0].message
+    db._db.execute("UPDATE t_membership SET child_object_id = 2 WHERE membership_id = 99")
+    assert checks_module._find_system_membership_existence_issues(db._db) == []
+
+
+@pytest.mark.parametrize("fix_issues", (False, True))
 def test_validate_database_reports_attribute_class_mismatch_without_deleting(
     db_with_validation_records: PlexosDB,
     fix_issues: bool,

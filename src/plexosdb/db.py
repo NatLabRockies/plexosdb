@@ -4845,6 +4845,9 @@ class PlexosDB:
           of up to ten data IDs and deletion guidance; validation does not delete them.
         - Attribute/class mismatches include guidance to remove the invalid
           attribute data row; validation does not delete these rows.
+        - Objects other than object ID 1 must have a System membership when the
+          System class is identified by ``lang_id=1``. Missing memberships are
+          reported with creation guidance but are not created automatically.
 
         Additional model checks in ``checks.py`` are placeholders until implemented.
 
