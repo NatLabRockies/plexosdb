@@ -54,6 +54,81 @@ def test_find_attribute_class_issues_accepts_matching_classes(
     assert checks_module._find_attribute_class_issues(db_with_validation_records._db) == []
 
 
+@pytest.mark.parametrize(
+    ("max_band_id", "bands", "actual_max"),
+    (
+        (1, (), None),
+        (None, (5,), None),
+        (1, (None,), None),
+        (2, (1,), None),
+        (2, (1, 2), None),
+        (1, (1, 3, 2), 3),
+        (0, (1,), 1),
+        (2, (None, 3), 3),
+    ),
+)
+@pytest.mark.parametrize("fix_issues", (False, True))
+def test_validate_database_checks_band_count_without_updating(
+    db_with_validation_records: PlexosDB,
+    max_band_id: int | None,
+    bands: tuple[int | None, ...],
+    actual_max: int | None,
+    fix_issues: bool,
+) -> None:
+    db = db_with_validation_records
+    db._db.execute("UPDATE t_property SET max_band_id = ? WHERE property_id = 1", (max_band_id,))
+    for data_id, band_id in enumerate(bands, start=1):
+        if data_id > 1:
+            db._db.execute(
+                "INSERT INTO t_data (data_id, membership_id, property_id, value) VALUES (?, 1, 1, ?)",
+                (data_id, float(data_id + 1)),
+            )
+        db._db.execute("INSERT INTO t_band (data_id, band_id) VALUES (?, ?)", (data_id, band_id))
+    original_properties = db.query("SELECT * FROM t_property")
+    original_bands = db.query("SELECT * FROM t_band")
+    total_changes = db._db.connection.total_changes
+    expected_findings = (
+        [
+            DatabaseValidationFinding(
+                category=DatabaseValidationCategory.PROPERTIES,
+                message=(
+                    "Band count exceeded: property 'Max Capacity' (property_id=1) "
+                    f"has max_band_id={max_band_id} but actual max band is {actual_max}. "
+                    "Fix: update max_band_id to match the actual maximum band used."
+                ),
+            ),
+        ]
+        if actual_max is not None
+        else []
+    )
+
+    assert checks_module._find_band_count_issues(db._db) == expected_findings
+    if expected_findings:
+        with pytest.raises(DatabaseValidationError) as exc_info:
+            db.validate_database(fix_issues=fix_issues)
+        assert exc_info.value.findings == tuple(expected_findings)
+    else:
+        assert db.validate_database(fix_issues=fix_issues) is True
+    assert db._db.connection.total_changes == total_changes
+    assert db.query("SELECT * FROM t_property") == original_properties
+    assert db.query("SELECT * FROM t_band") == original_bands
+
+
+def test_find_band_count_issues_groups_by_property(
+    db_with_validation_records: PlexosDB,
+) -> None:
+    db = db_with_validation_records
+    db.add_property(ClassEnum.Generator, "Generator1", "Max Energy", 3.0)
+    db._db.execute("UPDATE t_property SET max_band_id = 1 WHERE property_id = 1")
+    db._db.execute("UPDATE t_property SET max_band_id = 5 WHERE property_id = 2")
+    db._db.execute("INSERT INTO t_band (data_id, band_id) SELECT data_id, property_id + 2 FROM t_data")
+
+    findings = checks_module._find_band_count_issues(db._db)
+    assert len(findings) == 1
+    assert "property 'Max Capacity' (property_id=1)" in findings[0].message
+    assert "actual max band is 3" in findings[0].message
+
+
 @pytest.mark.parametrize("lang_id", (29, 31, 34, 35, None, 0, 2, 99))
 @pytest.mark.parametrize("fix_issues", (False, True))
 def test_validate_database_checks_tag_object_class_without_deleting(

@@ -4850,6 +4850,9 @@ class PlexosDB:
         - Actions on tags and texts are only valid for the Variable class
           (language ID 31). Invalid actions are reported with guidance to clear
           ``action_id`` but are not modified.
+        - The highest band ID used by a property must not exceed its non-NULL
+          ``max_band_id``. Exceeded limits are reported with update guidance but
+          are not modified.
 
         Additional model checks in ``checks.py`` are placeholders until implemented.
 

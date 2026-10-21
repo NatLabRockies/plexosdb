@@ -36,6 +36,7 @@ from .db_constants import (
     VARIABLE_CLASS_LANG_ID,
     ACTION_TAG_FINDINGS_QUERY,
     ACTION_TEXT_FINDINGS_QUERY,
+    BAND_COUNT_FINDINGS_QUERY,
     REPAIR_MEMBERSHIP_CLASS_IDS_SCRIPT,
 )
 from .enums import ClassEnum, CollectionEnum, Schema
@@ -860,9 +861,19 @@ def _find_action_only_on_variables_issues(db: SQLiteManager, /) -> list[Database
     return findings
 
 
-def _find_band_count_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:
-    """Find invalid band counts (not implemented yet)."""
-    pass
+def _find_band_count_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
+    """Validate that max band_id used must not exceed t_property.max_band_id."""
+    return [
+        DatabaseValidationFinding(
+            category=DatabaseValidationCategory.PROPERTIES,
+            message=(
+                f"Band count exceeded: property '{pname}' (property_id={pid}) "
+                f"has max_band_id={max_bid} but actual max band is {actual}. "
+                "Fix: update max_band_id to match the actual maximum band used."
+            ),
+        )
+        for pid, pname, max_bid, actual in db.query(BAND_COUNT_FINDINGS_QUERY)
+    ]
 
 
 def _find_property_values_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:
