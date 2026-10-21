@@ -145,7 +145,7 @@ def test_validate_database_checks_duplicate_static_data_without_deleting(
     db._db.execute("UPDATE t_property SET is_dynamic = ? WHERE property_id = 1", (is_dynamic,))
     db._db.execute(
         "INSERT INTO t_data (data_id, membership_id, property_id, value) "
-        "SELECT 2, membership_id, property_id, value FROM t_data WHERE data_id = 1"
+        "SELECT 2, membership_id, property_id, value + 1 FROM t_data WHERE data_id = 1"
     )
     for data_id, band_id in bands:
         db._db.execute("INSERT INTO t_band (data_id, band_id) VALUES (?, ?)", (data_id, band_id))
@@ -190,6 +190,123 @@ def test_find_duplicate_static_data_issues_accepts_distinct_memberships_and_prop
 
     assert checks_module._find_duplicate_static_data_issues(db._db) == []
     assert db.validate_database() is True
+
+
+@pytest.fixture
+def db_with_matching_data_graphs(db_with_validation_records: PlexosDB) -> PlexosDB:
+    db = db_with_validation_records
+    db._db.execute("UPDATE t_property SET is_dynamic = 1 WHERE property_id = 1")
+    db._db.execute(
+        "INSERT INTO t_data (data_id, membership_id, property_id, value) "
+        "SELECT 2, membership_id, property_id, value FROM t_data WHERE data_id = 1"
+    )
+    return db
+
+
+@pytest.mark.parametrize("fix_issues", (False, True))
+@pytest.mark.parametrize("is_dynamic", (0, 1, None))
+def test_validate_database_reports_duplicate_data_graphs_without_deleting(
+    db_with_matching_data_graphs: PlexosDB,
+    fix_issues: bool,
+    is_dynamic: int | None,
+) -> None:
+    db = db_with_matching_data_graphs
+    db._db.execute("UPDATE t_property SET is_dynamic = ? WHERE property_id = 1", (is_dynamic,))
+    original_data = db.query("SELECT * FROM t_data")
+    total_changes = db._db.connection.total_changes
+    finding = DatabaseValidationFinding(
+        category=DatabaseValidationCategory.PROPERTIES,
+        message=(
+            "Duplicate data graph: 2 identical data rows (data_ids=[1, 2]) "
+            "for membership_id=1, property_id=1. Fix: remove the duplicate data rows."
+        ),
+    )
+
+    assert checks_module._find_duplicate_data_graphs_issues(db._db) == [finding]
+    with pytest.raises(DatabaseValidationError) as exc_info:
+        db.validate_database(fix_issues=fix_issues)
+    assert exc_info.value.findings == (
+        *checks_module._find_duplicate_static_data_issues(db._db),
+        finding,
+    )
+    assert db._db.connection.total_changes == total_changes
+    assert db.query("SELECT * FROM t_data") == original_data
+
+
+@pytest.mark.parametrize(
+    "statement",
+    (
+        "UPDATE t_data SET value = 3 WHERE data_id = 2",
+        "UPDATE t_data SET property_id = 2 WHERE data_id = 2",
+        "UPDATE t_data SET membership_id = NULL WHERE data_id = 2",
+        "INSERT INTO t_band (data_id, band_id) VALUES (2, 2)",
+        "INSERT INTO t_band (data_id, band_id) VALUES (2, NULL)",
+        "INSERT INTO t_tag (data_id, object_id) VALUES (1, 1), (2, 2)",
+        "INSERT INTO t_tag (data_id, object_id, action_id) VALUES (1, 1, NULL), (2, 1, 1)",
+        "INSERT INTO t_tag (data_id, object_id) VALUES (2, 1)",
+        "INSERT INTO t_text (data_id, class_id, value) VALUES (1, 1, 'a'), (2, 2, 'a')",
+        "INSERT INTO t_text (data_id, class_id, value) VALUES (1, 1, 'a'), (2, 1, 'b')",
+        "INSERT INTO t_text (data_id, class_id, action_id) VALUES (1, 1, NULL), (2, 1, 1)",
+        "INSERT INTO t_text (data_id, class_id) VALUES (2, 1)",
+        "INSERT INTO t_date_from (data_id, date) VALUES (2, '2026-01-01')",
+        "INSERT INTO t_date_to (data_id, date) VALUES (2, '2026-01-02')",
+        "INSERT INTO t_memo_data (data_id, value) VALUES (2, 'memo')",
+    ),
+)
+def test_find_duplicate_data_graphs_issues_distinguishes_each_graph_field(
+    db_with_matching_data_graphs: PlexosDB,
+    statement: str,
+) -> None:
+    db = db_with_matching_data_graphs
+    db._db.execute("INSERT INTO t_action (action_id) VALUES (1)")
+    db._db.execute(statement)
+
+    assert checks_module._find_duplicate_data_graphs_issues(db._db) == []
+
+
+def test_find_duplicate_data_graphs_issues_matches_unordered_full_graphs(
+    db_with_matching_data_graphs: PlexosDB,
+) -> None:
+    db = db_with_matching_data_graphs
+    db._db.execute("INSERT INTO t_action (action_id) VALUES (0), (1)")
+    db._db.execute(
+        "INSERT INTO t_tag (data_id, object_id, action_id) "
+        "VALUES (1, 1, NULL), (1, 2, 1), (2, 2, 1), (2, 1, 0)"
+    )
+    db._db.execute(
+        "INSERT INTO t_text (data_id, class_id, value, action_id) "
+        "VALUES (1, 1, 'a', NULL), (1, 2, 'b', 1), (2, 2, 'b', 1), (2, 1, 'a', 0)"
+    )
+    db._db.execute("INSERT INTO t_band (data_id, band_id) VALUES (2, 1)")
+    for table, column, value in (
+        ("t_date_from", "date", "2026-01-01"),
+        ("t_date_to", "date", "2026-01-02"),
+        ("t_memo_data", "value", "memo"),
+    ):
+        db._db.execute(f"INSERT INTO {table} (data_id, {column}) SELECT data_id, ? FROM t_data", (value,))
+
+    findings = checks_module._find_duplicate_data_graphs_issues(db._db)
+    assert len(findings) == 1
+    assert "data_ids=[1, 2]" in findings[0].message
+
+
+def test_find_duplicate_data_graphs_issues_groups_all_matching_rows(
+    db_with_matching_data_graphs: PlexosDB,
+) -> None:
+    db = db_with_matching_data_graphs
+    db._db.execute(
+        "INSERT INTO t_data (data_id, membership_id, property_id, value, uid, state) "
+        "VALUES (3, 1, 1, 2.0, 100, 1), (4, 1, 1, NULL, 101, 0), (5, 1, 1, NULL, 102, 1)"
+    )
+    db._db.execute("INSERT INTO t_memo_data (data_id, value) VALUES (1, NULL)")
+    findings = checks_module._find_duplicate_data_graphs_issues(db._db)
+
+    assert [finding.message for finding in findings] == [
+        "Duplicate data graph: 3 identical data rows (data_ids=[1, 2, 3]) "
+        "for membership_id=1, property_id=1. Fix: remove the duplicate data rows.",
+        "Duplicate data graph: 2 identical data rows (data_ids=[4, 5]) "
+        "for membership_id=1, property_id=1. Fix: remove the duplicate data rows.",
+    ]
 
 
 @pytest.mark.parametrize("fix_issues", (False, True))

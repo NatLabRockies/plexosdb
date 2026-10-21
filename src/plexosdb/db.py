@@ -4837,6 +4837,8 @@ class PlexosDB:
         guidance to enable dynamic behavior or remove the artifacts, but not repaired.
         Duplicate static data is reported per membership, property, and band,
         treating missing bands as band 1; validation does not remove duplicates.
+        Identical data graphs are also reported for static and dynamic properties,
+        comparing values, bands, tag/text sets, dates, and memos without removing rows.
         Additional model checks in ``checks.py`` are placeholders until implemented.
 
         Parameters

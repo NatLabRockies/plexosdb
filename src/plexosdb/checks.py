@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections import defaultdict
+from collections.abc import Hashable, Iterable
 from contextlib import closing
 from functools import cache
 from importlib.resources import files
@@ -14,6 +15,7 @@ from loguru import logger
 
 from .enums import ClassEnum, CollectionEnum, Schema
 from .exceptions import DatabaseValidationCategory, DatabaseValidationFinding, NotFoundError
+from .types import SQLiteValue
 from .utils import get_sql_query, no_space, normalize_names
 
 if TYPE_CHECKING:
@@ -37,6 +39,9 @@ CATEGORY_CLASS_FINDINGS_QUERY = get_sql_query("database_validation_category_clas
 PROPERTY_COLLECTION_FINDINGS_QUERY = get_sql_query("database_validation_property_collection.sql")
 STATIC_PROPERTY_ARTIFACTS_QUERY = Template(get_sql_query("database_validation_static_property_artifacts.sql"))
 DUPLICATE_STATIC_DATA_QUERY = get_sql_query("database_validation_duplicate_static_data.sql")
+DATA_GRAPHS_QUERY = get_sql_query("database_validation_data_graphs.sql")
+DATA_GRAPH_TAGS_QUERY = get_sql_query("database_validation_data_graph_tags.sql")
+DATA_GRAPH_TEXTS_QUERY = get_sql_query("database_validation_data_graph_texts.sql")
 REPAIR_MEMBERSHIP_CLASS_IDS_SCRIPT = get_sql_query("database_validation_repair_memberships.sql")
 
 
@@ -665,9 +670,46 @@ def _find_duplicate_static_data_issues(db: SQLiteManager, /) -> list[DatabaseVal
     ]
 
 
-def _find_duplicate_data_graphs_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:
-    """Find duplicate data graphs (not implemented yet)."""
-    pass
+def _find_duplicate_data_graphs_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
+    """V-9: Detect data rows with identical full property graphs."""
+    tags: dict[int, set[tuple[SQLiteValue, SQLiteValue]]] = defaultdict(set)
+    for data_id, object_id, action_id in db.iter_query(DATA_GRAPH_TAGS_QUERY):
+        tags[data_id].add((object_id, action_id or 0))
+
+    texts: dict[int, set[tuple[SQLiteValue, SQLiteValue, SQLiteValue]]] = defaultdict(set)
+    for data_id, class_id, value, action_id in db.iter_query(DATA_GRAPH_TEXTS_QUERY):
+        texts[data_id].add((class_id, value, action_id or 0))
+
+    fingerprints: dict[tuple[Hashable, ...], list[int]] = defaultdict(list)
+    for data_id, membership_id, property_id, value, band_id, date_from, date_to, memo in db.iter_query(
+        DATA_GRAPHS_QUERY
+    ):
+        fingerprint = (
+            membership_id,
+            property_id,
+            value,
+            band_id,
+            frozenset(tags.pop(data_id, ())),
+            frozenset(texts.pop(data_id, ())),
+            date_from,
+            date_to,
+            memo,
+        )
+        fingerprints[fingerprint].append(data_id)
+
+    return [
+        DatabaseValidationFinding(
+            category=DatabaseValidationCategory.PROPERTIES,
+            message=(
+                f"Duplicate data graph: {len(data_ids)} identical data rows "
+                f"(data_ids={data_ids}) for membership_id={fingerprint[0]}, "
+                f"property_id={fingerprint[1]}. "
+                "Fix: remove the duplicate data rows."
+            ),
+        )
+        for fingerprint, data_ids in fingerprints.items()
+        if len(data_ids) > 1
+    ]
 
 
 def _find_duplicate_uids_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:
