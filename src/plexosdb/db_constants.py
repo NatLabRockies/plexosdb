@@ -61,4 +61,8 @@ ORPHANED_CHILD_ROWS_QUERY = Template(get_sql_query("database_validation_orphaned
 ATTRIBUTE_CLASS_FINDINGS_QUERY = get_sql_query("database_validation_attribute_class.sql")
 SYSTEM_MEMBERSHIP_FINDINGS_QUERY = get_sql_query("database_validation_system_membership.sql")
 MEMBERSHIP_COUNT_BOUNDS_QUERY = get_sql_query("database_validation_membership_count_bounds.sql")
+VALID_TAG_CLASS_LANG_IDS = (29, 31, 34, 35)  # Data File, Variable, Timeslice, Scenario
+TAG_OBJECT_CLASS_QUERY = Template(get_sql_query("database_validation_tag_object_class.sql")).substitute(
+    placeholders=",".join("?" * len(VALID_TAG_CLASS_LANG_IDS))
+)
 REPAIR_MEMBERSHIP_CLASS_IDS_SCRIPT = get_sql_query("database_validation_repair_memberships.sql")

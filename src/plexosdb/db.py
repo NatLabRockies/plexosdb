@@ -4844,6 +4844,9 @@ class PlexosDB:
         - Membership counts per parent must respect collection limits. A
           ``max_count`` of -1 is unlimited; otherwise explicit nonnegative limits
           take precedence over the one-to-one fallback. Excess rows are not removed.
+        - Tags must reference Data File, Variable, Timeslice, or Scenario objects,
+          identified by class language IDs 29, 31, 34, and 35. Invalid tag rows are
+          reported with removal guidance but are not deleted.
 
         Additional model checks in ``checks.py`` are placeholders until implemented.
 

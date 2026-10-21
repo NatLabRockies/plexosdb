@@ -54,6 +54,52 @@ def test_find_attribute_class_issues_accepts_matching_classes(
     assert checks_module._find_attribute_class_issues(db_with_validation_records._db) == []
 
 
+@pytest.mark.parametrize("lang_id", (29, 31, 34, 35, None, 0, 2, 99))
+@pytest.mark.parametrize("fix_issues", (False, True))
+def test_validate_database_checks_tag_object_class_without_deleting(
+    db_with_validation_records: PlexosDB,
+    lang_id: int | None,
+    fix_issues: bool,
+) -> None:
+    db = db_with_validation_records
+    db._db.execute("UPDATE t_property SET is_dynamic = 1 WHERE property_id = 1")
+    db._db.execute("UPDATE t_class SET lang_id = ? WHERE class_id = 2", (lang_id,))
+    db._db.execute("INSERT INTO t_tag (data_id, object_id) VALUES (1, 2)")
+    original_tags = db.query("SELECT * FROM t_tag")
+    total_changes = db._db.connection.total_changes
+    expected_findings = (
+        [
+            DatabaseValidationFinding(
+                category=DatabaseValidationCategory.PROPERTIES,
+                message=(
+                    "Invalid tag class: tag on data_id=1 references object "
+                    f"'Generator1' of class 'Generator' (lang_id={lang_id}). "
+                    "Valid tag classes: Data File (29), Variable (31), Timeslice (34), Scenario (35). "
+                    "Fix: remove the invalid tag row."
+                ),
+            ),
+        ]
+        if lang_id in (0, 2, 99)
+        else []
+    )
+
+    assert checks_module._find_tag_object_class_issues(db._db) == expected_findings
+    if expected_findings:
+        with pytest.raises(DatabaseValidationError) as exc_info:
+            db.validate_database(fix_issues=fix_issues)
+        assert exc_info.value.findings == tuple(expected_findings)
+    else:
+        assert db.validate_database(fix_issues=fix_issues) is True
+    assert db._db.connection.total_changes == total_changes
+    assert db.query("SELECT * FROM t_tag") == original_tags
+
+
+def test_find_tag_object_class_issues_accepts_no_tags(
+    db_with_validation_records: PlexosDB,
+) -> None:
+    assert checks_module._find_tag_object_class_issues(db_with_validation_records._db) == []
+
+
 @pytest.mark.parametrize(
     ("max_count", "is_one_to_many", "max_allowed"),
     (

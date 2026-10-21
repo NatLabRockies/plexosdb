@@ -31,6 +31,8 @@ from .db_constants import (
     ATTRIBUTE_CLASS_FINDINGS_QUERY,
     SYSTEM_MEMBERSHIP_FINDINGS_QUERY,
     MEMBERSHIP_COUNT_BOUNDS_QUERY,
+    VALID_TAG_CLASS_LANG_IDS,
+    TAG_OBJECT_CLASS_QUERY,
     REPAIR_MEMBERSHIP_CLASS_IDS_SCRIPT,
 )
 from .enums import ClassEnum, CollectionEnum, Schema
@@ -812,9 +814,20 @@ def _find_membership_count_bounds_issues(db: SQLiteManager, /) -> list[DatabaseV
     ]
 
 
-def _find_tag_object_class_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:
-    """Find tag object class inconsistencies (not implemented yet)."""
-    pass
+def _find_tag_object_class_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
+    """Validate that tags must reference objects of valid tag classes."""
+    return [
+        DatabaseValidationFinding(
+            category=DatabaseValidationCategory.PROPERTIES,
+            message=(
+                f"Invalid tag class: tag on data_id={did} references object "
+                f"'{oname}' of class '{cname}' (lang_id={lid}). "
+                "Valid tag classes: Data File (29), Variable (31), Timeslice (34), Scenario (35). "
+                "Fix: remove the invalid tag row."
+            ),
+        )
+        for did, oname, cname, lid in db.query(TAG_OBJECT_CLASS_QUERY, VALID_TAG_CLASS_LANG_IDS)
+    ]
 
 
 def _find_action_only_on_variables_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:
