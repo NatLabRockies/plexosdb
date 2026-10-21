@@ -147,7 +147,7 @@ FROM t_attribute_data AS data
 JOIN t_object AS obj ON obj.object_id = data.object_id
 JOIN t_attribute AS attribute ON attribute.attribute_id = data.attribute_id
 WHERE attribute.class_id IS NULL
-   OR obj.class_id IS NOT attribute.class_id
+   OR obj.class_id IS NULL
 
 UNION ALL
 

@@ -4843,6 +4843,8 @@ class PlexosDB:
         - Duplicate non-NULL data UIDs are reported but not reassigned.
         - Orphaned tag, text, date, band, and memo rows are reported with a sample
           of up to ten data IDs and deletion guidance; validation does not delete them.
+        - Attribute/class mismatches include guidance to remove the invalid
+          attribute data row; validation does not delete these rows.
 
         Additional model checks in ``checks.py`` are placeholders until implemented.
 

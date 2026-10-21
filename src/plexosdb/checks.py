@@ -44,6 +44,7 @@ DATA_GRAPH_TAGS_QUERY = get_sql_query("database_validation_data_graph_tags.sql")
 DATA_GRAPH_TEXTS_QUERY = get_sql_query("database_validation_data_graph_texts.sql")
 DUPLICATE_UIDS_QUERY = get_sql_query("database_validation_duplicate_uids.sql")
 ORPHANED_CHILD_ROWS_QUERY = Template(get_sql_query("database_validation_orphaned_child_rows.sql"))
+ATTRIBUTE_CLASS_FINDINGS_QUERY = get_sql_query("database_validation_attribute_class.sql")
 REPAIR_MEMBERSHIP_CLASS_IDS_SCRIPT = get_sql_query("database_validation_repair_memberships.sql")
 
 
@@ -663,7 +664,7 @@ def _find_duplicate_static_data_issues(db: SQLiteManager, /) -> list[DatabaseVal
         DatabaseValidationFinding(
             category=DatabaseValidationCategory.PROPERTIES,
             message=(
-                f"Duplicate static data: membership_id={mid}, property_id={pid}, "
+                f"Duplicated static data: membership_id={mid}, property_id={pid}, "
                 f"band_id={bid}, count={count}. "
                 "Fix: remove duplicate data rows, keeping only the last."
             ),
@@ -703,7 +704,7 @@ def _find_duplicate_data_graphs_issues(db: SQLiteManager, /) -> list[DatabaseVal
         DatabaseValidationFinding(
             category=DatabaseValidationCategory.PROPERTIES,
             message=(
-                f"Duplicate data graph: {len(data_ids)} identical data rows "
+                f"Duplicated data graph: {len(data_ids)} identical data rows "
                 f"(data_ids={data_ids}) for membership_id={fingerprint[0]}, "
                 f"property_id={fingerprint[1]}. "
                 "Fix: remove the duplicate data rows."
@@ -720,7 +721,7 @@ def _find_duplicate_uids_issues(db: SQLiteManager, /) -> list[DatabaseValidation
         DatabaseValidationFinding(
             category=DatabaseValidationCategory.PROPERTIES,
             message=(
-                f"Duplicate UID: uid={uid} appears {count} times in t_data. "
+                f"Duplicated UID: uid={uid} appears {count} times in t_data. "
                 "Fix: assign new unique UIDs to the duplicate rows."
             ),
         )
@@ -766,9 +767,19 @@ def _find_orphaned_child_rows_issues(db: SQLiteManager, /) -> list[DatabaseValid
     return findings
 
 
-def _find_attribute_class_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:
-    """Find attribute and object class inconsistencies (not implemented yet)."""
-    pass
+def _find_attribute_class_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
+    """Validate that t_attribute.class_id must match t_object.class_id."""
+    return [
+        DatabaseValidationFinding(
+            category=DatabaseValidationCategory.ATTRIBUTES,
+            message=(
+                f"Attribute-class mismatch: attribute '{aname}' (class_id={acid}) "
+                f"on object '{oname}' (class_id={ocid}). "
+                "Fix: remove the invalid attribute_data row."
+            ),
+        )
+        for aname, acid, oname, ocid in db.query(ATTRIBUTE_CLASS_FINDINGS_QUERY)
+    ]
 
 
 def _find_system_membership_existence_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:

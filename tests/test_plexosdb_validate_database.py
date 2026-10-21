@@ -48,6 +48,55 @@ def test_find_category_class_issues_accepts_matching_categories(
     assert checks_module._find_category_class_issues(db_with_validation_records._db) == []
 
 
+def test_find_attribute_class_issues_accepts_matching_classes(
+    db_with_validation_records: PlexosDB,
+) -> None:
+    assert checks_module._find_attribute_class_issues(db_with_validation_records._db) == []
+
+
+@pytest.mark.parametrize("fix_issues", (False, True))
+def test_validate_database_reports_attribute_class_mismatch_without_deleting(
+    db_with_validation_records: PlexosDB,
+    fix_issues: bool,
+) -> None:
+    db = db_with_validation_records
+    db._db.execute("UPDATE t_attribute SET class_id = 3 WHERE attribute_id = 1")
+    original_data = db.query("SELECT * FROM t_attribute_data")
+    total_changes = db._db.connection.total_changes
+    finding = DatabaseValidationFinding(
+        category=DatabaseValidationCategory.ATTRIBUTES,
+        message=(
+            "Attribute-class mismatch: attribute 'Latitude' (class_id=3) "
+            "on object 'Generator1' (class_id=2). "
+            "Fix: remove the invalid attribute_data row."
+        ),
+    )
+
+    assert checks_module._find_attribute_class_issues(db._db) == [finding]
+    with pytest.raises(DatabaseValidationError) as exc_info:
+        db.validate_database(fix_issues=fix_issues)
+    assert exc_info.value.findings == (finding,)
+    assert db._db.connection.total_changes == total_changes
+    assert db.query("SELECT * FROM t_attribute_data") == original_data
+
+
+@pytest.mark.parametrize("table", ("t_attribute", "t_object"))
+def test_validate_database_preserves_missing_attribute_class_findings(
+    db_with_validation_records: PlexosDB,
+    table: str,
+) -> None:
+    db = db_with_validation_records
+    db._db.execute(f"UPDATE {table} SET class_id = NULL")
+
+    assert checks_module._find_attribute_class_issues(db._db) == []
+    with pytest.raises(DatabaseValidationError) as exc_info:
+        db.validate_database()
+    assert any(
+        finding.category is DatabaseValidationCategory.ATTRIBUTES and "NULL" in finding.message
+        for finding in exc_info.value.findings
+    )
+
+
 def test_find_property_collection_mismatch_issues_accepts_matching_collections(
     db_with_validation_records: PlexosDB,
 ) -> None:
@@ -157,7 +206,7 @@ def test_validate_database_checks_duplicate_static_data_without_deleting(
             DatabaseValidationFinding(
                 category=DatabaseValidationCategory.PROPERTIES,
                 message=(
-                    "Duplicate static data: membership_id=1, property_id=1, "
+                    "Duplicated static data: membership_id=1, property_id=1, "
                     f"band_id={expected_band}, count=2. "
                     "Fix: remove duplicate data rows, keeping only the last."
                 ),
@@ -217,7 +266,7 @@ def test_validate_database_reports_duplicate_data_graphs_without_deleting(
     finding = DatabaseValidationFinding(
         category=DatabaseValidationCategory.PROPERTIES,
         message=(
-            "Duplicate data graph: 2 identical data rows (data_ids=[1, 2]) "
+            "Duplicated data graph: 2 identical data rows (data_ids=[1, 2]) "
             "for membership_id=1, property_id=1. Fix: remove the duplicate data rows."
         ),
     )
@@ -265,7 +314,7 @@ def test_validate_database_checks_duplicate_uids_without_reassigning(
         DatabaseValidationFinding(
             category=DatabaseValidationCategory.PROPERTIES,
             message=(
-                f"Duplicate UID: uid={uid} appears {count} times in t_data. "
+                f"Duplicated UID: uid={uid} appears {count} times in t_data. "
                 "Fix: assign new unique UIDs to the duplicate rows."
             ),
         )
@@ -454,9 +503,9 @@ def test_find_duplicate_data_graphs_issues_groups_all_matching_rows(
     findings = checks_module._find_duplicate_data_graphs_issues(db._db)
 
     assert [finding.message for finding in findings] == [
-        "Duplicate data graph: 3 identical data rows (data_ids=[1, 2, 3]) "
+        "Duplicated data graph: 3 identical data rows (data_ids=[1, 2, 3]) "
         "for membership_id=1, property_id=1. Fix: remove the duplicate data rows.",
-        "Duplicate data graph: 2 identical data rows (data_ids=[4, 5]) "
+        "Duplicated data graph: 2 identical data rows (data_ids=[4, 5]) "
         "for membership_id=1, property_id=1. Fix: remove the duplicate data rows.",
     ]
 
@@ -636,7 +685,8 @@ def test_validate_database_raises_with_model_consistency_findings(
         if finding.category is DatabaseValidationCategory.MEMBERSHIPS
     )
     assert any(
-        "object_id=2" in finding.message
+        "Attribute-class mismatch: attribute 'Latitude' (class_id=2) "
+        "on object 'Generator1' (class_id=3)." in finding.message
         for finding in findings
         if finding.category is DatabaseValidationCategory.ATTRIBUTES
     )
@@ -863,7 +913,7 @@ def test_validate_database_reports_static_property_issues_in_populated_xml_model
         DatabaseValidationFinding(
             category=DatabaseValidationCategory.PROPERTIES,
             message=(
-                "Duplicate static data: membership_id=6, property_id=585, band_id=1, count=3. "
+                "Duplicated static data: membership_id=6, property_id=585, band_id=1, count=3. "
                 "Fix: remove duplicate data rows, keeping only the last."
             ),
         )
