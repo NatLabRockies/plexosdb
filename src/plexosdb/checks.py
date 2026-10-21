@@ -39,6 +39,7 @@ from .db_constants import (
     ACTION_TEXT_FINDINGS_QUERY,
     BAND_COUNT_FINDINGS_QUERY,
     PROPERTY_VALUES_QUERY,
+    ATTRIBUTE_VALUES_QUERY,
     REPAIR_MEMBERSHIP_CLASS_IDS_SCRIPT,
 )
 from .enums import ClassEnum, CollectionEnum, Schema
@@ -934,7 +935,7 @@ def _validate_comparison_rule(value: int | float, rule: str) -> ValidationResult
 
 
 def _find_property_values_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
-    """V-17 / Rule 16: t_data.value must pass t_property.validation_rule."""
+    """Validate that t_data.value must pass t_property.validation_rule."""
     findings: list[DatabaseValidationFinding] = []
     for did, value, pname, rule in db.iter_query(PROPERTY_VALUES_QUERY):
         result = validate_value_by_rule(value, rule)
@@ -953,9 +954,26 @@ def _find_property_values_issues(db: SQLiteManager, /) -> list[DatabaseValidatio
     return findings
 
 
-def _find_attribute_values_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:
-    """Find invalid attribute values (not implemented yet)."""
-    pass
+def _find_attribute_values_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
+    """Validate that non-NULL t_attribute_data.value passes t_attribute.validation_rule."""
+    findings: list[DatabaseValidationFinding] = []
+    for value, aname, rule, oname in db.iter_query(ATTRIBUTE_VALUES_QUERY):
+        if value is None:
+            continue
+        result = validate_value_by_rule(value, rule)
+        if not result.is_valid:
+            findings.append(
+                DatabaseValidationFinding(
+                    category=DatabaseValidationCategory.ATTRIBUTES,
+                    message=(
+                        f"Attribute value invalid: object '{oname}', "
+                        f"attribute '{aname}' value={value} fails rule '{rule}': "
+                        f"{result.error_message}. "
+                        "Fix: correct the value to satisfy the validation rule."
+                    ),
+                )
+            )
+    return findings
 
 
 def _find_case_insensitive_name_collisions_issues(

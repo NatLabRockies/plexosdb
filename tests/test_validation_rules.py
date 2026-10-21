@@ -8,6 +8,7 @@ from plexosdb import (
     ValidationResult,
 )
 from plexosdb.types import SQLiteValue
+from plexosdb import checks as checks_module
 
 
 @pytest.mark.parametrize(
@@ -93,3 +94,40 @@ def test_property_rule_validation_without_mutating(
     else:
         assert db.validate_database(fix_issues=fix_issues) is True
     assert db._db.connection.total_changes == total_changes
+
+
+@pytest.mark.parametrize("fix_issues", (False, True))
+@pytest.mark.parametrize("value", (None, 2.0))
+@pytest.mark.parametrize("rule", (None, "", "Between 1 And 3", "In (1,2,3)", "<2", ">x", "unknown"))
+def test_attribute_rule_validation_without_mutating(
+    db_instance_with_schema: PlexosDB,
+    rule: str | None,
+    value: float | None,
+    fix_issues: bool,
+) -> None:
+    db = db_instance_with_schema
+    db.add_object(ClassEnum.Generator, "Generator1")
+    db.add_attribute(ClassEnum.Generator, "Generator1", attribute_name="Latitude", attribute_value=2.0)
+    db._db.execute("UPDATE t_attribute SET validation_rule = ? WHERE attribute_id = 1", (rule,))
+    db._db.execute("UPDATE t_attribute_data SET value = ?", (value,))
+    original_data = db.query("SELECT * FROM t_attribute_data")
+    total_changes = db._db.connection.total_changes
+
+    if value is not None and rule in ("<2", ">x", "unknown"):
+        result = db.validate_value_by_rule(value, rule)
+        with pytest.raises(DatabaseValidationError) as exc_info:
+            db.validate_database(fix_issues=fix_issues)
+        assert len(exc_info.value.findings) == 1
+        finding = exc_info.value.findings[0]
+        assert finding.category is DatabaseValidationCategory.ATTRIBUTES
+        assert finding.message == (
+            "Attribute value invalid: object 'Generator1', attribute 'Latitude' "
+            f"value={value} fails rule '{rule}': {result.error_message}. "
+            "Fix: correct the value to satisfy the validation rule."
+        )
+        assert checks_module._find_attribute_values_issues(db._db) == [finding]
+    else:
+        assert db.validate_database(fix_issues=fix_issues) is True
+        assert checks_module._find_attribute_values_issues(db._db) == []
+    assert db._db.connection.total_changes == total_changes
+    assert db.query("SELECT * FROM t_attribute_data") == original_data

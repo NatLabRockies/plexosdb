@@ -4875,6 +4875,9 @@ class PlexosDB:
         - Property values must satisfy nonempty ``validation_rule`` expressions.
           Invalid values and malformed or unsupported rules are reported without
           changing the data.
+        - Non-NULL attribute values must satisfy nonempty ``validation_rule``
+          expressions. Invalid values and malformed or unsupported rules are
+          reported without changing the data; NULL attribute values are skipped.
 
         Additional model checks in ``checks.py`` are placeholders until implemented.
 
