@@ -54,6 +54,92 @@ def test_find_attribute_class_issues_accepts_matching_classes(
     assert checks_module._find_attribute_class_issues(db_with_validation_records._db) == []
 
 
+@pytest.mark.parametrize(
+    ("max_count", "is_one_to_many", "max_allowed"),
+    (
+        (-1, 0, None),
+        (-1, 1, None),
+        (-1, None, None),
+        (0, 1, 0),
+        (1, 1, 1),
+        (2, 0, None),
+        (3, 0, None),
+        (None, 0, 1),
+        (None, 1, None),
+        (None, None, None),
+        (-2, 0, 1),
+        (-2, 1, None),
+        (-2, None, 1),
+    ),
+)
+@pytest.mark.parametrize("fix_issues", (False, True))
+def test_validate_database_checks_membership_count_bounds_without_removing(
+    db_with_validation_records: PlexosDB,
+    max_count: int | None,
+    is_one_to_many: int | None,
+    max_allowed: int | None,
+    fix_issues: bool,
+) -> None:
+    db = db_with_validation_records
+    db.add_object(ClassEnum.Generator, "Generator2")
+    db._db.execute(
+        "UPDATE t_collection SET max_count = ?, is_one_to_many = ? WHERE collection_id = 1",
+        (max_count, is_one_to_many),
+    )
+    original_memberships = db.query("SELECT * FROM t_membership")
+    total_changes = db._db.connection.total_changes
+    expected_findings = (
+        [
+            DatabaseValidationFinding(
+                category=DatabaseValidationCategory.MEMBERSHIPS,
+                message=(
+                    "Membership count exceeded: collection 'Generators' "
+                    f"(collection_id=1) allows max {max_allowed}, "
+                    "but parent_object_id=1 has 2. "
+                    "Fix: remove excess memberships, keeping only the first."
+                ),
+            ),
+        ]
+        if max_allowed is not None
+        else []
+    )
+
+    assert checks_module._find_membership_count_bounds_issues(db._db) == expected_findings
+    if expected_findings:
+        with pytest.raises(DatabaseValidationError) as exc_info:
+            db.validate_database(fix_issues=fix_issues)
+        assert exc_info.value.findings == tuple(expected_findings)
+    else:
+        assert db.validate_database(fix_issues=fix_issues) is True
+    assert db._db.connection.total_changes == total_changes
+    assert db.query("SELECT * FROM t_membership") == original_memberships
+
+
+def test_find_membership_count_bounds_issues_groups_by_parent_and_collection(
+    db_with_validation_records: PlexosDB,
+) -> None:
+    db = db_with_validation_records
+    child_id = db.add_object(ClassEnum.Generator, "Generator2")
+    db._db.execute("DELETE FROM t_membership WHERE child_object_id = ?", (child_id,))
+    db._db.execute("UPDATE t_collection SET max_count = 1")
+    db._db.execute(
+        "INSERT INTO t_membership "
+        "(parent_class_id, parent_object_id, collection_id, child_class_id, child_object_id) "
+        "VALUES (1, 2, 1, 2, 3), (1, 1, 2, 3, 3)"
+    )
+
+    assert checks_module._find_membership_count_bounds_issues(db._db) == []
+    db._db.execute(
+        "INSERT INTO t_membership "
+        "(parent_class_id, parent_object_id, collection_id, child_class_id, child_object_id) "
+        "VALUES (1, 2, 1, 2, 2)"
+    )
+    findings = checks_module._find_membership_count_bounds_issues(db._db)
+    assert len(findings) == 1
+    assert "collection_id=1" in findings[0].message
+    assert "parent_object_id=2 has 2" in findings[0].message
+
+
 @pytest.mark.parametrize("fix_issues", (False, True))
 def test_validate_database_reports_missing_system_membership_without_creating(
     db_with_validation_records: PlexosDB,

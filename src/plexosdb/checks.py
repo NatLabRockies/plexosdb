@@ -8,45 +8,39 @@ from contextlib import closing
 from functools import cache
 from importlib.resources import files
 import sqlite3
-from string import Template
 from typing import TYPE_CHECKING
 
 from loguru import logger
 
+from .db_constants import (
+    MEMBERSHIP_FROM_RECORD_FIELDS,
+    SQLITE_INTEGRITY_QUERY,
+    FOREIGN_KEY_CHECK_QUERY,
+    TABLE_NAMES_QUERY,
+    TABLE_INFO_QUERY,
+    RELATIONSHIP_FINDINGS_QUERY,
+    CATEGORY_CLASS_FINDINGS_QUERY,
+    PROPERTY_COLLECTION_FINDINGS_QUERY,
+    STATIC_PROPERTY_ARTIFACTS_QUERY,
+    DUPLICATE_STATIC_DATA_QUERY,
+    DATA_GRAPHS_QUERY,
+    DATA_GRAPH_TAGS_QUERY,
+    DATA_GRAPH_TEXTS_QUERY,
+    DUPLICATE_UIDS_QUERY,
+    ORPHANED_CHILD_ROWS_QUERY,
+    ATTRIBUTE_CLASS_FINDINGS_QUERY,
+    SYSTEM_MEMBERSHIP_FINDINGS_QUERY,
+    MEMBERSHIP_COUNT_BOUNDS_QUERY,
+    REPAIR_MEMBERSHIP_CLASS_IDS_SCRIPT,
+)
 from .enums import ClassEnum, CollectionEnum, Schema
 from .exceptions import DatabaseValidationCategory, DatabaseValidationFinding, NotFoundError
 from .types import SQLiteValue
-from .utils import get_sql_query, no_space, normalize_names
+from .utils import no_space, normalize_names
 
 if TYPE_CHECKING:
     from .db import PlexosDB
     from .db_manager import SQLiteManager
-
-MEMBERSHIP_FROM_RECORD_FIELDS = {
-    "parent_object_id",
-    "child_object_id",
-    "collection_id",
-    "child_class_id",
-    "parent_class_id",
-}
-
-SQLITE_INTEGRITY_QUERY = get_sql_query("database_validation_integrity.sql")
-FOREIGN_KEY_CHECK_QUERY = get_sql_query("database_validation_foreign_keys.sql")
-TABLE_NAMES_QUERY = get_sql_query("database_validation_table_names.sql")
-TABLE_INFO_QUERY = Template(get_sql_query("database_validation_table_info.sql"))
-RELATIONSHIP_FINDINGS_QUERY = get_sql_query("database_validation_relationships.sql")
-CATEGORY_CLASS_FINDINGS_QUERY = get_sql_query("database_validation_category_class.sql")
-PROPERTY_COLLECTION_FINDINGS_QUERY = get_sql_query("database_validation_property_collection.sql")
-STATIC_PROPERTY_ARTIFACTS_QUERY = Template(get_sql_query("database_validation_static_property_artifacts.sql"))
-DUPLICATE_STATIC_DATA_QUERY = get_sql_query("database_validation_duplicate_static_data.sql")
-DATA_GRAPHS_QUERY = get_sql_query("database_validation_data_graphs.sql")
-DATA_GRAPH_TAGS_QUERY = get_sql_query("database_validation_data_graph_tags.sql")
-DATA_GRAPH_TEXTS_QUERY = get_sql_query("database_validation_data_graph_texts.sql")
-DUPLICATE_UIDS_QUERY = get_sql_query("database_validation_duplicate_uids.sql")
-ORPHANED_CHILD_ROWS_QUERY = Template(get_sql_query("database_validation_orphaned_child_rows.sql"))
-ATTRIBUTE_CLASS_FINDINGS_QUERY = get_sql_query("database_validation_attribute_class.sql")
-SYSTEM_MEMBERSHIP_FINDINGS_QUERY = get_sql_query("database_validation_system_membership.sql")
-REPAIR_MEMBERSHIP_CLASS_IDS_SCRIPT = get_sql_query("database_validation_repair_memberships.sql")
 
 
 def check_memberships_from_records(memberships: list[dict[str, int]]) -> bool:
@@ -802,9 +796,20 @@ def _find_system_membership_existence_issues(db: SQLiteManager, /) -> list[Datab
     ]
 
 
-def _find_membership_count_bounds_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:
-    """Find membership counts outside their bounds (not implemented yet)."""
-    pass
+def _find_membership_count_bounds_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
+    """Validate that membership count per parent must not exceed collection limits."""
+    return [
+        DatabaseValidationFinding(
+            category=DatabaseValidationCategory.MEMBERSHIPS,
+            message=(
+                f"Membership count exceeded: collection '{coll_name}' "
+                f"(collection_id={coll_id}) allows max {max_allowed}, "
+                f"but parent_object_id={parent_oid} has {count}. "
+                "Fix: remove excess memberships, keeping only the first."
+            ),
+        )
+        for coll_id, coll_name, max_allowed, parent_oid, count in db.query(MEMBERSHIP_COUNT_BOUNDS_QUERY)
+    ]
 
 
 def _find_tag_object_class_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:

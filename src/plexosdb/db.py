@@ -14,6 +14,14 @@ import warnings
 from loguru import logger
 
 from . import checks as checks_module
+from .db_constants import (
+    SQLITE_ASCII_CASE_FOLD,
+    SQLITE_BACKEND_KWARGS,
+    SQLITE_QUERY_CHUNK_SIZE,
+    PLEXOS_DEFAULT_SCHEMA,
+    PROPERTY_QUERY,
+    MASTER_TEMPLATE_FILES,
+)
 from .db_manager import SQLiteManager
 from .types import SQLiteRecord
 from .enums import (
@@ -33,7 +41,6 @@ from .exceptions import (
     NotFoundError,
 )
 from .utils import (
-    SQLITE_ASCII_CASE_FOLD,
     apply_scenario_tags,
     batched,
     create_membership_record,
@@ -48,17 +55,6 @@ from .utils import (
     _normalize_attribute_records,
 )
 from .xml_handler import XMLHandler
-
-SQLITE_BACKEND_KWARGS = {"in_memory"}
-CHECK_QUERY = "SELECT 1 FROM ${schema} ${where_clause}"
-PLEXOS_DEFAULT_SCHEMA = fpath = files("plexosdb").joinpath("schema.sql").read_text(encoding="utf-8-sig")
-PROPERTY_QUERY = files("plexosdb.sql").joinpath("object_properties.sql").read_text(encoding="utf-8-sig")
-MASTER_TEMPLATE_FILES: dict[int, str] = {
-    9: "master_9.2R6_btu.xml",
-    10: "master_10.0R2_btu.xml",
-    11: "master_11.0R4_btu.xml",
-    12: "master_12.0R3_btu.xml",
-}
 
 
 class PropertyRecord(TypedDict, total=False):
@@ -1088,9 +1084,8 @@ class PlexosDB:
         object_names = tuple({record["name"] for record in records})
         name_to_object_id: dict[str, int] = {}
 
-        CHUNK = 900  # noqa: N806
-        for i in range(0, len(object_names), CHUNK):
-            chunk = object_names[i : i + CHUNK]
+        for i in range(0, len(object_names), SQLITE_QUERY_CHUNK_SIZE):
+            chunk = object_names[i : i + SQLITE_QUERY_CHUNK_SIZE]
             object_placeholders = ", ".join("?" for _ in chunk)
 
             object_rows = self._db.query(
@@ -2768,11 +2763,9 @@ class PlexosDB:
             extra = " AND parent_class.name = ? AND collections.name = ?"
             extra_params = [ClassEnum.System.value, collection.value]
 
-        # Specify bound parameter limit
-        CHUNK = 900  # noqa: N806
         all_rows: list[dict[str, Any]] = []
-        for i in range(0, len(names), CHUNK):
-            chunk = names[i : i + CHUNK]
+        for i in range(0, len(names), SQLITE_QUERY_CHUNK_SIZE):
+            chunk = names[i : i + SQLITE_QUERY_CHUNK_SIZE]
             ph = ",".join("?" * len(chunk))
             params = (class_id, *chunk, *extra_params)
             all_rows.extend(
@@ -4848,6 +4841,9 @@ class PlexosDB:
         - Objects other than object ID 1 must have a System membership when the
           System class is identified by ``lang_id=1``. Missing memberships are
           reported with creation guidance but are not created automatically.
+        - Membership counts per parent must respect collection limits. A
+          ``max_count`` of -1 is unlimited; otherwise explicit nonnegative limits
+          take precedence over the one-to-one fallback. Excess rows are not removed.
 
         Additional model checks in ``checks.py`` are placeholders until implemented.
 
