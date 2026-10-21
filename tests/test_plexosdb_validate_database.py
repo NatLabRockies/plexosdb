@@ -1312,6 +1312,52 @@ def test_validate_database_rolls_back_unsafe_partial_repairs(
     assert membership_classes == (2, 3)
 
 
+@pytest.mark.parametrize("unresolved", (False, True))
+@pytest.mark.parametrize("commit_caller", (False, True))
+def test_validate_database_preserves_caller_transaction(
+    db_with_validation_records: PlexosDB,
+    unresolved: bool,
+    commit_caller: bool,
+) -> None:
+    db = db_with_validation_records
+    connection = db._db.connection
+    db._db.execute("UPDATE t_membership SET parent_class_id = 2, child_class_id = 3 WHERE membership_id = 1")
+    if unresolved:
+        db._db.execute("UPDATE t_collection SET child_class_id = 3 WHERE collection_id = 1")
+
+    connection.execute("BEGIN")
+    try:
+        connection.execute("UPDATE t_object SET name = 'Pending edit' WHERE name = 'Generator1'")
+        if unresolved:
+            with pytest.raises(DatabaseValidationError) as exc_info:
+                db.validate_database(fix_issues=True)
+            assert {finding.category for finding in exc_info.value.findings} == {
+                DatabaseValidationCategory.MEMBERSHIPS
+            }
+        else:
+            assert db.validate_database(fix_issues=True) is True
+
+        assert connection.in_transaction
+        assert db.query("SELECT name FROM t_object WHERE name = 'Pending edit'") == [("Pending edit",)]
+        expected_classes = (2, 3) if unresolved else (1, 2)
+        assert db.query(
+            "SELECT parent_class_id, child_class_id FROM t_membership WHERE membership_id = 1"
+        ) == [expected_classes]
+
+        if commit_caller:
+            connection.commit()
+        else:
+            connection.rollback()
+        assert not connection.in_transaction
+        expected_name = "Pending edit" if commit_caller else "Generator1"
+        assert db.query("SELECT name FROM t_object WHERE name = ?", (expected_name,)) == [(expected_name,)]
+        assert db.query(
+            "SELECT parent_class_id, child_class_id FROM t_membership WHERE membership_id = 1"
+        ) == [expected_classes if commit_caller else (2, 3)]
+    finally:
+        connection.rollback()
+
+
 def test_validate_database_does_not_repair_memberships_with_other_findings(
     db_with_validation_records: PlexosDB,
 ) -> None:

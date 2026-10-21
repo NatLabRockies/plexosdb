@@ -4847,8 +4847,10 @@ class PlexosDB:
         fix_issues : bool, optional
             If True, repair membership class IDs only when the referenced object
             and collection agree, and only when membership findings are the sole
-            findings. Repairs are committed only if validation then passes.
-            Otherwise, changes are rolled back and findings are raised.
+            findings. Repairs are retained only if validation then passes.
+            Otherwise, only the repairs are rolled back and findings are raised.
+            An existing caller transaction remains open and is not committed or
+            rolled back; without one, successful repairs are committed.
 
         Returns
         -------
@@ -4874,10 +4876,17 @@ class PlexosDB:
         }:
             raise DatabaseValidationError(findings)
 
-        with self._db.transaction():
+        connection = self._db.connection
+        connection.execute("SAVEPOINT plexosdb_validation")
+        try:
             checks_module.repair_safe_membership_class_ids(self._db)
             if checks_module._find_database_validation_issues(self._db):
                 raise DatabaseValidationError(findings)
+        except Exception:
+            connection.execute("ROLLBACK TO SAVEPOINT plexosdb_validation")
+            raise
+        finally:
+            connection.execute("RELEASE SAVEPOINT plexosdb_validation")
         return True
 
     def _validate_and_filter_objects(

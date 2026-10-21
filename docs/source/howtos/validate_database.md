@@ -115,8 +115,12 @@ Download the script:
 
 `db.validate_database(fix_issues=True)` only repairs membership class IDs when
 the referenced object and collection agree and membership findings are the only
-category of findings. Repairs run in a transaction and are committed only if
-revalidation passes; otherwise they are rolled back and an exception is raised.
+category of findings. Repairs run in a savepoint and are retained only if
+revalidation passes; otherwise only the repairs are rolled back and an exception
+is raised. If a caller transaction is already open, validation leaves it open
+without committing or rolling back unrelated edits. The caller decides whether
+to commit or roll back the successful repairs along with its other changes.
+Without an existing transaction, successful repairs are committed.
 
 It does not create missing memberships, remove excess memberships or duplicate
 rows, delete artifacts or orphans, change values or UIDs, rename objects, or
