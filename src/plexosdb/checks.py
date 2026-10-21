@@ -42,6 +42,7 @@ from .db_constants import (
     PROPERTY_VALUES_QUERY,
     ATTRIBUTE_VALUES_QUERY,
     NAME_COLLISIONS_QUERY,
+    CUSTOM_COLUMN_CLASS_QUERY,
     REPAIR_MEMBERSHIP_CLASS_IDS_SCRIPT,
 )
 from .enums import ClassEnum, CollectionEnum, Schema
@@ -549,7 +550,40 @@ def get_default_schema_columns() -> tuple[tuple[str, frozenset[str]], ...]:
         )
 
 
-def find_database_schema_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
+def _find_database_validation_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
+    """Collect findings, stopping after schema checks if tables or columns are missing."""
+    findings: list[DatabaseValidationFinding] = []
+    for find_issues in (
+        _find_sqlite_integrity_issues,
+        _find_database_schema_issues,
+        _find_foreign_key_issues,
+        _find_database_relationship_issues,
+        _find_category_class_issues,
+        _find_property_collection_mismatch_issues,
+        _find_static_property_artifacts_issues,
+        _find_duplicate_static_data_issues,
+        _find_duplicate_data_graphs_issues,
+        _find_duplicate_uids_issues,
+        _find_orphaned_child_rows_issues,
+        _find_attribute_class_issues,
+        _find_system_membership_existence_issues,
+        _find_membership_count_bounds_issues,
+        _find_tag_object_class_issues,
+        _find_action_only_on_variables_issues,
+        _find_band_count_issues,
+        _find_property_values_issues,
+        _find_attribute_values_issues,
+        _find_case_insensitive_name_collisions_issues,
+        _find_custom_column_class_issues,
+    ):
+        issues = find_issues(db)
+        findings.extend(issues)
+        if find_issues is _find_database_schema_issues and issues:
+            return findings
+    return findings
+
+
+def _find_database_schema_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
     """Compare database tables and columns with the packaged PLEXOS schema."""
     available_tables = set(db.tables)
     findings: list[DatabaseValidationFinding] = []
@@ -575,43 +609,12 @@ def find_database_schema_issues(db: SQLiteManager, /) -> list[DatabaseValidation
     return findings
 
 
-def find_database_validation_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
-    """Collect database integrity and cross-table consistency findings."""
-    findings = find_sqlite_integrity_issues(db)
-    schema_findings = find_database_schema_issues(db)
-    findings.extend(schema_findings)
-    if schema_findings:
-        return findings
-
-    findings.extend(find_foreign_key_issues(db))
-    findings.extend(find_database_relationship_issues(db))
-    for find_issues in (
-        _find_category_class_issues,
-        _find_property_collection_mismatch_issues,
-        _find_static_property_artifacts_issues,
-        _find_duplicate_static_data_issues,
-        _find_duplicate_data_graphs_issues,
-        _find_duplicate_uids_issues,
-        _find_orphaned_child_rows_issues,
-        _find_attribute_class_issues,
-        _find_system_membership_existence_issues,
-        _find_membership_count_bounds_issues,
-        _find_tag_object_class_issues,
-        _find_action_only_on_variables_issues,
-        _find_band_count_issues,
-        _find_property_values_issues,
-        _find_attribute_values_issues,
-        _find_case_insensitive_name_collisions_issues,
-        _find_custom_column_class_issues,
-    ):
-        issues = find_issues(db)
-        if issues is not None:
-            findings.extend(issues)
-    return findings
-
-
 def _find_category_class_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
-    """Validate that t_object.class_id matches t_category.class_id."""
+    """Validate that t_object.class_id matches t_category.class_id.
+
+    Category/class mismatches include guidance to reset the category to the
+    class's default ``-`` category; these are reported but not repaired.
+    """
     return [
         DatabaseValidationFinding(
             category=DatabaseValidationCategory.OBJECTS,
@@ -626,7 +629,11 @@ def _find_category_class_issues(db: SQLiteManager, /) -> list[DatabaseValidation
 
 
 def _find_property_collection_mismatch_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
-    """Validate that property and membership collection IDs must match for t_data."""
+    """Validate that property and membership collection IDs must match for t_data.
+
+    Property/collection mismatches include guidance to remove the invalid data
+    row; validation does not delete these rows.
+    """
     return [
         DatabaseValidationFinding(
             category=DatabaseValidationCategory.PROPERTIES,
@@ -641,7 +648,11 @@ def _find_property_collection_mismatch_issues(db: SQLiteManager, /) -> list[Data
 
 
 def _find_static_property_artifacts_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
-    """Validate that static properties must not have tags, texts, dates, or memo."""
+    """Validate that static properties must not have tags, texts, dates, or memo.
+
+    Static properties with tags, texts, dates, or memos are reported with
+    guidance to enable dynamic behavior or remove the artifacts, but not repaired.
+    """
     findings: list[DatabaseValidationFinding] = []
     for table_name, artifact_type in (
         ("t_tag", "tag"),
@@ -665,7 +676,11 @@ def _find_static_property_artifacts_issues(db: SQLiteManager, /) -> list[Databas
 
 
 def _find_duplicate_static_data_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
-    """Validate that static properties allow one data row per membership, property, and band."""
+    """Validate that static properties allow one data row per membership, property, and band.
+
+    Duplicate static data is reported per membership, property, and band,
+    treating missing bands as band 1; validation does not remove duplicates.
+    """
     return [
         DatabaseValidationFinding(
             category=DatabaseValidationCategory.PROPERTIES,
@@ -680,7 +695,11 @@ def _find_duplicate_static_data_issues(db: SQLiteManager, /) -> list[DatabaseVal
 
 
 def _find_duplicate_data_graphs_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
-    """Validate that data rows with identical full property graphs are detected."""
+    """Validate that data rows with identical full property graphs are detected.
+
+    Identical data graphs are also reported for static and dynamic properties,
+    comparing values, bands, tag/text sets, dates, and memos without removing rows.
+    """
     tags: dict[int, set[tuple[SQLiteValue, SQLiteValue]]] = defaultdict(set)
     for data_id, object_id, action_id in db.iter_query(DATA_GRAPH_TAGS_QUERY):
         tags[data_id].add((object_id, action_id or 0))
@@ -722,7 +741,10 @@ def _find_duplicate_data_graphs_issues(db: SQLiteManager, /) -> list[DatabaseVal
 
 
 def _find_duplicate_uids_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
-    """Validate that every non-NULL t_data.uid must be unique."""
+    """Validate that every non-NULL t_data.uid must be unique.
+
+    Duplicate non-NULL data UIDs are reported but not reassigned.
+    """
     return [
         DatabaseValidationFinding(
             category=DatabaseValidationCategory.PROPERTIES,
@@ -741,6 +763,9 @@ def _find_orphaned_child_rows_issues(db: SQLiteManager, /) -> list[DatabaseValid
     Deleting data with foreign-key enforcement disabled can leave child rows
     behind because ON DELETE CASCADE does not fire. Report these orphans without
     deleting them.
+
+    Orphaned tag, text, date, band, and memo rows are reported with a sample
+    of up to ten data IDs and deletion guidance; validation does not delete them.
     """
     findings: list[DatabaseValidationFinding] = []
     for table_name, label in (
@@ -774,7 +799,11 @@ def _find_orphaned_child_rows_issues(db: SQLiteManager, /) -> list[DatabaseValid
 
 
 def _find_attribute_class_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
-    """Validate that t_attribute.class_id must match t_object.class_id."""
+    """Validate that t_attribute.class_id must match t_object.class_id.
+
+    Attribute/class mismatches include guidance to remove the invalid
+    attribute data row; validation does not delete these rows.
+    """
     return [
         DatabaseValidationFinding(
             category=DatabaseValidationCategory.ATTRIBUTES,
@@ -789,7 +818,12 @@ def _find_attribute_class_issues(db: SQLiteManager, /) -> list[DatabaseValidatio
 
 
 def _find_system_membership_existence_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
-    """Validate that every object except object_id=1 needs a System membership."""
+    """Validate that every object except object_id=1 needs a System membership.
+
+    Objects other than object ID 1 must have a System membership when the
+    System class is identified by ``lang_id=1``. Missing memberships are
+    reported with creation guidance but are not created automatically.
+    """
     system_class = db.query("SELECT class_id FROM t_class WHERE lang_id = 1")
     if not system_class:
         return []
@@ -808,7 +842,12 @@ def _find_system_membership_existence_issues(db: SQLiteManager, /) -> list[Datab
 
 
 def _find_membership_count_bounds_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
-    """Validate that membership count per parent must not exceed collection limits."""
+    """Validate that membership count per parent must not exceed collection limits.
+
+    Membership counts per parent must respect collection limits. A
+    ``max_count`` of -1 is unlimited; otherwise explicit nonnegative limits
+    take precedence over the one-to-one fallback. Excess rows are not removed.
+    """
     return [
         DatabaseValidationFinding(
             category=DatabaseValidationCategory.MEMBERSHIPS,
@@ -824,7 +863,12 @@ def _find_membership_count_bounds_issues(db: SQLiteManager, /) -> list[DatabaseV
 
 
 def _find_tag_object_class_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
-    """Validate that tags must reference objects of valid tag classes."""
+    """Validate that tags must reference objects of valid tag classes.
+
+    Tags must reference Data File, Variable, Timeslice, or Scenario objects,
+    identified by class language IDs 29, 31, 34, and 35. Invalid tag rows are
+    reported with removal guidance but are not deleted.
+    """
     return [
         DatabaseValidationFinding(
             category=DatabaseValidationCategory.PROPERTIES,
@@ -840,7 +884,12 @@ def _find_tag_object_class_issues(db: SQLiteManager, /) -> list[DatabaseValidati
 
 
 def _find_action_only_on_variables_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
-    """Validate that action_id is only valid on Variable class tags/texts."""
+    """Validate that action_id is only valid on Variable class tags/texts.
+
+    Actions on tags and texts are only valid for the Variable class
+    (language ID 31). Invalid actions are reported with guidance to clear
+    ``action_id`` but are not modified.
+    """
     findings = [
         DatabaseValidationFinding(
             category=DatabaseValidationCategory.PROPERTIES,
@@ -867,7 +916,12 @@ def _find_action_only_on_variables_issues(db: SQLiteManager, /) -> list[Database
 
 
 def _find_band_count_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
-    """Validate that max band_id used must not exceed t_property.max_band_id."""
+    """Validate that max band_id used must not exceed t_property.max_band_id.
+
+    The highest band ID used by a property must not exceed its non-NULL
+    ``max_band_id``. Exceeded limits are reported with update guidance but
+    are not modified.
+    """
     return [
         DatabaseValidationFinding(
             category=DatabaseValidationCategory.PROPERTIES,
@@ -937,7 +991,12 @@ def _validate_comparison_rule(value: int | float, rule: str) -> ValidationResult
 
 
 def _find_property_values_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
-    """Validate that t_data.value must pass t_property.validation_rule."""
+    """Validate that t_data.value must pass t_property.validation_rule.
+
+    Property values must satisfy nonempty ``validation_rule`` expressions.
+    Invalid values and malformed or unsupported rules are reported without
+    changing the data.
+    """
     findings: list[DatabaseValidationFinding] = []
     for did, value, pname, rule in db.iter_query(PROPERTY_VALUES_QUERY):
         result = validate_value_by_rule(value, rule)
@@ -957,7 +1016,12 @@ def _find_property_values_issues(db: SQLiteManager, /) -> list[DatabaseValidatio
 
 
 def _find_attribute_values_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
-    """Validate that non-NULL t_attribute_data.value passes t_attribute.validation_rule."""
+    """Validate that non-NULL t_attribute_data.value passes t_attribute.validation_rule.
+
+    Non-NULL attribute values must satisfy nonempty ``validation_rule``
+    expressions. Invalid values and malformed or unsupported rules are
+    reported without changing the data; NULL attribute values are skipped.
+    """
     findings: list[DatabaseValidationFinding] = []
     for value, aname, rule, oname in db.iter_query(ATTRIBUTE_VALUES_QUERY):
         if value is None:
@@ -979,7 +1043,12 @@ def _find_attribute_values_issues(db: SQLiteManager, /) -> list[DatabaseValidati
 
 
 def _find_case_insensitive_name_collisions_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
-    """Detect objects in the same class with names differing only by case."""
+    """Detect objects in the same class with names differing only by case.
+
+    Objects in the same class must have case-insensitively unique names,
+    using SQLite's ASCII ``LOWER`` semantics. Collisions are reported with
+    rename guidance but names are not modified.
+    """
     findings: list[DatabaseValidationFinding] = []
     for _, rows in groupby(db.iter_query(NAME_COLLISIONS_QUERY), key=lambda row: (row[0], row[1])):
         first = next(rows)
@@ -999,12 +1068,27 @@ def _find_case_insensitive_name_collisions_issues(db: SQLiteManager, /) -> list[
     return findings
 
 
-def _find_custom_column_class_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:
-    """Find custom column class inconsistencies (not implemented yet)."""
-    pass
+def _find_custom_column_class_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
+    """Validate that t_custom_column.class_id matches t_object.class_id.
+
+    Custom columns assigned through object memos must match the object's
+    class. Mismatches are reported with guidance to update the custom
+    column's ``class_id`` but are not repaired automatically.
+    """
+    return [
+        DatabaseValidationFinding(
+            category=DatabaseValidationCategory.OBJECTS,
+            message=(
+                f"Custom column class mismatch: object '{oname}' (class_id={ocid}) "
+                f"has custom column '{ccname}' (class_id={cccid}). "
+                f"Fix: update the custom column's class_id to {ocid}."
+            ),
+        )
+        for oname, ocid, ccname, cccid in db.query(CUSTOM_COLUMN_CLASS_QUERY)
+    ]
 
 
-def find_sqlite_integrity_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
+def _find_sqlite_integrity_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
     """Return SQLite integrity-check messages other than ``ok``."""
     return [
         DatabaseValidationFinding(
@@ -1016,7 +1100,7 @@ def find_sqlite_integrity_issues(db: SQLiteManager, /) -> list[DatabaseValidatio
     ]
 
 
-def find_foreign_key_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
+def _find_foreign_key_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
     """Return foreign-key violations reported by SQLite."""
     return [
         DatabaseValidationFinding(
@@ -1027,7 +1111,7 @@ def find_foreign_key_issues(db: SQLiteManager, /) -> list[DatabaseValidationFind
     ]
 
 
-def find_database_relationship_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
+def _find_database_relationship_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
     """Return model relationship and integer-attribute findings from shared SQL."""
     findings: list[DatabaseValidationFinding] = []
     for category_value, message, class_id, object_id, attribute_id, value in db.iter_query(

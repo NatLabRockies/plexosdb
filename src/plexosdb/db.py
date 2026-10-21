@@ -4842,48 +4842,6 @@ class PlexosDB:
         database. Findings are ``DatabaseValidationFinding`` instances with a
         ``DatabaseValidationCategory`` and a message.
 
-        - Category/class mismatches include guidance to reset the category to the
-          class's default ``-`` category; these are reported but not repaired.
-        - Property/collection mismatches include guidance to remove the invalid data
-          row; validation does not delete these rows.
-        - Static properties with tags, texts, dates, or memos are reported with
-          guidance to enable dynamic behavior or remove the artifacts, but not repaired.
-        - Duplicate static data is reported per membership, property, and band,
-          treating missing bands as band 1; validation does not remove duplicates.
-        - Identical data graphs are also reported for static and dynamic properties,
-          comparing values, bands, tag/text sets, dates, and memos without removing rows.
-        - Duplicate non-NULL data UIDs are reported but not reassigned.
-        - Orphaned tag, text, date, band, and memo rows are reported with a sample
-          of up to ten data IDs and deletion guidance; validation does not delete them.
-        - Attribute/class mismatches include guidance to remove the invalid
-          attribute data row; validation does not delete these rows.
-        - Objects other than object ID 1 must have a System membership when the
-          System class is identified by ``lang_id=1``. Missing memberships are
-          reported with creation guidance but are not created automatically.
-        - Membership counts per parent must respect collection limits. A
-          ``max_count`` of -1 is unlimited; otherwise explicit nonnegative limits
-          take precedence over the one-to-one fallback. Excess rows are not removed.
-        - Tags must reference Data File, Variable, Timeslice, or Scenario objects,
-          identified by class language IDs 29, 31, 34, and 35. Invalid tag rows are
-          reported with removal guidance but are not deleted.
-        - Actions on tags and texts are only valid for the Variable class
-          (language ID 31). Invalid actions are reported with guidance to clear
-          ``action_id`` but are not modified.
-        - The highest band ID used by a property must not exceed its non-NULL
-          ``max_band_id``. Exceeded limits are reported with update guidance but
-          are not modified.
-        - Property values must satisfy nonempty ``validation_rule`` expressions.
-          Invalid values and malformed or unsupported rules are reported without
-          changing the data.
-        - Non-NULL attribute values must satisfy nonempty ``validation_rule``
-          expressions. Invalid values and malformed or unsupported rules are
-          reported without changing the data; NULL attribute values are skipped.
-        - Objects in the same class must have case-insensitively unique names,
-          using SQLite's ASCII ``LOWER`` semantics. Collisions are reported with
-          rename guidance but names are not modified.
-
-        Additional model checks in ``checks.py`` are placeholders until implemented.
-
         Parameters
         ----------
         fix_issues : bool, optional
@@ -4908,7 +4866,7 @@ class PlexosDB:
         if not isinstance(fix_issues, bool):
             raise TypeError("fix_issues must be a bool.")
 
-        findings = checks_module.find_database_validation_issues(self._db)
+        findings = checks_module._find_database_validation_issues(self._db)
         if not findings:
             return True
         if not fix_issues or {finding.category for finding in findings} != {
@@ -4918,7 +4876,7 @@ class PlexosDB:
 
         with self._db.transaction():
             checks_module.repair_safe_membership_class_ids(self._db)
-            if checks_module.find_database_validation_issues(self._db):
+            if checks_module._find_database_validation_issues(self._db):
                 raise DatabaseValidationError(findings)
         return True
 

@@ -54,6 +54,59 @@ def test_find_attribute_class_issues_accepts_matching_classes(
     assert checks_module._find_attribute_class_issues(db_with_validation_records._db) == []
 
 
+@pytest.mark.parametrize("column_class_id", (2, 3, None))
+@pytest.mark.parametrize("fix_issues", (False, True))
+def test_validate_database_checks_custom_column_class_without_updating(
+    db_with_validation_records: PlexosDB,
+    column_class_id: int | None,
+    fix_issues: bool,
+) -> None:
+    db = db_with_validation_records
+    db._db.execute(
+        "INSERT INTO t_custom_column (column_id, class_id, name) VALUES (1, ?, 'Notes')",
+        (column_class_id,),
+    )
+    db._db.execute("INSERT INTO t_memo_object (object_id, column_id, value) VALUES (2, 1, 'memo')")
+    original_columns = db.query("SELECT * FROM t_custom_column")
+    original_memos = db.query("SELECT * FROM t_memo_object")
+    total_changes = db._db.connection.total_changes
+    expected_findings = (
+        [
+            DatabaseValidationFinding(
+                category=DatabaseValidationCategory.OBJECTS,
+                message=(
+                    "Custom column class mismatch: object 'Generator1' (class_id=2) "
+                    "has custom column 'Notes' (class_id=3). "
+                    "Fix: update the custom column's class_id to 2."
+                ),
+            ),
+        ]
+        if column_class_id == 3
+        else []
+    )
+
+    assert checks_module._find_custom_column_class_issues(db._db) == expected_findings
+    if expected_findings:
+        with pytest.raises(DatabaseValidationError) as exc_info:
+            db.validate_database(fix_issues=fix_issues)
+        assert exc_info.value.findings == tuple(expected_findings)
+    else:
+        assert db.validate_database(fix_issues=fix_issues) is True
+    assert db._db.connection.total_changes == total_changes
+    assert db.query("SELECT * FROM t_custom_column") == original_columns
+    assert db.query("SELECT * FROM t_memo_object") == original_memos
+
+
+def test_find_custom_column_class_issues_ignores_unassigned_columns(
+    db_with_validation_records: PlexosDB,
+) -> None:
+    db = db_with_validation_records
+    db._db.execute("INSERT INTO t_custom_column (column_id, class_id, name) VALUES (1, 3, 'Notes')")
+
+    assert checks_module._find_custom_column_class_issues(db._db) == []
+    assert db.validate_database() is True
+
+
 @pytest.mark.parametrize(
     ("max_band_id", "bands", "actual_max"),
     (
@@ -915,6 +968,10 @@ def test_validate_database_reports_category_class_mismatch_without_repairing(
 @pytest.mark.parametrize(
     "finder_name",
     (
+        "_find_sqlite_integrity_issues",
+        "_find_database_schema_issues",
+        "_find_foreign_key_issues",
+        "_find_database_relationship_issues",
         "_find_category_class_issues",
         "_find_property_collection_mismatch_issues",
         "_find_static_property_artifacts_issues",
