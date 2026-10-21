@@ -35,6 +35,7 @@ TABLE_INFO_QUERY = Template(get_sql_query("database_validation_table_info.sql"))
 RELATIONSHIP_FINDINGS_QUERY = get_sql_query("database_validation_relationships.sql")
 CATEGORY_CLASS_FINDINGS_QUERY = get_sql_query("database_validation_category_class.sql")
 PROPERTY_COLLECTION_FINDINGS_QUERY = get_sql_query("database_validation_property_collection.sql")
+STATIC_PROPERTY_ARTIFACTS_QUERY = Template(get_sql_query("database_validation_static_property_artifacts.sql"))
 REPAIR_MEMBERSHIP_CLASS_IDS_SCRIPT = get_sql_query("database_validation_repair_memberships.sql")
 
 
@@ -624,9 +625,28 @@ def _find_property_collection_mismatch_issues(db: SQLiteManager, /) -> list[Data
     ]
 
 
-def _find_static_property_artifacts_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:
-    """Find artifacts on static properties (not implemented yet)."""
-    pass
+def _find_static_property_artifacts_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
+    """Validate static properties must not have tags, texts, dates, or memo."""
+    findings: list[DatabaseValidationFinding] = []
+    for table_name, artifact_type in (
+        ("t_tag", "tag"),
+        ("t_text", "text"),
+        ("t_date_from", "date_from"),
+        ("t_date_to", "date_to"),
+        ("t_memo_data", "memo"),
+    ):
+        for pid, pname, count in db.query(STATIC_PROPERTY_ARTIFACTS_QUERY.substitute(table=table_name)):
+            findings.append(
+                DatabaseValidationFinding(
+                    category=DatabaseValidationCategory.PROPERTIES,
+                    message=(
+                        f"Static property with {artifact_type}: '{pname}' (property_id={pid}) "
+                        f"is static but has {count} {table_name} row(s). "
+                        f"Fix: set is_dynamic=1 on this property, or remove the {table_name} rows."
+                    ),
+                )
+            )
+    return findings
 
 
 def _find_duplicate_static_data_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding] | None:

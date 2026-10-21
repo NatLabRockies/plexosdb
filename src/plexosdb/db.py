@@ -4833,6 +4833,8 @@ class PlexosDB:
         class's default ``-`` category; these are reported but not repaired.
         Property/collection mismatches include guidance to remove the invalid data
         row; validation does not delete these rows.
+        Static properties with tags, texts, dates, or memos are reported with
+        guidance to enable dynamic behavior or remove the artifacts, but not repaired.
         Additional model checks in ``checks.py`` are placeholders until implemented.
 
         Parameters

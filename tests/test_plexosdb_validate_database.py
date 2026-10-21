@@ -54,6 +54,73 @@ def test_find_property_collection_mismatch_issues_accepts_matching_collections(
     assert checks_module._find_property_collection_mismatch_issues(db_with_validation_records._db) == []
 
 
+def test_find_static_property_artifacts_issues_accepts_no_artifacts(
+    db_with_validation_records: PlexosDB,
+) -> None:
+    db = db_with_validation_records
+    db._db.execute("UPDATE t_property SET is_dynamic = 0 WHERE property_id = 1")
+
+    assert checks_module._find_static_property_artifacts_issues(db._db) == []
+
+
+@pytest.mark.parametrize(
+    ("table", "artifact_type", "extra_columns", "extra_values"),
+    (
+        ("t_tag", "tag", ", object_id", ", 1"),
+        ("t_text", "text", ", class_id", ", 1"),
+        ("t_date_from", "date_from", "", ""),
+        ("t_date_to", "date_to", "", ""),
+        ("t_memo_data", "memo", "", ""),
+    ),
+)
+@pytest.mark.parametrize("is_dynamic", (0, 1, None))
+@pytest.mark.parametrize("fix_issues", (False, True))
+def test_validate_database_checks_static_property_artifacts_without_mutating(
+    db_with_validation_records: PlexosDB,
+    table: str,
+    artifact_type: str,
+    extra_columns: str,
+    extra_values: str,
+    is_dynamic: int | None,
+    fix_issues: bool,
+) -> None:
+    db = db_with_validation_records
+    db._db.execute("UPDATE t_property SET is_dynamic = ? WHERE property_id = 1", (is_dynamic,))
+    db._db.execute(
+        "INSERT INTO t_data (data_id, membership_id, property_id, value) "
+        "SELECT 2, membership_id, property_id, 3.0 FROM t_data WHERE data_id = 1"
+    )
+    db._db.execute(f"INSERT INTO {table} (data_id{extra_columns}) SELECT data_id{extra_values} FROM t_data")
+    original_artifacts = db.query(f"SELECT * FROM {table}")
+    total_changes = db._db.connection.total_changes
+    expected_findings = (
+        [
+            DatabaseValidationFinding(
+                category=DatabaseValidationCategory.PROPERTIES,
+                message=(
+                    f"Static property with {artifact_type}: 'Max Capacity' (property_id=1) "
+                    f"is static but has 2 {table} row(s). "
+                    f"Fix: set is_dynamic=1 on this property, or remove the {table} rows."
+                ),
+            ),
+        ]
+        if is_dynamic == 0
+        else []
+    )
+
+    assert checks_module._find_static_property_artifacts_issues(db._db) == expected_findings
+    if expected_findings:
+        with pytest.raises(DatabaseValidationError) as exc_info:
+            db.validate_database(fix_issues=fix_issues)
+        assert exc_info.value.findings == tuple(expected_findings)
+    else:
+        assert db.validate_database(fix_issues=fix_issues) is True
+
+    assert db._db.connection.total_changes == total_changes
+    assert db.query(f"SELECT * FROM {table}") == original_artifacts
+    assert db.query("SELECT is_dynamic FROM t_property WHERE property_id = 1") == [(is_dynamic,)]
+
+
 @pytest.mark.parametrize("fix_issues", (False, True))
 def test_validate_database_reports_property_collection_mismatch_without_deleting(
     db_with_validation_records: PlexosDB,
@@ -424,5 +491,32 @@ def test_validate_database_rejects_non_boolean_fix_issues(
         db_instance_with_schema.validate_database(fix_issues=1)  # type: ignore[arg-type]
 
 
-def test_validate_database_accepts_populated_xml_model(db_from_model_xml: PlexosDB) -> None:
-    assert db_from_model_xml.validate_database() is True
+def test_validate_database_reports_static_artifacts_in_populated_xml_model(
+    db_from_model_xml: PlexosDB,
+) -> None:
+    total_changes = db_from_model_xml._db.connection.total_changes
+
+    with pytest.raises(DatabaseValidationError) as exc_info:
+        db_from_model_xml.validate_database()
+
+    assert exc_info.value.findings == tuple(
+        DatabaseValidationFinding(
+            category=DatabaseValidationCategory.PROPERTIES,
+            message=(
+                f"Static property with {artifact_type}: '{name}' (property_id={pid}) "
+                f"is static but has {count} {table} row(s). "
+                f"Fix: set is_dynamic=1 on this property, or remove the {table} rows."
+            ),
+        )
+        for artifact_type, table, pid, name, count in (
+            ("tag", "t_tag", 52, "Units", 1),
+            ("tag", "t_tag", 585, "Price", 3),
+            ("tag", "t_tag", 2121, "Flow Coefficient", 2),
+            ("tag", "t_tag", 4934, "Sense", 1),
+            ("tag", "t_tag", 4949, "RHS", 1),
+            ("memo", "t_memo_data", 2035, "Max Flow", 1),
+            ("memo", "t_memo_data", 2043, "Resistance", 1),
+            ("memo", "t_memo_data", 2044, "Reactance", 1),
+        )
+    )
+    assert db_from_model_xml._db.connection.total_changes == total_changes
