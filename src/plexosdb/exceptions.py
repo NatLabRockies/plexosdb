@@ -3,6 +3,8 @@
 from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum
+import os
+import sys
 
 
 class NotFoundError(Exception):
@@ -39,13 +41,20 @@ class DatabaseValidationFinding:
 
 
 class DatabaseValidationError(ModelError):
-    """Raised when database validation finds integrity or consistency issues."""
+    """Raised when database validation finds integrity or consistency issues.
+
+    WARN labels are yellow when stderr is a terminal, unless NO_COLOR is set.
+    Redirected output remains plain text.
+    """
 
     def __init__(self, findings: Iterable[DatabaseValidationFinding]) -> None:
         """Create an error carrying typed findings."""
         self.findings = tuple(findings)
-        details = "\n".join(f"- [{finding.category.value}] {finding.message}" for finding in self.findings)
-        super().__init__(f"Database validation failed:\n{details}")
+        warning = "\033[33mWARN\033[0m" if sys.stderr.isatty() and "NO_COLOR" not in os.environ else "WARN"
+        details = "\n".join(
+            f"{warning}: [{finding.category.value}] {finding.message}" for finding in self.findings
+        )
+        super().__init__(f"Database validation results:\n{details}")
 
 
 class MultipleFilesError(Exception):

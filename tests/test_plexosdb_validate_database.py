@@ -1,11 +1,55 @@
 from collections.abc import Generator
 from pathlib import Path
+import sys
 
 import pytest
 
 from plexosdb import ClassEnum, DatabaseValidationCategory, DatabaseValidationError, PlexosDB
 from plexosdb import checks as checks_module
 from plexosdb.exceptions import DatabaseValidationFinding
+
+
+def test_database_validation_error_formats_each_finding_as_warning(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys.stderr, "isatty", lambda: False)
+    findings = (
+        DatabaseValidationFinding(category=DatabaseValidationCategory.PROPERTIES, message="Invalid tag."),
+        DatabaseValidationFinding(category=DatabaseValidationCategory.OBJECTS, message="Category mismatch."),
+    )
+    error = DatabaseValidationError(findings)
+
+    assert str(error) == (
+        "Database validation results:\nWARN: [properties] Invalid tag.\nWARN: [objects] Category mismatch."
+    )
+    assert error.findings == findings
+
+
+@pytest.mark.parametrize(
+    ("is_terminal", "no_color", "warning"),
+    (
+        (True, False, "\033[33mWARN\033[0m"),
+        (False, False, "WARN"),
+        (True, True, "WARN"),
+        (False, True, "WARN"),
+    ),
+)
+def test_database_validation_warning_color(
+    monkeypatch: pytest.MonkeyPatch,
+    is_terminal: bool,
+    no_color: bool,
+    warning: str,
+) -> None:
+    monkeypatch.setattr(sys.stderr, "isatty", lambda: is_terminal)
+    if no_color:
+        monkeypatch.setenv("NO_COLOR", "")
+    else:
+        monkeypatch.delenv("NO_COLOR", raising=False)
+    finding = DatabaseValidationFinding(
+        category=DatabaseValidationCategory.PROPERTIES, message="Invalid tag."
+    )
+    error = DatabaseValidationError([finding])
+
+    assert str(error) == f"Database validation results:\n{warning}: [properties] Invalid tag."
+    assert error.findings == (finding,)
 
 
 @pytest.fixture
