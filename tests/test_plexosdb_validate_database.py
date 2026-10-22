@@ -240,22 +240,25 @@ def test_validate_database_checks_band_count_without_updating(
     assert db.query("SELECT * FROM t_band") == original_bands
 
 
-def test_find_band_count_issues_accepts_v12_unlimited_storage_property(db_instance: PlexosDB) -> None:
-    db = db_instance
-    db.create_schema(version=12)
-    assert db.query("SELECT name, is_multi_band, max_band_id FROM t_property WHERE property_id = 1263") == [
-        ("Volume Build Option", 1, -1)
-    ]
-    db.add_object(ClassEnum.Storage, "Storage1")
-    for band in (1, 5):
-        db.add_property(ClassEnum.Storage, "Storage1", "Volume Build Option", 10.0 + band, band=band)
+def test_find_band_count_issues_accepts_v12_unlimited_storage_property() -> None:
+    db = PlexosDB()
+    try:
+        db.create_schema(version=12)
+        assert db.query(
+            "SELECT name, is_multi_band, max_band_id FROM t_property WHERE property_id = 1263"
+        ) == [("Volume Build Option", 1, -1)]
+        db.add_object(ClassEnum.Storage, "Storage1")
+        for band in (1, 5):
+            db.add_property(ClassEnum.Storage, "Storage1", "Volume Build Option", 10.0 + band, band=band)
 
-    assert db.query(
-        "SELECT band.band_id FROM t_band AS band "
-        "JOIN t_data AS data ON data.data_id = band.data_id "
-        "WHERE data.property_id = 1263 ORDER BY band.band_id"
-    ) == [(1,), (5,)]
-    assert checks_module._find_band_count_issues(db._db) == []
+        assert db.query(
+            "SELECT band.band_id FROM t_band AS band "
+            "JOIN t_data AS data ON data.data_id = band.data_id "
+            "WHERE data.property_id = 1263 ORDER BY band.band_id"
+        ) == [(1,), (5,)]
+        assert checks_module._find_band_count_issues(db._db) == []
+    finally:
+        db._db.close()
 
 
 def test_find_band_count_issues_groups_by_property(
@@ -1281,15 +1284,19 @@ def test_validate_database_reports_missing_required_column() -> None:
     )
 
 
-def test_validate_database_reports_missing_schema_tables(db_instance: PlexosDB) -> None:
-    with pytest.raises(DatabaseValidationError) as exc_info:
-        db_instance.validate_database()
+def test_validate_database_reports_missing_schema_tables() -> None:
+    db = PlexosDB()
+    try:
+        with pytest.raises(DatabaseValidationError) as exc_info:
+            db.validate_database()
 
-    assert any(
-        finding.category is DatabaseValidationCategory.SCHEMA
-        and "Required table 't_class' is missing." in finding.message
-        for finding in exc_info.value.findings
-    )
+        assert any(
+            finding.category is DatabaseValidationCategory.SCHEMA
+            and "Required table 't_class' is missing." in finding.message
+            for finding in exc_info.value.findings
+        )
+    finally:
+        db._db.close()
 
 
 @pytest.mark.parametrize(
