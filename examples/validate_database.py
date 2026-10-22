@@ -20,7 +20,10 @@ def main() -> None:
             issues = "\n".join(
                 f"- [{finding.category.value}] {finding.message}" for finding in error.findings
             )
-            args.output.write_text(f"Database validation results:\n{issues}\n", encoding="utf-8")
+            args.output.write_text(
+                f"Database validation results:\n{issues}\nValidation found {len(error.findings)} errors.\n",
+                encoding="utf-8",
+            )
             raise
         else:
             args.output.write_text("No validation issues found.\n", encoding="utf-8")

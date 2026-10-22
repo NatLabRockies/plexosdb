@@ -47,6 +47,7 @@ def test_validation_script_writes_plain_text_report(
         expected = "Database validation results:\n" + "".join(
             f"- [{finding.category.value}] {finding.message}\n" for finding in exc_info.value.findings
         )
+        expected += f"Validation found {len(exc_info.value.findings)} errors.\n"
         if invalid == "malformed_parent_key":
             assert "[foreign_keys]" in expected
             assert "foreign key mismatch" in expected
@@ -84,6 +85,7 @@ def test_validation_script_validates_populated_xml_model(
     expected = "Database validation results:\n" + "".join(
         f"- [{finding.category.value}] {finding.message}\n" for finding in findings
     )
+    expected += f"Validation found {len(findings)} errors.\n"
     contents = report.read_text(encoding="utf-8")
     assert contents == expected
     assert "\033" not in contents

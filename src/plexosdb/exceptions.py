@@ -54,7 +54,9 @@ class DatabaseValidationError(ModelError):
         details = "\n".join(
             f"{warning}: [{finding.category.value}] {finding.message}" for finding in self.findings
         )
-        super().__init__(f"Database validation results:\n{details}")
+        super().__init__(
+            f"Database validation results:\n{details}\nValidation found {len(self.findings)} errors."
+        )
 
 
 class MultipleFilesError(Exception):

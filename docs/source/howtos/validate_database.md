@@ -59,7 +59,9 @@ Function Precision is excluded from the integer check only.
 
 The exception display starts with `Database validation results:` and prefixes
 each finding with `WARN:`. Only `WARN` is yellow when stderr is a terminal;
-redirected output is plain text. Set `NO_COLOR` to disable coloring.
+redirected output is plain text. Set `NO_COLOR` to disable coloring. The display
+and failure text reports end with `Validation found N errors.`, where `N` is the
+number of findings, not the number of affected database rows.
 
 ```{note}
 Findings still raise an exception even though their display uses `WARN`.
@@ -87,7 +89,8 @@ except DatabaseValidationError as error:
         for finding in error.findings
     )
     Path("validation_issues.txt").write_text(
-        f"Database validation results:\n{issues}\n",
+        f"Database validation results:\n{issues}\n"
+        f"Validation found {len(error.findings)} errors.\n",
         encoding="utf-8",
     )
     raise

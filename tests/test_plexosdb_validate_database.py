@@ -20,8 +20,20 @@ def test_database_validation_error_formats_each_finding_as_warning(monkeypatch: 
 
     assert str(error) == (
         "Database validation results:\nWARN: [properties] Invalid tag.\nWARN: [objects] Category mismatch."
+        "\nValidation found 2 errors."
     )
     assert error.findings == findings
+
+
+@pytest.mark.parametrize("count", (0, 1, 15583))
+def test_database_validation_error_appends_finding_count(count: int) -> None:
+    error = DatabaseValidationError(
+        DatabaseValidationFinding(category=DatabaseValidationCategory.PROPERTIES, message="Invalid data.")
+        for _ in range(count)
+    )
+
+    assert str(error).splitlines()[-1] == f"Validation found {count} errors."
+    assert len(error.findings) == count
 
 
 @pytest.mark.parametrize(
@@ -49,7 +61,9 @@ def test_database_validation_warning_color(
     )
     error = DatabaseValidationError([finding])
 
-    assert str(error) == f"Database validation results:\n{warning}: [properties] Invalid tag."
+    assert str(error) == (
+        f"Database validation results:\n{warning}: [properties] Invalid tag.\nValidation found 1 errors."
+    )
     assert error.findings == (finding,)
 
 
