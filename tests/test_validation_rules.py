@@ -18,6 +18,7 @@ from plexosdb import checks as checks_module
         ("Between 1 And 100", 100, True),
         ("Between 1 And 100", 150.0, False),
         ("Between -2.5 And 1e2", -2.5, True),
+        ("Between 0 and 1", 0.5, True),
         ("In (0,1)", 0, True),
         ("In (0,1)", 2, False),
         (">=1", 1, True),

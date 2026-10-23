@@ -948,7 +948,7 @@ def validate_value_by_rule(value: SQLiteValue, validation_rule: str) -> Validati
         return ValidationResult(is_valid=False, error_message=f"Value {value} must be numeric")
 
     if rule.startswith("Between "):
-        parts = rule.removeprefix("Between ").split(" And ")
+        parts = rule.removeprefix("Between ").lower().split(" and ")
         try:
             if len(parts) != 2:
                 raise ValueError("Expected two range bounds")
