@@ -6,18 +6,15 @@ import ast
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from datetime import datetime
-from importlib.resources import files
 from itertools import islice
 from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
+from .db_constants import SQLITE_INT64_MIN, SQLITE_INT64_MAX
+from .db_constants import get_sql_query as get_sql_query
 from .enums import ClassEnum
 from .exceptions import NotFoundError
-
-SQLITE_INT64_MIN = -(2**63)
-SQLITE_INT64_MAX = 2**63 - 1
-SQLITE_ASCII_CASE_FOLD = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
 
 if TYPE_CHECKING:
     from plexosdb import CollectionEnum, PlexosDB
@@ -126,23 +123,6 @@ def normalize_names(*args: str | Iterable[str]) -> list[str]:
     else:
         names = args
     return list(set(str(name) for name in names if name is not None))
-
-
-def get_sql_query(query_name: str) -> str:
-    """Load SQL query from package.
-
-    Parameters
-    ----------
-    query_name : str
-        Name of the query file to load from plexosdb.sql
-
-    Returns
-    -------
-    str
-        Content of the SQL query file as a string
-    """
-    fpath = files("plexosdb.sql").joinpath(query_name)
-    return fpath.read_text(encoding="utf-8-sig")
 
 
 def prepare_sql_data_params(

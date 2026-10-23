@@ -18,6 +18,9 @@ version = db.version
 print(f"Imported PLEXOS model version: {version}")
 ```
 
+After importing, see [Validating a Database](validate_database.md) to check
+model consistency and write findings to a text report.
+
 ## Importing a PLEXOS solution ZIP and reading report tables
 
 Use `PlexosSolution` when you want to analyze PLEXOS solution ZIP outputs. With
