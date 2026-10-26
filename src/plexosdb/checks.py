@@ -10,7 +10,7 @@ from importlib.resources import files
 from itertools import groupby
 import sqlite3
 import operator
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 from loguru import logger
 
@@ -25,6 +25,8 @@ from .db_constants import (
     PROPERTY_COLLECTION_FINDINGS_QUERY,
     STATIC_PROPERTY_ARTIFACTS_QUERY,
     DUPLICATE_STATIC_DATA_QUERY,
+    STATIC_DATA_TAGS_QUERY,
+    STATIC_DATA_TEXTS_QUERY,
     DATA_GRAPHS_QUERY,
     DATA_GRAPH_TAGS_QUERY,
     DATA_GRAPH_TEXTS_QUERY,
@@ -55,6 +57,21 @@ from .utils import no_space, normalize_names
 if TYPE_CHECKING:
     from .db import PlexosDB
     from .db_manager import SQLiteManager
+
+
+class _StaticDataKey(NamedTuple):
+    membership_id: int | None
+    property_id: int | None
+    band_id: int | None
+    property_name: str | None
+    object_name: str | None
+    object_id: int | None
+    class_name: str | None
+    tags: frozenset[tuple[SQLiteValue, SQLiteValue]]
+    texts: frozenset[tuple[SQLiteValue, SQLiteValue, SQLiteValue]]
+    date_from: SQLiteValue
+    date_to: SQLiteValue
+    memo: SQLiteValue
 
 
 def check_memberships_from_records(memberships: list[dict[str, int]]) -> bool:
@@ -650,10 +667,10 @@ def _find_property_collection_mismatch_issues(db: SQLiteManager, /) -> list[Data
 
 
 def _find_static_property_artifacts_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
-    """Validate that static properties must not have tags, texts, dates, or memo.
+    """Report unsupported artifacts on static properties.
 
-    Static properties with tags, texts, dates, or memos are reported with
-    guidance to enable dynamic behavior or remove the artifacts, but not repaired.
+    Scenario and Data File tags are supported static contexts. Other tag classes,
+    texts, dates, and memos are reported without changing the database.
     """
     findings: list[DatabaseValidationFinding] = []
     for table_name, artifact_type in (
@@ -663,14 +680,35 @@ def _find_static_property_artifacts_issues(db: SQLiteManager, /) -> list[Databas
         ("t_date_to", "date_to"),
         ("t_memo_data", "memo"),
     ):
-        for pid, pname, count in db.query(STATIC_PROPERTY_ARTIFACTS_QUERY.substitute(table=table_name)):
+        artifact_filter = (
+            "NOT EXISTS ("
+            "SELECT 1 FROM t_object AS tagged_object "
+            "JOIN t_class AS tagged_class ON tagged_object.class_id = tagged_class.class_id "
+            "WHERE tagged_object.object_id = artifact.object_id "
+            "AND tagged_class.lang_id IN (29, 35))"
+            if table_name == "t_tag"
+            else "1 = 1"
+        )
+        for pid, pname, count in db.query(
+            STATIC_PROPERTY_ARTIFACTS_QUERY.substitute(table=table_name, artifact_filter=artifact_filter)
+        ):
+            if table_name == "t_tag":
+                details = (
+                    f"has {count} unsupported {table_name} row(s); only Scenario and Data File tags "
+                    "are supported static contexts. Fix: use a Scenario or Data File tag, or remove "
+                    f"the unsupported {table_name} rows."
+                )
+            else:
+                details = (
+                    f"has {count} {table_name} row(s). "
+                    f"Fix: set is_dynamic=1 on this property, or remove the {table_name} rows."
+                )
             findings.append(
                 DatabaseValidationFinding(
                     category=DatabaseValidationCategory.PROPERTIES,
                     message=(
                         f"Static property with {artifact_type}: '{pname}' (property_id={pid}) "
-                        f"is static but has {count} {table_name} row(s). "
-                        f"Fix: set is_dynamic=1 on this property, or remove the {table_name} rows."
+                        f"is static but {details}"
                     ),
                 )
             )
@@ -678,24 +716,72 @@ def _find_static_property_artifacts_issues(db: SQLiteManager, /) -> list[Databas
 
 
 def _find_duplicate_static_data_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:
-    """Validate that static properties allow one data row per membership, property, and band.
+    """Detect duplicate static assignments within the same tag/text/date context.
 
-    Duplicate static data is reported per membership, property, and band,
-    treating missing bands as band 1; validation does not remove duplicates.
-    Findings include the property name and child object's name, class, and ID.
+    Context includes tag/action and text/action sets, date bounds, and memo values.
+    Different values in the same context are considered conflicting assignments.
+    Distinct contexts are not conflated and rows are never removed.
     """
-    return [
-        DatabaseValidationFinding(
-            category=DatabaseValidationCategory.PROPERTIES,
-            message=(
-                f"Duplicated static data: property '{pname}' (property_id={pid}) "
-                f"on object '{oname}' (object_id={oid}, class='{cname}'), membership_id={mid}, "
-                f"band_id={bid}, count={count}. "
-                "Fix: remove duplicate data rows, keeping only the last."
-            ),
+    tags: dict[int, set[tuple[SQLiteValue, SQLiteValue]]] = defaultdict(set)
+    for data_id, object_id, action_id in db.iter_query(STATIC_DATA_TAGS_QUERY):
+        tags[data_id].add((object_id, action_id or 0))
+
+    texts: dict[int, set[tuple[SQLiteValue, SQLiteValue, SQLiteValue]]] = defaultdict(set)
+    for data_id, class_id, value, action_id in db.iter_query(STATIC_DATA_TEXTS_QUERY):
+        texts[data_id].add((class_id, value, action_id or 0))
+
+    groups: dict[_StaticDataKey, list[int]] = defaultdict(list)
+    for (
+        data_id,
+        membership_id,
+        property_id,
+        band_id,
+        property_name,
+        object_name,
+        object_id,
+        class_name,
+        date_from,
+        date_to,
+        memo,
+    ) in db.iter_query(DUPLICATE_STATIC_DATA_QUERY):
+        key = _StaticDataKey(
+            membership_id=membership_id,
+            property_id=property_id,
+            band_id=band_id,
+            property_name=property_name,
+            object_name=object_name,
+            object_id=object_id,
+            class_name=class_name,
+            tags=frozenset(tags.pop(data_id, ())),
+            texts=frozenset(texts.pop(data_id, ())),
+            date_from=date_from,
+            date_to=date_to,
+            memo=memo,
         )
-        for mid, pid, bid, count, pname, oname, oid, cname in db.query(DUPLICATE_STATIC_DATA_QUERY)
-    ]
+        groups[key].append(data_id)
+
+    findings: list[DatabaseValidationFinding] = []
+    for key, data_ids in groups.items():
+        if len(data_ids) < 2:
+            continue
+        findings.append(
+            DatabaseValidationFinding(
+                category=DatabaseValidationCategory.PROPERTIES,
+                message=(
+                    f"Duplicated static data: property '{key.property_name}' "
+                    f"(property_id={key.property_id}) on object '{key.object_name}' "
+                    f"(object_id={key.object_id}, class='{key.class_name}'), "
+                    f"membership_id={key.membership_id}, band_id={key.band_id}, "
+                    f"count={len(data_ids)}, data_ids={data_ids}. "
+                    f"Matching context: tags={sorted(key.tags, key=repr)}, "
+                    f"texts={sorted(key.texts, key=repr)}, date_from={key.date_from!r}, "
+                    f"date_to={key.date_to!r}, memo={key.memo!r}. "
+                    "Reason: these rows assign multiple values to the same static context. "
+                    "No rows were changed. Review the assignments and retain the intended value."
+                ),
+            )
+        )
+    return findings
 
 
 def _find_duplicate_data_graphs_issues(db: SQLiteManager, /) -> list[DatabaseValidationFinding]:

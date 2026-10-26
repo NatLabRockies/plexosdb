@@ -74,14 +74,10 @@ def test_validation_script_validates_populated_xml_model(
         runpy.run_path(str(script), run_name="__main__")
 
     findings = exc_info.value.findings
-    assert len(findings) == 9
-    assert any("Static property with tag:" in finding.message for finding in findings)
+    assert len(findings) == 3
+    assert not any("Static property with tag:" in finding.message for finding in findings)
     assert any("Static property with memo:" in finding.message for finding in findings)
-    assert any(
-        "Duplicated static data: property 'Price' (property_id=585) "
-        "on object 'Gas' (object_id=7, class='Fuel')" in finding.message
-        for finding in findings
-    )
+    assert not any("Duplicated static data: property 'Price'" in finding.message for finding in findings)
     expected = "Database validation results:\n" + "".join(
         f"- [{finding.category.value}] {finding.message}\n" for finding in findings
     )

@@ -33,8 +33,8 @@ Model checks cover:
 
 - Object/category, attribute/object, property/collection, and custom-column
   class consistency.
-- Artifacts on static properties, duplicate static data, identical data graphs,
-  duplicate non-NULL UIDs, and orphaned child rows.
+- Unsupported artifacts on static properties, duplicate static data, identical
+  data graphs, duplicate non-NULL UIDs, and orphaned child rows.
 - Missing System memberships and collection membership-count limits.
 - Valid tag classes and actions restricted to Variable tags and texts.
 - Property band limits, property and attribute validation rules, integer
@@ -49,6 +49,14 @@ tuple; reports can therefore be generated without parsing the exception text.
 Property band limits are enforced only for nonnegative `max_band_id` values.
 NULL and negative limits, including the v12 unlimited value `-1`, are not
 treated as upper bounds.
+
+Scenario and Data File tags are valid contexts for static property values and
+are not reported as artifacts. Static duplicate detection includes the complete
+tag/action and text/action sets, band, date bounds, and memo in the data-row
+context; it reports multiple values only when they share that context. Different
+Scenario or Data File assignments are kept distinct and are not flagged as
+duplicates. Unsupported tag classes and static text, date, or memo artifacts
+continue to be reported.
 
 Property and attribute rules support inclusive `Between X And Y`, `In (X,Y,Z)`,
 and `>=`, `<=`, `<`, and `>` comparisons. NULL attribute values are skipped.

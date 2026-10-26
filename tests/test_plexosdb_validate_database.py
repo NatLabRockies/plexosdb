@@ -635,9 +635,15 @@ def test_validate_database_checks_static_property_artifacts_without_mutating(
             DatabaseValidationFinding(
                 category=DatabaseValidationCategory.PROPERTIES,
                 message=(
-                    f"Static property with {artifact_type}: 'Max Capacity' (property_id=1) "
-                    f"is static but has 2 {table} row(s). "
-                    f"Fix: set is_dynamic=1 on this property, or remove the {table} rows."
+                    f"Static property with {artifact_type}: 'Max Capacity' (property_id=1) is static but "
+                    + (
+                        f"has 2 unsupported {table} row(s); only Scenario and Data File tags "
+                        "are supported static contexts. Fix: use a Scenario or Data File tag, or "
+                        f"remove the unsupported {table} rows."
+                        if table == "t_tag"
+                        else f"has 2 {table} row(s). "
+                        f"Fix: set is_dynamic=1 on this property, or remove the {table} rows."
+                    )
                 ),
             ),
         ]
@@ -656,6 +662,28 @@ def test_validate_database_checks_static_property_artifacts_without_mutating(
     assert db._db.connection.total_changes == total_changes
     assert db.query(f"SELECT * FROM {table}") == original_artifacts
     assert db.query("SELECT is_dynamic FROM t_property WHERE property_id = 1") == [(is_dynamic,)]
+
+
+@pytest.mark.parametrize("tag_class_lang_id", (29, 35))
+@pytest.mark.parametrize(("tag_ids", "is_duplicate"), (((1, 1), True), ((1, 2), False)))
+def test_static_scenario_and_datafile_tags_are_supported_contexts(
+    db_with_validation_records: PlexosDB,
+    tag_class_lang_id: int,
+    tag_ids: tuple[int, int],
+    is_duplicate: bool,
+) -> None:
+    db = db_with_validation_records
+    db._db.execute("UPDATE t_property SET is_dynamic = 0 WHERE property_id = 1")
+    db._db.execute("UPDATE t_class SET lang_id = ? WHERE class_id IN (1, 2)", (tag_class_lang_id,))
+    db._db.execute("INSERT INTO t_data (data_id, membership_id, property_id, value) VALUES (2, 1, 1, 3.0)")
+    db._db.execute("INSERT INTO t_tag (data_id, object_id) VALUES (1, ?), (2, ?)", tag_ids)
+
+    assert checks_module._find_static_property_artifacts_issues(db._db) == []
+    findings = checks_module._find_duplicate_static_data_issues(db._db)
+    assert len(findings) == int(is_duplicate)
+    if is_duplicate:
+        assert "data_ids=[1, 2]" in findings[0].message
+        assert "No rows were changed." in findings[0].message
 
 
 @pytest.mark.parametrize(
@@ -695,8 +723,10 @@ def test_validate_database_checks_duplicate_static_data_without_deleting(
                 message=(
                     "Duplicated static data: property 'Max Capacity' (property_id=1) "
                     "on object 'Generator1' (object_id=2, class='Generator'), membership_id=1, "
-                    f"band_id={expected_band}, count=2. "
-                    "Fix: remove duplicate data rows, keeping only the last."
+                    f"band_id={expected_band}, count=2, data_ids=[1, 2]. "
+                    "Matching context: tags=[], texts=[], date_from=None, date_to=None, memo=None. "
+                    "Reason: these rows assign multiple values to the same static context. "
+                    "No rows were changed. Review the assignments and retain the intended value."
                 ),
             ),
         ]
@@ -1441,25 +1471,31 @@ def test_validate_database_reports_static_property_issues_in_populated_xml_model
             ),
         )
         for artifact_type, table, pid, name, count in (
-            ("tag", "t_tag", 52, "Units", 1),
-            ("tag", "t_tag", 585, "Price", 3),
-            ("tag", "t_tag", 2121, "Flow Coefficient", 2),
-            ("tag", "t_tag", 4934, "Sense", 1),
-            ("tag", "t_tag", 4949, "RHS", 1),
             ("memo", "t_memo_data", 2035, "Max Flow", 1),
             ("memo", "t_memo_data", 2043, "Resistance", 1),
             ("memo", "t_memo_data", 2044, "Reactance", 1),
         )
     ]
-    expected_findings.append(
-        DatabaseValidationFinding(
-            category=DatabaseValidationCategory.PROPERTIES,
-            message=(
-                "Duplicated static data: property 'Price' (property_id=585) "
-                "on object 'Gas' (object_id=7, class='Fuel'), membership_id=6, band_id=1, count=3. "
-                "Fix: remove duplicate data rows, keeping only the last."
-            ),
-        )
+    price_contexts = db_from_model_xml.query(
+        "SELECT tag_object.name, tag_class.lang_id FROM t_data AS data "
+        "JOIN t_tag AS tag ON tag.data_id = data.data_id "
+        "JOIN t_object AS tag_object ON tag_object.object_id = tag.object_id "
+        "JOIN t_class AS tag_class ON tag_class.class_id = tag_object.class_id "
+        "WHERE data.membership_id = 6 AND data.property_id = 585 ORDER BY tag_object.name"
     )
+    assert price_contexts == [
+        ("High Gas Price", 35),
+        ("Low Gas Price", 35),
+        ("Weekly Fuel Prices", 29),
+    ]
+    units_context = db_from_model_xml.query(
+        "SELECT tag_object.name, tag_class.lang_id FROM t_data AS data "
+        "JOIN t_tag AS tag ON tag.data_id = data.data_id "
+        "JOIN t_object AS tag_object ON tag_object.object_id = tag.object_id "
+        "JOIN t_class AS tag_class ON tag_class.class_id = tag_object.class_id "
+        "WHERE data.property_id = 52 AND tag_object.name = 'Run of River'"
+    )
+    assert units_context == [("Run of River", 35)]
+    assert checks_module._find_duplicate_static_data_issues(db_from_model_xml._db) == []
     assert exc_info.value.findings == tuple(expected_findings)
     assert db_from_model_xml._db.connection.total_changes == total_changes
