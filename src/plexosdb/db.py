@@ -14,8 +14,16 @@ import warnings
 from loguru import logger
 
 from . import checks as checks_module
+from .db_constants import (
+    SQLITE_ASCII_CASE_FOLD,
+    SQLITE_BACKEND_KWARGS,
+    SQLITE_QUERY_CHUNK_SIZE,
+    PLEXOS_DEFAULT_SCHEMA,
+    PROPERTY_QUERY,
+    MASTER_TEMPLATE_FILES,
+)
 from .db_manager import SQLiteManager
-from .types import SQLiteRecord
+from .types import SQLiteRecord, SQLiteValue, ValidationResult
 from .enums import (
     ClassEnum,
     CollectionEnum,
@@ -26,12 +34,13 @@ from .enums import (
     parse_collection_enum,
 )
 from .exceptions import (
+    DatabaseValidationCategory,
+    DatabaseValidationError,
     NameError,
     NoPropertiesError,
     NotFoundError,
 )
 from .utils import (
-    SQLITE_ASCII_CASE_FOLD,
     apply_scenario_tags,
     batched,
     create_membership_record,
@@ -46,17 +55,6 @@ from .utils import (
     _normalize_attribute_records,
 )
 from .xml_handler import XMLHandler
-
-SQLITE_BACKEND_KWARGS = {"in_memory"}
-CHECK_QUERY = "SELECT 1 FROM ${schema} ${where_clause}"
-PLEXOS_DEFAULT_SCHEMA = fpath = files("plexosdb").joinpath("schema.sql").read_text(encoding="utf-8-sig")
-PROPERTY_QUERY = files("plexosdb.sql").joinpath("object_properties.sql").read_text(encoding="utf-8-sig")
-MASTER_TEMPLATE_FILES: dict[int, str] = {
-    9: "master_9.2R6_btu.xml",
-    10: "master_10.0R2_btu.xml",
-    11: "master_11.0R4_btu.xml",
-    12: "master_12.0R3_btu.xml",
-}
 
 
 class PropertyRecord(TypedDict, total=False):
@@ -1086,9 +1084,8 @@ class PlexosDB:
         object_names = tuple({record["name"] for record in records})
         name_to_object_id: dict[str, int] = {}
 
-        CHUNK = 900  # noqa: N806
-        for i in range(0, len(object_names), CHUNK):
-            chunk = object_names[i : i + CHUNK]
+        for i in range(0, len(object_names), SQLITE_QUERY_CHUNK_SIZE):
+            chunk = object_names[i : i + SQLITE_QUERY_CHUNK_SIZE]
             object_placeholders = ", ".join("?" for _ in chunk)
 
             object_rows = self._db.query(
@@ -2766,11 +2763,9 @@ class PlexosDB:
             extra = " AND parent_class.name = ? AND collections.name = ?"
             extra_params = [ClassEnum.System.value, collection.value]
 
-        # Specify bound parameter limit
-        CHUNK = 900  # noqa: N806
         all_rows: list[dict[str, Any]] = []
-        for i in range(0, len(names), CHUNK):
-            chunk = names[i : i + CHUNK]
+        for i in range(0, len(names), SQLITE_QUERY_CHUNK_SIZE):
+            chunk = names[i : i + SQLITE_QUERY_CHUNK_SIZE]
             ph = ",".join("?" * len(chunk))
             params = (class_id, *chunk, *extra_params)
             all_rows.extend(
@@ -4818,9 +4813,81 @@ class PlexosDB:
         """Update text data for a property data record."""
         raise NotImplementedError  # pragma: no cover
 
-    def validate_database(self, /, *, fix_issues: bool = False) -> dict[str, list[str]]:
-        """Validate database integrity and consistency."""
-        raise NotImplementedError  # pragma: no cover
+    @staticmethod
+    def validate_value_by_rule(value: SQLiteValue, validation_rule: str) -> ValidationResult:
+        """Validate a numeric value against a PLEXOS validation rule.
+
+        Supports inclusive ``Between X And Y``, ``In (X,Y,Z)``, and comparisons
+        ``>=X``, ``<=X``, ``<X``, and ``>X``. Surrounding whitespace is ignored.
+        Empty rules accept any value. Non-numeric values, malformed rules, and
+        unsupported rules return an invalid ``ValidationResult`` with an error
+        message; valid results have an empty error message.
+
+        Examples
+        --------
+        >>> PlexosDB.validate_value_by_rule(50.0, "Between 1 And 100").is_valid
+        True
+        >>> PlexosDB.validate_value_by_rule(150.0, "Between 1 And 100").error_message
+        'Value 150.0 must be between 1.0 and 100.0'
+        """
+        return checks_module.validate_value_by_rule(value, validation_rule)
+
+    def validate_database(self, /, *, fix_issues: bool = False) -> bool:
+        """Validate the packaged PLEXOS schema and database relationships.
+
+        Checks that required tables and columns exist, SQLite integrity and
+        foreign keys are valid, classes are consistent across objects,
+        memberships, attributes, and properties, and integer-valued attributes
+        marked with ``is_integer``. By default, validation does not modify the
+        database. Findings are ``DatabaseValidationFinding`` instances with a
+        ``DatabaseValidationCategory`` and a message.
+
+        Parameters
+        ----------
+        fix_issues : bool, optional
+            If True, repair membership class IDs only when the referenced object
+            and collection agree, and only when membership findings are the sole
+            findings. Repairs are retained only if validation then passes.
+            Otherwise, only the repairs are rolled back and findings are raised.
+            An existing caller transaction remains open and is not committed or
+            rolled back; without one, successful repairs are committed.
+
+        Returns
+        -------
+        bool
+            True when the database passes all supported checks.
+
+        Raises
+        ------
+        DatabaseValidationError
+            If one or more checks fail. The exception's ``findings`` attribute
+            contains typed validation findings.
+        TypeError
+            If ``fix_issues`` is not a bool.
+        """
+        if not isinstance(fix_issues, bool):
+            raise TypeError("fix_issues must be a bool.")
+
+        findings = checks_module._find_database_validation_issues(self._db)
+        if not findings:
+            return True
+        if not fix_issues or {finding.category for finding in findings} != {
+            DatabaseValidationCategory.MEMBERSHIPS
+        }:
+            raise DatabaseValidationError(findings)
+
+        connection = self._db.connection
+        connection.execute("SAVEPOINT plexosdb_validation")
+        try:
+            checks_module.repair_safe_membership_class_ids(self._db)
+            if checks_module._find_database_validation_issues(self._db):
+                raise DatabaseValidationError(findings)
+        except Exception:
+            connection.execute("ROLLBACK TO SAVEPOINT plexosdb_validation")
+            raise
+        finally:
+            connection.execute("RELEASE SAVEPOINT plexosdb_validation")
+        return True
 
     def _validate_and_filter_objects(
         self, object_names: str | Iterable[str], class_enum: ClassEnum

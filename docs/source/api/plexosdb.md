@@ -1,5 +1,8 @@
 # PlexosDB Class
 
+See [Validating a Database](../howtos/validate_database.md) for
+`validate_database()`, structured findings, limited repairs, and text reports.
+
 The reference below includes the complete `PlexosDB` class surface. Some
 declared methods are reserved for future implementation and currently raise
 `NotImplementedError`; they are listed in the API for transparency but should
@@ -12,7 +15,7 @@ Currently unimplemented methods include `add_custom_column`, `add_metadata`,
 `get_metadata`, `get_property_unit`, `get_text`, `get_unit`, `import_from_csv`,
 `list_reports`, `set_config`, `set_date_range`, `to_csv`, `update_attribute`,
 `update_category`, `update_properties`, `update_property`, `update_scenario`,
-`update_text`, and `validate_database`.
+and `update_text`.
 
 ```{eval-rst}
 .. automodule:: plexosdb.db
