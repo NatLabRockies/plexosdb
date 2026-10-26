@@ -60,6 +60,8 @@ if TYPE_CHECKING:
 
 
 class _StaticDataKey(NamedTuple):
+    """Identify static data assignments sharing the same validation context."""
+
     membership_id: int | None
     property_id: int | None
     band_id: int | None
