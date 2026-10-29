@@ -50,19 +50,6 @@ requires = ["uv_build>=0.8.22,<0.9.0"]
 build-backend = "uv_build"
 
 [dependency-groups]
-docs = [
-    "furo",
-    "sphinx-book-theme",
-    "ghp-import",
-    "myst-parser",
-    "sphinx-copybutton",
-    "sphinx-tabs",
-    "sphinxcontrib-mermaid",
-    "sphinx-autobuild>=2024.10.3",
-    "sphinx-multiversion>=0.2.4",
-    "sphinxcontrib-versioning>=2.2.1",
-    "docstr-coverage>=2.3.2",
-]
 dev = [
     "ipython>=9.2.0",
     "prek>=0.3.3",
