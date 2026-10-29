@@ -10,11 +10,9 @@ Attributes are different from properties in the following ways:
 - Attribute values are assigned directly to individual objects in
   `t_attribute_data`.
 
-:::note
-See the [API Reference](/plexosdb/reference/python-api/) for class-specific attribute
-tables that list available attributes, default values, validation rules and
-descriptions.
-:::
+:::note See the [API Reference](/plexosdb/reference/python-api/) for
+class-specific attribute tables that list available attributes, default values,
+validation rules and descriptions. :::
 
 ## Listing available attributes per `ClassEnum`
 

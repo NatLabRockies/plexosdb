@@ -5,7 +5,6 @@ title: "PlexosDB Documentation"
 PlexosDB is a Python library for working with PLEXOS energy market simulation
 models.
 
-
 ## About PlexosDB
 
 PlexosDB provides a Python interface for working with PLEXOS energy market
@@ -30,8 +29,9 @@ PlexosDB offers the following capabilities:
 
 ## Getting Started
 
-To begin using PlexosDB, start with the [installation guide](/plexosdb/getting-started/installation/)
-and then follow the step-by-step [tutorial](/plexosdb/tutorials/tutorial/).
+To begin using PlexosDB, start with the
+[installation guide](/plexosdb/getting-started/installation/) and then follow
+the step-by-step [tutorial](/plexosdb/tutorials/tutorial/).
 
 ## How-to Guides
 
@@ -40,11 +40,9 @@ Task-oriented guides for specific workflows can be found in the
 
 ## Reference
 
-Complete API documentation is available in the [API Reference](/plexosdb/reference/python-api/)
-section.
+Complete API documentation is available in the
+[API Reference](/plexosdb/reference/python-api/) section.
 
 ## Release Notes
 
 Track changes and updates in the [Release Notes](/plexosdb/changelog/).
-
-

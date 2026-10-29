@@ -8,7 +8,8 @@ inspect its table catalog using the `show_db_tables` helper.
 This guide uses the SQLite-backed `PlexosSolution` imported from
 `plexosdb.solution_reader`. It is separate from the DuckDB-backed class in
 `plexosdb.db_solution`. See the
-[SQLite solution API reference](/plexosdb/reference/api/modules/solution_reader/) for the complete API.
+[SQLite solution API reference](/plexosdb/reference/api/modules/solution_reader/)
+for the complete API.
 
 ## Converting a solution
 

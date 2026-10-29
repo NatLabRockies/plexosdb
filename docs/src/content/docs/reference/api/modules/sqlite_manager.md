@@ -10,7 +10,7 @@ title: "SQLite Manager"
 
 #### SQLiteConfig
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/73e7fabe5e9f951231b6120c139cec1e52d12463/src/plexosdb/db_manager.py#L14)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/783cbe719e0b53a41cf7731131ad55dd171c274a/src/plexosdb/db_manager.py#L14)
 
 SQLite database configuration.
 
@@ -34,7 +34,7 @@ Create optimized config for file-based databases.
 
 #### SQLiteManager
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/73e7fabe5e9f951231b6120c139cec1e52d12463/src/plexosdb/db_manager.py#L49)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/783cbe719e0b53a41cf7731131ad55dd171c274a/src/plexosdb/db_manager.py#L49)
 
 SQLite database manager with optimized transaction support.
 

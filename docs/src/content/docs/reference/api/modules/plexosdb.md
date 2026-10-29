@@ -27,15 +27,16 @@ and `update_text`.
 
 #### PropertyRecord
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/73e7fabe5e9f951231b6120c139cec1e52d12463/src/plexosdb/db.py#L60)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/783cbe719e0b53a41cf7731131ad55dd171c274a/src/plexosdb/db.py#L60)
 
 Type definition for property records returned by iterate_properties.
 
-Full reference: [`PropertyRecord`](/plexosdb/reference/python-api/propertyrecord/).
+Full reference:
+[`PropertyRecord`](/plexosdb/reference/python-api/propertyrecord/).
 
 #### PlexosDB
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/73e7fabe5e9f951231b6120c139cec1e52d12463/src/plexosdb/db.py#L110)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/783cbe719e0b53a41cf7731131ad55dd171c274a/src/plexosdb/db.py#L110)
 
 High-level API for PlexosDB schema manipulation.
 
@@ -503,7 +504,8 @@ Import data from CSV files into the database.
 iterate_properties(self, /, *, class_enum: ClassEnum | None=None, object_names: str | Iterable[str] | None=None, property_names: str | Iterable[str] | None=None, parent_class: ClassEnum | None=None, collection: CollectionEnum | None=None, category: str | None=None, scenario: str | Iterable[str] | None=None, scenario_category: str | Iterable[str] | None=None, batch_size: int=1000) -> Iterator[PropertyRecord]
 ```
 
-Iterate through properties with chunked processing to handle large datasets efficiently.
+Iterate through properties with chunked processing to handle large datasets
+efficiently.
 
 ###### list_attributes
 

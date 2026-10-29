@@ -128,6 +128,5 @@ db.update_scenario(
 )
 ```
 
-:::tip
-Scenarios are a powerful way to compare different model assumptions without duplicating your entire dataset.
-:::
+:::tip Scenarios are a powerful way to compare different model assumptions
+without duplicating your entire dataset. :::

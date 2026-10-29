@@ -73,10 +73,8 @@ redirected output is plain text. Set `NO_COLOR` to disable coloring. The display
 and failure text reports end with `Validation found N errors.`, where `N` is the
 number of findings, not the number of affected database rows.
 
-:::note
-Findings still raise an exception even though their display uses `WARN`.
-The suggested fixes are guidance, not actions performed automatically.
-:::
+:::note Findings still raise an exception even though their display uses `WARN`.
+The suggested fixes are guidance, not actions performed automatically. :::
 
 ## Writing a text report
 

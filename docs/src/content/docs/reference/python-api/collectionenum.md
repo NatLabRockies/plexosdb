@@ -3,7 +3,7 @@ title: "CollectionEnum"
 editUrl: false
 ---
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/73e7fabe5e9f951231b6120c139cec1e52d12463/src/plexosdb/enums.py#L96)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/783cbe719e0b53a41cf7731131ad55dd171c274a/src/plexosdb/enums.py#L96)
 
 Enum that defines the different Plexos colections via Collection Name.
 
@@ -250,4 +250,3 @@ Purchasers = 'Purchasers'
 ```
 
 ## Declared methods
-

@@ -228,8 +228,6 @@ valid_props = db.list_valid_properties(
 print(f"Valid generator properties: {valid_props}")
 ```
 
-:::caution
-Adding an invalid property raises `NameError`; a missing object raises
-`NotFoundError`. Always check if properties are valid for your collection and
-create the target object before adding its properties.
-:::
+:::caution Adding an invalid property raises `NameError`; a missing object
+raises `NotFoundError`. Always check if properties are valid for your collection
+and create the target object before adding its properties. :::

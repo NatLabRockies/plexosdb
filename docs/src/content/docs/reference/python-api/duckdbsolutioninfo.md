@@ -3,7 +3,7 @@ title: "DuckDBSolutionInfo"
 editUrl: false
 ---
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/73e7fabe5e9f951231b6120c139cec1e52d12463/src/plexosdb/db_solution_models.py#L41)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/783cbe719e0b53a41cf7731131ad55dd171c274a/src/plexosdb/db_solution_models.py#L41)
 
 Metadata about a DuckDB-backed PLEXOS solution.
 
@@ -40,4 +40,3 @@ converter_version: Annotated[str | None, 'plexos2duckdb converter version.'] = f
 ```
 
 ## Declared methods
-

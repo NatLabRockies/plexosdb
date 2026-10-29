@@ -64,36 +64,39 @@ def public_names() -> list[str]:
     return [name for name in ast.literal_eval(assignment) if not name.startswith("_")]
 
 
+def definition_name(node: ast.AST) -> str | None:
+    if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+        return node.name
+    if isinstance(node, ast.Assign):
+        return next((target.id for target in node.targets if isinstance(target, ast.Name)), None)
+    if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+        return node.target.id
+    return None
+
+
+def source_definition(module: ast.Module, name: str) -> ast.AST | None:
+    return next((node for node in module.body if definition_name(node) == name), None)
+
+
+def import_source_path(node: ast.ImportFrom) -> Path:
+    module_path = SOURCE.joinpath(*(node.module or "").split("."))
+    source_path = module_path.with_suffix(".py")
+    return source_path if source_path.is_file() else module_path / "__init__.py"
+
+
 def root_export_definitions() -> dict[str, tuple[Path, ast.AST]]:
     root = ast.parse((SOURCE / "__init__.py").read_text())
     names = set(public_names())
-    result = {}
-    for node in root.body:
-        if not isinstance(node, ast.ImportFrom) or node.level == 0:
+    result: dict[str, tuple[Path, ast.AST]] = {}
+    for imported_from in root.body:
+        if not isinstance(imported_from, ast.ImportFrom) or imported_from.level == 0:
             continue
-        module_path = SOURCE.joinpath(*(node.module or "").split("."))
-        source_path = module_path.with_suffix(".py")
-        if not source_path.is_file():
-            source_path = module_path / "__init__.py"
+        source_path = import_source_path(imported_from)
         module = ast.parse(source_path.read_text())
-        for imported in node.names:
+        for imported in imported_from.names:
             export_name = imported.asname or imported.name
-            if export_name not in names:
-                continue
-            for definition in module.body:
-                if isinstance(definition, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
-                    definition_name = definition.name
-                elif isinstance(definition, ast.Assign):
-                    definition_name = next(
-                        (target.id for target in definition.targets if isinstance(target, ast.Name)), None
-                    )
-                elif isinstance(definition, ast.AnnAssign) and isinstance(definition.target, ast.Name):
-                    definition_name = definition.target.id
-                else:
-                    continue
-                if definition_name == imported.name:
-                    result[export_name] = (source_path, definition)
-                    break
+            if export_name in names and (definition := source_definition(module, imported.name)):
+                result[export_name] = (source_path, definition)
     missing = names - result.keys()
     if missing:
         raise KeyError(f"Could not resolve root exports to source: {sorted(missing)}")
@@ -125,10 +128,93 @@ def class_methods(node: ast.ClassDef) -> list[ast.FunctionDef | ast.AsyncFunctio
     ]
 
 
+def render_class_fields(node: ast.ClassDef, route: str) -> tuple[list[str], list[dict[str, str]]]:
+    lines: list[str] = []
+    members: list[dict[str, str]] = []
+    fields = [child for child in node.body if isinstance(child, ast.AnnAssign)]
+    if fields:
+        lines.append("## Declared fields\n")
+    for field in fields:
+        field_name = ast.unparse(field.target)
+        lines += [f"### {field_name}\n", f"```text\n{ast.unparse(field)}\n```\n"]
+        members.append({"label": field_name, "link": route + "#" + anchor(field_name)})
+    return lines, members
+
+
+def is_enum_class(node: ast.ClassDef) -> bool:
+    enum_bases = {"Enum", "StrEnum", "IntEnum", "Flag", "IntFlag"}
+    return any(ast.unparse(base).rsplit(".", 1)[-1] in enum_bases for base in node.bases)
+
+
+def render_enum_values(node: ast.ClassDef, route: str) -> tuple[list[str], list[dict[str, str]]]:
+    lines: list[str] = []
+    members: list[dict[str, str]] = []
+    values = [
+        child
+        for child in node.body
+        if isinstance(child, ast.Assign)
+        and is_enum_class(node)
+        and any(isinstance(target, ast.Name) and not target.id.startswith("_") for target in child.targets)
+    ]
+    if values:
+        lines.append("## Enum values\n")
+    for value in values:
+        for target in value.targets:
+            if isinstance(target, ast.Name) and not target.id.startswith("_"):
+                lines += [f"### {target.id}\n", f"```text\n{ast.unparse(value)}\n```\n"]
+                members.append({"label": target.id, "link": route + "#" + anchor(target.id)})
+    return lines, members
+
+
+def render_class_methods(
+    node: ast.ClassDef,
+    path: Path,
+    route: str,
+    revision: str,
+) -> tuple[list[str], list[dict[str, str]]]:
+    lines = ["## Declared methods\n"]
+    members: list[dict[str, str]] = []
+    for method in class_methods(node):
+        lines += [
+            f"### {method.name}\n",
+            f"[Source]({source_url(path, method, revision)})\n",
+            f"```text\n{function_signature(method)}\n```\n",
+        ]
+        if summary := doc_summary(method):
+            lines.append(summary + "\n")
+        members.append({"label": method.name, "link": route + "#" + anchor(method.name)})
+    return lines, members
+
+
+def render_class(
+    node: ast.ClassDef,
+    path: Path,
+    route: str,
+    revision: str,
+) -> tuple[list[str], list[dict[str, str]]]:
+    lines, members = render_class_fields(node, route)
+    enum_lines, enum_members = render_enum_values(node, route)
+    lines.extend(enum_lines)
+    members.extend(enum_members)
+    constructor = next(
+        (child for child in node.body if isinstance(child, ast.FunctionDef) and child.name == "__init__"),
+        None,
+    )
+    if constructor:
+        lines += ["## Constructor\n", f"```text\n{function_signature(constructor)}\n```\n"]
+    method_lines, method_members = render_class_methods(node, path, route, revision)
+    lines.extend(method_lines)
+    members.extend(method_members)
+    return lines, members
+
+
 def render_object(name: str, path: Path, node: ast.AST, revision: str) -> tuple[str, list[dict[str, str]]]:
     route = f"/reference/python-api/{slug(name)}/"
     members: list[dict[str, str]] = [{"label": name, "link": route}]
-    lines = [f"---\ntitle: {json.dumps(name)}\neditUrl: false\n---\n", f"[Source]({source_url(path, node, revision)})\n"]
+    lines = [
+        f"---\ntitle: {json.dumps(name)}\neditUrl: false\n---\n",
+        f"[Source]({source_url(path, node, revision)})\n",
+    ]
     summary = doc_summary(node)
     if summary:
         lines.append(summary + "\n")
@@ -137,44 +223,9 @@ def render_object(name: str, path: Path, node: ast.AST, revision: str) -> tuple[
     lines += ["## Import\n", f"```python\nfrom {imported_from} import {name}\n```\n"]
 
     if isinstance(node, ast.ClassDef):
-        fields = [child for child in node.body if isinstance(child, ast.AnnAssign)]
-        if fields:
-            lines.append("## Declared fields\n")
-            for field in fields:
-                field_name = ast.unparse(field.target)
-                lines += [f"### {field_name}\n", f"```text\n{ast.unparse(field)}\n```\n"]
-                members.append({"label": field_name, "link": route + "#" + anchor(field_name)})
-        enum_values = [
-            child
-            for child in node.body
-            if isinstance(child, ast.Assign)
-            and any(ast.unparse(base).rsplit(".", 1)[-1] in {"Enum", "StrEnum", "IntEnum", "Flag", "IntFlag"} for base in node.bases)
-            and any(isinstance(target, ast.Name) and not target.id.startswith("_") for target in child.targets)
-        ]
-        if enum_values:
-            lines.append("## Enum values\n")
-            for value in enum_values:
-                for target in value.targets:
-                    if isinstance(target, ast.Name) and not target.id.startswith("_"):
-                        lines += [f"### {target.id}\n", f"```text\n{ast.unparse(value)}\n```\n"]
-                        members.append({"label": target.id, "link": route + "#" + anchor(target.id)})
-        constructor = next(
-            (child for child in node.body if isinstance(child, ast.FunctionDef) and child.name == "__init__"),
-            None,
-        )
-        if constructor:
-            lines += ["## Constructor\n", f"```text\n{function_signature(constructor)}\n```\n"]
-        lines.append("## Declared methods\n")
-        methods = class_methods(node)
-        for method in methods:
-            lines += [
-                f"### {method.name}\n",
-                f"[Source]({source_url(path, method, revision)})\n",
-                f"```text\n{function_signature(method)}\n```\n",
-            ]
-            if summary := doc_summary(method):
-                lines.append(summary + "\n")
-            members.append({"label": method.name, "link": route + "#" + anchor(method.name)})
+        class_lines, class_members = render_class(node, path, route, revision)
+        lines.extend(class_lines)
+        members.extend(class_members)
     elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
         lines += ["## Signature\n", f"```text\n{function_signature(node)}\n```\n"]
     else:
@@ -204,13 +255,89 @@ def module_definitions(path: Path) -> list[ast.AST]:
     nodes = ast.parse(path.read_text()).body
     result = []
     for node in nodes:
-        if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and not node.name.startswith("_"):
+        if isinstance(
+            node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
+        ) and not node.name.startswith("_"):
             result.append(node)
         elif isinstance(node, (ast.Assign, ast.AnnAssign)):
             targets = node.targets if isinstance(node, ast.Assign) else [node.target]
             if any(isinstance(target, ast.Name) and not target.id.startswith("_") for target in targets):
                 result.append(node)
     return result
+
+
+def module_definition_name(node: ast.AST) -> str:
+    if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+        return node.name
+    targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+    return next(
+        target.id for target in targets if isinstance(target, ast.Name) and not target.id.startswith("_")
+    )
+
+
+def render_module_methods(
+    module: str,
+    name: str,
+    methods: list[ast.FunctionDef | ast.AsyncFunctionDef],
+    public_route: str,
+    fragments: dict[str, str],
+) -> list[str]:
+    lines = ["##### Methods\n"]
+    for method in methods:
+        method_anchor = anchor(method.name)
+        lines += [f"###### {method.name}\n", f"```text\n{function_signature(method)}\n```\n"]
+        if summary := doc_summary(method):
+            lines.append(summary + "\n")
+        fragments[f"{module}.{name}.{method.name}"] = public_route + "#" + method_anchor
+        fragments[f"plexosdb.{module.removeprefix('plexosdb.')}.{name}.{method.name}"] = (
+            public_route + "#" + method_anchor
+        )
+    return lines
+
+
+def render_module_class(
+    module: str,
+    name: str,
+    node: ast.ClassDef,
+    exported: set[str],
+    public_route: str,
+    fragments: dict[str, str],
+) -> list[str]:
+    lines = []
+    methods = class_methods(node)
+    if methods:
+        lines.extend(render_module_methods(module, name, methods, public_route, fragments))
+    if name in exported:
+        object_route = f"/plexosdb/reference/python-api/{slug(name)}/"
+        lines.append(f"Full reference: [`{name}`]({object_route}).\n")
+        fragments[f"{module}.{name}"] = object_route
+        fragments[f"plexosdb.{module.removeprefix('plexosdb.')}.{name}"] = object_route
+    return lines
+
+
+def render_module_definition(
+    module: str,
+    path: Path,
+    node: ast.AST,
+    revision: str,
+    exported: set[str],
+    public_route: str,
+    fragments: dict[str, str],
+) -> list[str]:
+    name = module_definition_name(node)
+    lines = [f"#### {name}\n", f"[Source]({source_url(path, node, revision)})\n"]
+    if summary := doc_summary(node):
+        lines.append(summary + "\n")
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        lines.append(f"```text\n{function_signature(node)}\n```\n")
+    elif isinstance(node, ast.ClassDef):
+        lines.extend(render_module_class(module, name, node, exported, public_route, fragments))
+    else:
+        lines.append(f"```text\n{ast.unparse(node)}\n```\n")
+    name_anchor = anchor(name)
+    fragments[f"{module}.{name}"] = public_route + "#" + name_anchor
+    fragments[f"plexosdb.{module.removeprefix('plexosdb.')}.{name}"] = public_route + "#" + name_anchor
+    return lines
 
 
 def append_module_reference(
@@ -227,42 +354,9 @@ def append_module_reference(
     for module, path in module_sources:
         lines.append(f"### {module}\n")
         for node in module_definitions(path):
-            name = node.name if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) else None
-            if name is None:
-                targets = node.targets if isinstance(node, ast.Assign) else [node.target]
-                name = next(
-                    target.id
-                    for target in targets
-                    if isinstance(target, ast.Name) and not target.id.startswith("_")
-                )
-            name_anchor = anchor(name)
-            lines += [f"#### {name}\n", f"[Source]({source_url(path, node, revision)})\n"]
-            if summary := doc_summary(node):
-                lines.append(summary + "\n")
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                lines.append(f"```text\n{function_signature(node)}\n```\n")
-            elif isinstance(node, ast.ClassDef):
-                methods = class_methods(node)
-                if methods:
-                    lines.append("##### Methods\n")
-                for method in methods:
-                    method_anchor = anchor(method.name)
-                    lines += [f"###### {method.name}\n", f"```text\n{function_signature(method)}\n```\n"]
-                    if summary := doc_summary(method):
-                        lines.append(summary + "\n")
-                    fragments[f"{module}.{name}.{method.name}"] = public_route + "#" + method_anchor
-                    fragments[f"plexosdb.{module.removeprefix('plexosdb.')}.{name}.{method.name}"] = (
-                        public_route + "#" + method_anchor
-                    )
-                if name in exported:
-                    object_route = f"/plexosdb/reference/python-api/{slug(name)}/"
-                    lines.append(f"Full reference: [`{name}`]({object_route}).\n")
-                    fragments[f"{module}.{name}"] = object_route
-                    fragments[f"plexosdb.{module.removeprefix('plexosdb.')}.{name}"] = object_route
-            else:
-                lines.append(f"```text\n{ast.unparse(node)}\n```\n")
-            fragments[f"{module}.{name}"] = public_route + "#" + name_anchor
-            fragments[f"plexosdb.{module.removeprefix('plexosdb.')}.{name}"] = public_route + "#" + name_anchor
+            lines.extend(
+                render_module_definition(module, path, node, revision, exported, public_route, fragments)
+            )
     existing = destination.read_text()
     if GENERATED_START in existing:
         existing = existing.split(GENERATED_START, 1)[0].rstrip()

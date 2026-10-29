@@ -3,7 +3,7 @@ title: "DatabaseValidationError"
 editUrl: false
 ---
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/73e7fabe5e9f951231b6120c139cec1e52d12463/src/plexosdb/exceptions.py#L43)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/783cbe719e0b53a41cf7731131ad55dd171c274a/src/plexosdb/exceptions.py#L43)
 
 Raised when database validation finds integrity or consistency issues.
 
@@ -20,4 +20,3 @@ __init__(self, findings: Iterable[DatabaseValidationFinding]) -> None
 ```
 
 ## Declared methods
-

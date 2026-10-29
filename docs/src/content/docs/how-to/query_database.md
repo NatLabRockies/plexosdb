@@ -120,6 +120,5 @@ categories = db.list_categories(ClassEnum.Generator)
 print(f"Generator categories: {categories}")
 ```
 
-:::note
-For very large databases, always use iteration methods or add appropriate filters to avoid memory issues.
-:::
+:::note For very large databases, always use iteration methods or add
+appropriate filters to avoid memory issues. :::

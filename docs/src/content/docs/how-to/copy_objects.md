@@ -46,9 +46,8 @@ new_object_id = db.copy_object(
 print(f"Created new object with ID: {new_object_id}")
 ```
 
-:::note
-Object-level attributes (stored in `t_attribute_data`) are also copied when using `copy_object`.
-:::
+:::note Object-level attributes (stored in `t_attribute_data`) are also copied
+when using `copy_object`. :::
 
 ## Copying Objects Without Properties
 
@@ -187,6 +186,6 @@ db.add_object(ClassEnum.Generator, "Generator1")
 duplicate_generator_with_connections(db, "Generator1", "Generator1_Full_Copy")
 ```
 
-:::note
-When copying objects with properties that reference other objects (like "Node" for a generator), you may need to update these properties manually if you want them to reference different objects.
-:::
+:::note When copying objects with properties that reference other objects (like
+"Node" for a generator), you may need to update these properties manually if you
+want them to reference different objects. :::

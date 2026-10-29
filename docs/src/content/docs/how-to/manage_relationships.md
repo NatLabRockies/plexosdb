@@ -182,6 +182,5 @@ for record in membership_records:
 db.add_memberships_from_records(db_records)
 ```
 
-:::note
-Every object in PlexosDB automatically has a system membership when created. This links the object to the "System" object.
-:::
+:::note Every object in PlexosDB automatically has a system membership when
+created. This links the object to the "System" object. :::

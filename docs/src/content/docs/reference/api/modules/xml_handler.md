@@ -10,7 +10,7 @@ title: "XML Handler"
 
 #### PLEXOS_NAMESPACE
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/73e7fabe5e9f951231b6120c139cec1e52d12463/src/plexosdb/xml_handler.py#L14)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/783cbe719e0b53a41cf7731131ad55dd171c274a/src/plexosdb/xml_handler.py#L14)
 
 ```text
 PLEXOS_NAMESPACE = 'http://tempuri.org/MasterDataSet.xsd'
@@ -18,7 +18,7 @@ PLEXOS_NAMESPACE = 'http://tempuri.org/MasterDataSet.xsd'
 
 #### XMLHandler
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/73e7fabe5e9f951231b6120c139cec1e52d12463/src/plexosdb/xml_handler.py#L17)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/783cbe719e0b53a41cf7731131ad55dd171c274a/src/plexosdb/xml_handler.py#L17)
 
 PLEXOS XML handler.
 
@@ -68,7 +68,7 @@ Full reference: [`XMLHandler`](/plexosdb/reference/python-api/xmlhandler/).
 
 #### xml_query
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/73e7fabe5e9f951231b6120c139cec1e52d12463/src/plexosdb/xml_handler.py#L275)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/783cbe719e0b53a41cf7731131ad55dd171c274a/src/plexosdb/xml_handler.py#L275)
 
 Construct XPath query for extracting data from a XML with no namespace.
 

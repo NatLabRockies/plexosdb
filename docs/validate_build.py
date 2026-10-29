@@ -23,6 +23,7 @@ class Page(HTMLParser):
         self.feed(path.read_text())
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        """Collect IDs and links from one HTML start tag."""
         attributes = dict(attrs)
         if identifier := attributes.get("id"):
             self.ids.add(identifier)

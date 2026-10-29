@@ -3,7 +3,7 @@ title: "DuckDBResult"
 editUrl: false
 ---
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/73e7fabe5e9f951231b6120c139cec1e52d12463/src/plexosdb/db_solution_models.py#L17)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/783cbe719e0b53a41cf7731131ad55dd171c274a/src/plexosdb/db_solution_models.py#L17)
 
 Result returned by :meth:`plexosdb.db_solution.PlexosSolution.to_duckdb`.
 
@@ -31,11 +31,10 @@ tables: Annotated[list[str], 'Names of tables present in the raw DuckDB schema a
 
 ### is_in_memory
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/73e7fabe5e9f951231b6120c139cec1e52d12463/src/plexosdb/db_solution_models.py#L35)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/783cbe719e0b53a41cf7731131ad55dd171c274a/src/plexosdb/db_solution_models.py#L35)
 
 ```text
 is_in_memory(self) -> bool
 ```
 
-Return *True* when the database lives in memory only.
-
+Return _True_ when the database lives in memory only.

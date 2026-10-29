@@ -7,8 +7,9 @@ and SQL queries over result tables from a PLEXOS solution ZIP file. Import it
 from `plexosdb.db_solution`; the SQLite-backed class in
 `plexosdb.solution_reader` is a separate implementation.
 
-See the [DuckDB solution API reference](/plexosdb/reference/api/modules/db_solution/) for the full
-method and result-type documentation.
+See the
+[DuckDB solution API reference](/plexosdb/reference/api/modules/db_solution/)
+for the full method and result-type documentation.
 
 ## Converting a solution
 

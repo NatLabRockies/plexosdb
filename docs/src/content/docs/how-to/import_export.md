@@ -20,8 +20,9 @@ version = db.version
 print(f"Imported PLEXOS model version: {version}")
 ```
 
-After importing, see [Validating a Database](/plexosdb/how-to/validate_database/) to check
-model consistency and write findings to a text report.
+After importing, see
+[Validating a Database](/plexosdb/how-to/validate_database/) to check model
+consistency and write findings to a text report.
 
 ## Importing a PLEXOS solution ZIP and reading report tables
 
@@ -85,8 +86,6 @@ db.create_schema(version=10)
 
 ```
 
-:::caution
-When working with large XML files, ensure you have sufficient memory and disk
-space for the operations. CSV conversion and database backup are not currently
-implemented.
-:::
+:::caution When working with large XML files, ensure you have sufficient memory
+and disk space for the operations. CSV conversion and database backup are not
+currently implemented. :::

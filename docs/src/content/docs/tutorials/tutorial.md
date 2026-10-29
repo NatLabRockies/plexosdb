@@ -11,7 +11,8 @@ market simulation models.
 Before starting this tutorial, ensure you have:
 
 - Python 3.7 or higher installed
-- PlexosDB installed (see [Installation](/plexosdb/getting-started/installation/))
+- PlexosDB installed (see
+  [Installation](/plexosdb/getting-started/installation/))
 - Basic understanding of energy market modeling concepts
 
 ## Learning Objectives
@@ -520,5 +521,6 @@ db.add_properties_from_records(
 Now that you have completed the tutorial, you can:
 
 1. Explore the [How-to Guides](/plexosdb/how-to/) for specific tasks
-2. Consult the [API Reference](/plexosdb/reference/python-api/) for detailed method documentation
+2. Consult the [API Reference](/plexosdb/reference/python-api/) for detailed
+   method documentation
 3. Review examples in the source code test files

@@ -10,9 +10,7 @@ distinguish it from the SQLite-backed solution reader:
 from plexosdb.db_solution import PlexosSolution
 ```
 
-
 ## Result Types
-
 
 See [Reading a PLEXOS Solution](/plexosdb/how-to/read_solution/) for a complete
 ZIP-to-DuckDB workflow.
@@ -25,9 +23,9 @@ ZIP-to-DuckDB workflow.
 
 #### PlexosSolution
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/73e7fabe5e9f951231b6120c139cec1e52d12463/src/plexosdb/db_solution.py#L40)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/783cbe719e0b53a41cf7731131ad55dd171c274a/src/plexosdb/db_solution.py#L40)
 
-PLEXOS solution wrapper backed by ``plexos2duckdb``.
+PLEXOS solution wrapper backed by `plexos2duckdb`.
 
 ##### Methods
 
@@ -45,7 +43,7 @@ Create a solution wrapper bound to a PLEXOS solution path.
 to_duckdb(self, database: str | Path | None=None, *, if_exists: IfExists='reuse', n_threads: int | None=None, table_name_pattern: str | None=None, in_memory: bool | None=None) -> DuckDBResult
 ```
 
-Convert the solution with ``plexos2duckdb`` and open a DuckDB connection.
+Convert the solution with `plexos2duckdb` and open a DuckDB connection.
 
 ###### info
 
@@ -143,13 +141,14 @@ close(self) -> None
 
 Close the active DuckDB connection.
 
-Full reference: [`PlexosSolution`](/plexosdb/reference/python-api/plexossolution/).
+Full reference:
+[`PlexosSolution`](/plexosdb/reference/python-api/plexossolution/).
 
 ### plexosdb.db_solution_models
 
 #### DuckDBSchema
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/73e7fabe5e9f951231b6120c139cec1e52d12463/src/plexosdb/db_solution_models.py#L11)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/783cbe719e0b53a41cf7731131ad55dd171c274a/src/plexosdb/db_solution_models.py#L11)
 
 ```text
 DuckDBSchema = Literal['raw', 'processed', 'data', 'report']
@@ -157,7 +156,7 @@ DuckDBSchema = Literal['raw', 'processed', 'data', 'report']
 
 #### IfExists
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/73e7fabe5e9f951231b6120c139cec1e52d12463/src/plexosdb/db_solution_models.py#L12)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/783cbe719e0b53a41cf7731131ad55dd171c274a/src/plexosdb/db_solution_models.py#L12)
 
 ```text
 IfExists = Literal['fail', 'reuse', 'replace']
@@ -165,7 +164,7 @@ IfExists = Literal['fail', 'reuse', 'replace']
 
 #### ResultSchema
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/73e7fabe5e9f951231b6120c139cec1e52d12463/src/plexosdb/db_solution_models.py#L13)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/783cbe719e0b53a41cf7731131ad55dd171c274a/src/plexosdb/db_solution_models.py#L13)
 
 ```text
 ResultSchema = Literal['data', 'report']
@@ -173,7 +172,7 @@ ResultSchema = Literal['data', 'report']
 
 #### DuckDBResult
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/73e7fabe5e9f951231b6120c139cec1e52d12463/src/plexosdb/db_solution_models.py#L17)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/783cbe719e0b53a41cf7731131ad55dd171c274a/src/plexosdb/db_solution_models.py#L17)
 
 Result returned by :meth:`plexosdb.db_solution.PlexosSolution.to_duckdb`.
 
@@ -185,21 +184,22 @@ Result returned by :meth:`plexosdb.db_solution.PlexosSolution.to_duckdb`.
 is_in_memory(self) -> bool
 ```
 
-Return *True* when the database lives in memory only.
+Return _True_ when the database lives in memory only.
 
 Full reference: [`DuckDBResult`](/plexosdb/reference/python-api/duckdbresult/).
 
 #### DuckDBSolutionInfo
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/73e7fabe5e9f951231b6120c139cec1e52d12463/src/plexosdb/db_solution_models.py#L41)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/783cbe719e0b53a41cf7731131ad55dd171c274a/src/plexosdb/db_solution_models.py#L41)
 
 Metadata about a DuckDB-backed PLEXOS solution.
 
-Full reference: [`DuckDBSolutionInfo`](/plexosdb/reference/python-api/duckdbsolutioninfo/).
+Full reference:
+[`DuckDBSolutionInfo`](/plexosdb/reference/python-api/duckdbsolutioninfo/).
 
 #### TableInfo
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/73e7fabe5e9f951231b6120c139cec1e52d12463/src/plexosdb/db_solution_models.py#L64)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/783cbe719e0b53a41cf7731131ad55dd171c274a/src/plexosdb/db_solution_models.py#L64)
 
 Metadata about one table or view in a DuckDB solution schema.
 
@@ -207,7 +207,7 @@ Full reference: [`TableInfo`](/plexosdb/reference/python-api/tableinfo/).
 
 #### ResultTable
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/73e7fabe5e9f951231b6120c139cec1e52d12463/src/plexosdb/db_solution_models.py#L79)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/783cbe719e0b53a41cf7731131ad55dd171c274a/src/plexosdb/db_solution_models.py#L79)
 
 Metadata for one PLEXOS solution result table or view.
 
