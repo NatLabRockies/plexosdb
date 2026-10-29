@@ -1,0 +1,1166 @@
+{
+  "exports": [
+    {
+      "label": "ClassEnum",
+      "collapsed": true,
+      "items": [
+        {
+          "label": "ClassEnum",
+          "link": "/reference/python-api/classenum/"
+        },
+        {
+          "label": "System",
+          "link": "/reference/python-api/classenum/#system"
+        },
+        {
+          "label": "Generator",
+          "link": "/reference/python-api/classenum/#generator"
+        },
+        {
+          "label": "Fuel",
+          "link": "/reference/python-api/classenum/#fuel"
+        },
+        {
+          "label": "Battery",
+          "link": "/reference/python-api/classenum/#battery"
+        },
+        {
+          "label": "Storage",
+          "link": "/reference/python-api/classenum/#storage"
+        },
+        {
+          "label": "Emission",
+          "link": "/reference/python-api/classenum/#emission"
+        },
+        {
+          "label": "Reserve",
+          "link": "/reference/python-api/classenum/#reserve"
+        },
+        {
+          "label": "Region",
+          "link": "/reference/python-api/classenum/#region"
+        },
+        {
+          "label": "Zone",
+          "link": "/reference/python-api/classenum/#zone"
+        },
+        {
+          "label": "Node",
+          "link": "/reference/python-api/classenum/#node"
+        },
+        {
+          "label": "Line",
+          "link": "/reference/python-api/classenum/#line"
+        },
+        {
+          "label": "Transformer",
+          "link": "/reference/python-api/classenum/#transformer"
+        },
+        {
+          "label": "Interface",
+          "link": "/reference/python-api/classenum/#interface"
+        },
+        {
+          "label": "DataFile",
+          "link": "/reference/python-api/classenum/#datafile"
+        },
+        {
+          "label": "Timeslice",
+          "link": "/reference/python-api/classenum/#timeslice"
+        },
+        {
+          "label": "Scenario",
+          "link": "/reference/python-api/classenum/#scenario"
+        },
+        {
+          "label": "Model",
+          "link": "/reference/python-api/classenum/#model"
+        },
+        {
+          "label": "Horizon",
+          "link": "/reference/python-api/classenum/#horizon"
+        },
+        {
+          "label": "Report",
+          "link": "/reference/python-api/classenum/#report"
+        },
+        {
+          "label": "PASA",
+          "link": "/reference/python-api/classenum/#pasa"
+        },
+        {
+          "label": "MTSchedule",
+          "link": "/reference/python-api/classenum/#mtschedule"
+        },
+        {
+          "label": "STSchedule",
+          "link": "/reference/python-api/classenum/#stschedule"
+        },
+        {
+          "label": "Transmission",
+          "link": "/reference/python-api/classenum/#transmission"
+        },
+        {
+          "label": "Diagnostic",
+          "link": "/reference/python-api/classenum/#diagnostic"
+        },
+        {
+          "label": "Production",
+          "link": "/reference/python-api/classenum/#production"
+        },
+        {
+          "label": "Performance",
+          "link": "/reference/python-api/classenum/#performance"
+        },
+        {
+          "label": "Variable",
+          "link": "/reference/python-api/classenum/#variable"
+        },
+        {
+          "label": "Constraint",
+          "link": "/reference/python-api/classenum/#constraint"
+        },
+        {
+          "label": "Purchaser",
+          "link": "/reference/python-api/classenum/#purchaser"
+        }
+      ]
+    },
+    {
+      "label": "CollectionEnum",
+      "collapsed": true,
+      "items": [
+        {
+          "label": "CollectionEnum",
+          "link": "/reference/python-api/collectionenum/"
+        },
+        {
+          "label": "Generators",
+          "link": "/reference/python-api/collectionenum/#generators"
+        },
+        {
+          "label": "Fuels",
+          "link": "/reference/python-api/collectionenum/#fuels"
+        },
+        {
+          "label": "HeadStorage",
+          "link": "/reference/python-api/collectionenum/#headstorage"
+        },
+        {
+          "label": "TailStorage",
+          "link": "/reference/python-api/collectionenum/#tailstorage"
+        },
+        {
+          "label": "Nodes",
+          "link": "/reference/python-api/collectionenum/#nodes"
+        },
+        {
+          "label": "Storages",
+          "link": "/reference/python-api/collectionenum/#storages"
+        },
+        {
+          "label": "Emissions",
+          "link": "/reference/python-api/collectionenum/#emissions"
+        },
+        {
+          "label": "Reserves",
+          "link": "/reference/python-api/collectionenum/#reserves"
+        },
+        {
+          "label": "Batteries",
+          "link": "/reference/python-api/collectionenum/#batteries"
+        },
+        {
+          "label": "Regions",
+          "link": "/reference/python-api/collectionenum/#regions"
+        },
+        {
+          "label": "Zones",
+          "link": "/reference/python-api/collectionenum/#zones"
+        },
+        {
+          "label": "Region",
+          "link": "/reference/python-api/collectionenum/#region"
+        },
+        {
+          "label": "Zone",
+          "link": "/reference/python-api/collectionenum/#zone"
+        },
+        {
+          "label": "Lines",
+          "link": "/reference/python-api/collectionenum/#lines"
+        },
+        {
+          "label": "NodeFrom",
+          "link": "/reference/python-api/collectionenum/#nodefrom"
+        },
+        {
+          "label": "NodeTo",
+          "link": "/reference/python-api/collectionenum/#nodeto"
+        },
+        {
+          "label": "Transformers",
+          "link": "/reference/python-api/collectionenum/#transformers"
+        },
+        {
+          "label": "Interfaces",
+          "link": "/reference/python-api/collectionenum/#interfaces"
+        },
+        {
+          "label": "Models",
+          "link": "/reference/python-api/collectionenum/#models"
+        },
+        {
+          "label": "Scenario",
+          "link": "/reference/python-api/collectionenum/#scenario"
+        },
+        {
+          "label": "Scenarios",
+          "link": "/reference/python-api/collectionenum/#scenarios"
+        },
+        {
+          "label": "Horizon",
+          "link": "/reference/python-api/collectionenum/#horizon"
+        },
+        {
+          "label": "Horizons",
+          "link": "/reference/python-api/collectionenum/#horizons"
+        },
+        {
+          "label": "Report",
+          "link": "/reference/python-api/collectionenum/#report"
+        },
+        {
+          "label": "Reports",
+          "link": "/reference/python-api/collectionenum/#reports"
+        },
+        {
+          "label": "ReferenceNode",
+          "link": "/reference/python-api/collectionenum/#referencenode"
+        },
+        {
+          "label": "PASA",
+          "link": "/reference/python-api/collectionenum/#pasa"
+        },
+        {
+          "label": "MTSchedule",
+          "link": "/reference/python-api/collectionenum/#mtschedule"
+        },
+        {
+          "label": "STSchedule",
+          "link": "/reference/python-api/collectionenum/#stschedule"
+        },
+        {
+          "label": "Transmission",
+          "link": "/reference/python-api/collectionenum/#transmission"
+        },
+        {
+          "label": "Production",
+          "link": "/reference/python-api/collectionenum/#production"
+        },
+        {
+          "label": "Diagnostic",
+          "link": "/reference/python-api/collectionenum/#diagnostic"
+        },
+        {
+          "label": "Diagnostics",
+          "link": "/reference/python-api/collectionenum/#diagnostics"
+        },
+        {
+          "label": "Performance",
+          "link": "/reference/python-api/collectionenum/#performance"
+        },
+        {
+          "label": "DataFiles",
+          "link": "/reference/python-api/collectionenum/#datafiles"
+        },
+        {
+          "label": "Constraint",
+          "link": "/reference/python-api/collectionenum/#constraint"
+        },
+        {
+          "label": "Constraints",
+          "link": "/reference/python-api/collectionenum/#constraints"
+        },
+        {
+          "label": "Variables",
+          "link": "/reference/python-api/collectionenum/#variables"
+        },
+        {
+          "label": "Purchasers",
+          "link": "/reference/python-api/collectionenum/#purchasers"
+        }
+      ]
+    },
+    {
+      "label": "DatabaseValidationCategory",
+      "collapsed": true,
+      "items": [
+        {
+          "label": "DatabaseValidationCategory",
+          "link": "/reference/python-api/databasevalidationcategory/"
+        },
+        {
+          "label": "SQLITE",
+          "link": "/reference/python-api/databasevalidationcategory/#sqlite"
+        },
+        {
+          "label": "FOREIGN_KEYS",
+          "link": "/reference/python-api/databasevalidationcategory/#foreign_keys"
+        },
+        {
+          "label": "SCHEMA",
+          "link": "/reference/python-api/databasevalidationcategory/#schema"
+        },
+        {
+          "label": "OBJECTS",
+          "link": "/reference/python-api/databasevalidationcategory/#objects"
+        },
+        {
+          "label": "MEMBERSHIPS",
+          "link": "/reference/python-api/databasevalidationcategory/#memberships"
+        },
+        {
+          "label": "ATTRIBUTES",
+          "link": "/reference/python-api/databasevalidationcategory/#attributes"
+        },
+        {
+          "label": "PROPERTIES",
+          "link": "/reference/python-api/databasevalidationcategory/#properties"
+        },
+        {
+          "label": "TYPES",
+          "link": "/reference/python-api/databasevalidationcategory/#types"
+        }
+      ]
+    },
+    {
+      "label": "DatabaseValidationError",
+      "collapsed": true,
+      "items": [
+        {
+          "label": "DatabaseValidationError",
+          "link": "/reference/python-api/databasevalidationerror/"
+        }
+      ]
+    },
+    {
+      "label": "DatabaseValidationFinding",
+      "collapsed": true,
+      "items": [
+        {
+          "label": "DatabaseValidationFinding",
+          "link": "/reference/python-api/databasevalidationfinding/"
+        },
+        {
+          "label": "category",
+          "link": "/reference/python-api/databasevalidationfinding/#category"
+        },
+        {
+          "label": "message",
+          "link": "/reference/python-api/databasevalidationfinding/#message"
+        }
+      ]
+    },
+    {
+      "label": "DuckDBResult",
+      "collapsed": true,
+      "items": [
+        {
+          "label": "DuckDBResult",
+          "link": "/reference/python-api/duckdbresult/"
+        },
+        {
+          "label": "database",
+          "link": "/reference/python-api/duckdbresult/#database"
+        },
+        {
+          "label": "tables",
+          "link": "/reference/python-api/duckdbresult/#tables"
+        },
+        {
+          "label": "is_in_memory",
+          "link": "/reference/python-api/duckdbresult/#is_in_memory"
+        }
+      ]
+    },
+    {
+      "label": "DuckDBSchema",
+      "collapsed": true,
+      "items": [
+        {
+          "label": "DuckDBSchema",
+          "link": "/reference/python-api/duckdbschema/"
+        }
+      ]
+    },
+    {
+      "label": "DuckDBSolutionInfo",
+      "collapsed": true,
+      "items": [
+        {
+          "label": "DuckDBSolutionInfo",
+          "link": "/reference/python-api/duckdbsolutioninfo/"
+        },
+        {
+          "label": "database",
+          "link": "/reference/python-api/duckdbsolutioninfo/#database"
+        },
+        {
+          "label": "source",
+          "link": "/reference/python-api/duckdbsolutioninfo/#source"
+        },
+        {
+          "label": "model_name",
+          "link": "/reference/python-api/duckdbsolutioninfo/#model_name"
+        },
+        {
+          "label": "converter_version",
+          "link": "/reference/python-api/duckdbsolutioninfo/#converter_version"
+        }
+      ]
+    },
+    {
+      "label": "IfExists",
+      "collapsed": true,
+      "items": [
+        {
+          "label": "IfExists",
+          "link": "/reference/python-api/ifexists/"
+        }
+      ]
+    },
+    {
+      "label": "PeriodEnum",
+      "collapsed": true,
+      "items": [
+        {
+          "label": "PeriodEnum",
+          "link": "/reference/python-api/periodenum/"
+        },
+        {
+          "label": "INTERVAL",
+          "link": "/reference/python-api/periodenum/#interval"
+        },
+        {
+          "label": "DAY",
+          "link": "/reference/python-api/periodenum/#day"
+        },
+        {
+          "label": "WEEK",
+          "link": "/reference/python-api/periodenum/#week"
+        },
+        {
+          "label": "MONTH",
+          "link": "/reference/python-api/periodenum/#month"
+        },
+        {
+          "label": "YEAR",
+          "link": "/reference/python-api/periodenum/#year"
+        },
+        {
+          "label": "HOUR",
+          "link": "/reference/python-api/periodenum/#hour"
+        },
+        {
+          "label": "QUARTER",
+          "link": "/reference/python-api/periodenum/#quarter"
+        }
+      ]
+    },
+    {
+      "label": "PhaseEnum",
+      "collapsed": true,
+      "items": [
+        {
+          "label": "PhaseEnum",
+          "link": "/reference/python-api/phaseenum/"
+        },
+        {
+          "label": "LT",
+          "link": "/reference/python-api/phaseenum/#lt"
+        },
+        {
+          "label": "PASA",
+          "link": "/reference/python-api/phaseenum/#pasa"
+        },
+        {
+          "label": "MT",
+          "link": "/reference/python-api/phaseenum/#mt"
+        },
+        {
+          "label": "ST",
+          "link": "/reference/python-api/phaseenum/#st"
+        }
+      ]
+    },
+    {
+      "label": "PlexosDB",
+      "collapsed": true,
+      "items": [
+        {
+          "label": "PlexosDB",
+          "link": "/reference/python-api/plexosdb/"
+        },
+        {
+          "label": "version",
+          "link": "/reference/python-api/plexosdb/#version"
+        },
+        {
+          "label": "from_xml",
+          "link": "/reference/python-api/plexosdb/#from_xml"
+        },
+        {
+          "label": "add_attribute",
+          "link": "/reference/python-api/plexosdb/#add_attribute"
+        },
+        {
+          "label": "add_band",
+          "link": "/reference/python-api/plexosdb/#add_band"
+        },
+        {
+          "label": "add_category",
+          "link": "/reference/python-api/plexosdb/#add_category"
+        },
+        {
+          "label": "add_custom_column",
+          "link": "/reference/python-api/plexosdb/#add_custom_column"
+        },
+        {
+          "label": "add_datafile_tag",
+          "link": "/reference/python-api/plexosdb/#add_datafile_tag"
+        },
+        {
+          "label": "add_membership",
+          "link": "/reference/python-api/plexosdb/#add_membership"
+        },
+        {
+          "label": "add_memberships_from_records",
+          "link": "/reference/python-api/plexosdb/#add_memberships_from_records"
+        },
+        {
+          "label": "add_metadata",
+          "link": "/reference/python-api/plexosdb/#add_metadata"
+        },
+        {
+          "label": "add_object",
+          "link": "/reference/python-api/plexosdb/#add_object"
+        },
+        {
+          "label": "add_objects",
+          "link": "/reference/python-api/plexosdb/#add_objects"
+        },
+        {
+          "label": "add_properties_from_records",
+          "link": "/reference/python-api/plexosdb/#add_properties_from_records"
+        },
+        {
+          "label": "add_attributes_from_records",
+          "link": "/reference/python-api/plexosdb/#add_attributes_from_records"
+        },
+        {
+          "label": "add_property",
+          "link": "/reference/python-api/plexosdb/#add_property"
+        },
+        {
+          "label": "add_scenario",
+          "link": "/reference/python-api/plexosdb/#add_scenario"
+        },
+        {
+          "label": "add_report",
+          "link": "/reference/python-api/plexosdb/#add_report"
+        },
+        {
+          "label": "add_text",
+          "link": "/reference/python-api/plexosdb/#add_text"
+        },
+        {
+          "label": "add_time_slice",
+          "link": "/reference/python-api/plexosdb/#add_time_slice"
+        },
+        {
+          "label": "add_variable_tag",
+          "link": "/reference/python-api/plexosdb/#add_variable_tag"
+        },
+        {
+          "label": "backup_database",
+          "link": "/reference/python-api/plexosdb/#backup_database"
+        },
+        {
+          "label": "copy_object",
+          "link": "/reference/python-api/plexosdb/#copy_object"
+        },
+        {
+          "label": "copy_object_memberships",
+          "link": "/reference/python-api/plexosdb/#copy_object_memberships"
+        },
+        {
+          "label": "create_object_scenario",
+          "link": "/reference/python-api/plexosdb/#create_object_scenario"
+        },
+        {
+          "label": "create_schema",
+          "link": "/reference/python-api/plexosdb/#create_schema"
+        },
+        {
+          "label": "delete_attribute",
+          "link": "/reference/python-api/plexosdb/#delete_attribute"
+        },
+        {
+          "label": "delete_category",
+          "link": "/reference/python-api/plexosdb/#delete_category"
+        },
+        {
+          "label": "delete_membership",
+          "link": "/reference/python-api/plexosdb/#delete_membership"
+        },
+        {
+          "label": "delete_metadata",
+          "link": "/reference/python-api/plexosdb/#delete_metadata"
+        },
+        {
+          "label": "delete_object",
+          "link": "/reference/python-api/plexosdb/#delete_object"
+        },
+        {
+          "label": "delete_property",
+          "link": "/reference/python-api/plexosdb/#delete_property"
+        },
+        {
+          "label": "delete_text",
+          "link": "/reference/python-api/plexosdb/#delete_text"
+        },
+        {
+          "label": "get_attribute",
+          "link": "/reference/python-api/plexosdb/#get_attribute"
+        },
+        {
+          "label": "get_attribute_id",
+          "link": "/reference/python-api/plexosdb/#get_attribute_id"
+        },
+        {
+          "label": "get_attributes",
+          "link": "/reference/python-api/plexosdb/#get_attributes"
+        },
+        {
+          "label": "get_category_id",
+          "link": "/reference/python-api/plexosdb/#get_category_id"
+        },
+        {
+          "label": "get_category_max_id",
+          "link": "/reference/python-api/plexosdb/#get_category_max_id"
+        },
+        {
+          "label": "get_class_id",
+          "link": "/reference/python-api/plexosdb/#get_class_id"
+        },
+        {
+          "label": "get_collection_id",
+          "link": "/reference/python-api/plexosdb/#get_collection_id"
+        },
+        {
+          "label": "get_config",
+          "link": "/reference/python-api/plexosdb/#get_config"
+        },
+        {
+          "label": "get_custom_columns",
+          "link": "/reference/python-api/plexosdb/#get_custom_columns"
+        },
+        {
+          "label": "get_membership_id",
+          "link": "/reference/python-api/plexosdb/#get_membership_id"
+        },
+        {
+          "label": "list_object_memberships",
+          "link": "/reference/python-api/plexosdb/#list_object_memberships"
+        },
+        {
+          "label": "get_memberships_system",
+          "link": "/reference/python-api/plexosdb/#get_memberships_system"
+        },
+        {
+          "label": "get_metadata",
+          "link": "/reference/python-api/plexosdb/#get_metadata"
+        },
+        {
+          "label": "get_object_data_ids",
+          "link": "/reference/python-api/plexosdb/#get_object_data_ids"
+        },
+        {
+          "label": "get_object_properties",
+          "link": "/reference/python-api/plexosdb/#get_object_properties"
+        },
+        {
+          "label": "get_object_id",
+          "link": "/reference/python-api/plexosdb/#get_object_id"
+        },
+        {
+          "label": "get_objects_id",
+          "link": "/reference/python-api/plexosdb/#get_objects_id"
+        },
+        {
+          "label": "get_plexos_version",
+          "link": "/reference/python-api/plexosdb/#get_plexos_version"
+        },
+        {
+          "label": "get_property_id",
+          "link": "/reference/python-api/plexosdb/#get_property_id"
+        },
+        {
+          "label": "get_property_unit",
+          "link": "/reference/python-api/plexosdb/#get_property_unit"
+        },
+        {
+          "label": "get_scenario_id",
+          "link": "/reference/python-api/plexosdb/#get_scenario_id"
+        },
+        {
+          "label": "get_text",
+          "link": "/reference/python-api/plexosdb/#get_text"
+        },
+        {
+          "label": "get_unit",
+          "link": "/reference/python-api/plexosdb/#get_unit"
+        },
+        {
+          "label": "has_properties",
+          "link": "/reference/python-api/plexosdb/#has_properties"
+        },
+        {
+          "label": "import_from_csv",
+          "link": "/reference/python-api/plexosdb/#import_from_csv"
+        },
+        {
+          "label": "iterate_properties",
+          "link": "/reference/python-api/plexosdb/#iterate_properties"
+        },
+        {
+          "label": "list_attributes",
+          "link": "/reference/python-api/plexosdb/#list_attributes"
+        },
+        {
+          "label": "list_categories",
+          "link": "/reference/python-api/plexosdb/#list_categories"
+        },
+        {
+          "label": "list_child_objects",
+          "link": "/reference/python-api/plexosdb/#list_child_objects"
+        },
+        {
+          "label": "list_classes",
+          "link": "/reference/python-api/plexosdb/#list_classes"
+        },
+        {
+          "label": "list_collections",
+          "link": "/reference/python-api/plexosdb/#list_collections"
+        },
+        {
+          "label": "list_objects_by_class",
+          "link": "/reference/python-api/plexosdb/#list_objects_by_class"
+        },
+        {
+          "label": "list_parent_objects",
+          "link": "/reference/python-api/plexosdb/#list_parent_objects"
+        },
+        {
+          "label": "list_reports",
+          "link": "/reference/python-api/plexosdb/#list_reports"
+        },
+        {
+          "label": "list_scenarios",
+          "link": "/reference/python-api/plexosdb/#list_scenarios"
+        },
+        {
+          "label": "list_models",
+          "link": "/reference/python-api/plexosdb/#list_models"
+        },
+        {
+          "label": "list_scenarios_by_model",
+          "link": "/reference/python-api/plexosdb/#list_scenarios_by_model"
+        },
+        {
+          "label": "list_units",
+          "link": "/reference/python-api/plexosdb/#list_units"
+        },
+        {
+          "label": "list_valid_properties",
+          "link": "/reference/python-api/plexosdb/#list_valid_properties"
+        },
+        {
+          "label": "list_valid_properties_report",
+          "link": "/reference/python-api/plexosdb/#list_valid_properties_report"
+        },
+        {
+          "label": "query",
+          "link": "/reference/python-api/plexosdb/#query"
+        },
+        {
+          "label": "set_config",
+          "link": "/reference/python-api/plexosdb/#set_config"
+        },
+        {
+          "label": "set_date_range",
+          "link": "/reference/python-api/plexosdb/#set_date_range"
+        },
+        {
+          "label": "to_csv",
+          "link": "/reference/python-api/plexosdb/#to_csv"
+        },
+        {
+          "label": "to_xml",
+          "link": "/reference/python-api/plexosdb/#to_xml"
+        },
+        {
+          "label": "update_attribute",
+          "link": "/reference/python-api/plexosdb/#update_attribute"
+        },
+        {
+          "label": "update_category",
+          "link": "/reference/python-api/plexosdb/#update_category"
+        },
+        {
+          "label": "update_object",
+          "link": "/reference/python-api/plexosdb/#update_object"
+        },
+        {
+          "label": "update_properties",
+          "link": "/reference/python-api/plexosdb/#update_properties"
+        },
+        {
+          "label": "update_property",
+          "link": "/reference/python-api/plexosdb/#update_property"
+        },
+        {
+          "label": "update_scenario",
+          "link": "/reference/python-api/plexosdb/#update_scenario"
+        },
+        {
+          "label": "update_text",
+          "link": "/reference/python-api/plexosdb/#update_text"
+        },
+        {
+          "label": "validate_value_by_rule",
+          "link": "/reference/python-api/plexosdb/#validate_value_by_rule"
+        },
+        {
+          "label": "validate_database",
+          "link": "/reference/python-api/plexosdb/#validate_database"
+        }
+      ]
+    },
+    {
+      "label": "PlexosSolution",
+      "collapsed": true,
+      "items": [
+        {
+          "label": "PlexosSolution",
+          "link": "/reference/python-api/plexossolution/"
+        },
+        {
+          "label": "_zip_path",
+          "link": "/reference/python-api/plexossolution/#_zip_path"
+        },
+        {
+          "label": "_model_name",
+          "link": "/reference/python-api/plexossolution/#_model_name"
+        },
+        {
+          "label": "_database_path",
+          "link": "/reference/python-api/plexossolution/#_database_path"
+        },
+        {
+          "label": "_connection",
+          "link": "/reference/python-api/plexossolution/#_connection"
+        },
+        {
+          "label": "from_zip",
+          "link": "/reference/python-api/plexossolution/#from_zip"
+        },
+        {
+          "label": "to_duckdb",
+          "link": "/reference/python-api/plexossolution/#to_duckdb"
+        },
+        {
+          "label": "info",
+          "link": "/reference/python-api/plexossolution/#info"
+        },
+        {
+          "label": "list_tables",
+          "link": "/reference/python-api/plexossolution/#list_tables"
+        },
+        {
+          "label": "sql",
+          "link": "/reference/python-api/plexossolution/#sql"
+        },
+        {
+          "label": "query",
+          "link": "/reference/python-api/plexossolution/#query"
+        },
+        {
+          "label": "query_dicts",
+          "link": "/reference/python-api/plexossolution/#query_dicts"
+        },
+        {
+          "label": "table",
+          "link": "/reference/python-api/plexossolution/#table"
+        },
+        {
+          "label": "list_objects_by_class",
+          "link": "/reference/python-api/plexossolution/#list_objects_by_class"
+        },
+        {
+          "label": "list_result_tables",
+          "link": "/reference/python-api/plexossolution/#list_result_tables"
+        },
+        {
+          "label": "result_table",
+          "link": "/reference/python-api/plexossolution/#result_table"
+        },
+        {
+          "label": "get_result",
+          "link": "/reference/python-api/plexossolution/#get_result"
+        },
+        {
+          "label": "connection",
+          "link": "/reference/python-api/plexossolution/#connection"
+        },
+        {
+          "label": "close",
+          "link": "/reference/python-api/plexossolution/#close"
+        }
+      ]
+    },
+    {
+      "label": "PropertyRecord",
+      "collapsed": true,
+      "items": [
+        {
+          "label": "PropertyRecord",
+          "link": "/reference/python-api/propertyrecord/"
+        }
+      ]
+    },
+    {
+      "label": "ResultSchema",
+      "collapsed": true,
+      "items": [
+        {
+          "label": "ResultSchema",
+          "link": "/reference/python-api/resultschema/"
+        }
+      ]
+    },
+    {
+      "label": "ResultTable",
+      "collapsed": true,
+      "items": [
+        {
+          "label": "ResultTable",
+          "link": "/reference/python-api/resulttable/"
+        },
+        {
+          "label": "name",
+          "link": "/reference/python-api/resulttable/#name"
+        },
+        {
+          "label": "schema",
+          "link": "/reference/python-api/resulttable/#schema"
+        },
+        {
+          "label": "phase",
+          "link": "/reference/python-api/resulttable/#phase"
+        },
+        {
+          "label": "period",
+          "link": "/reference/python-api/resulttable/#period"
+        },
+        {
+          "label": "class_enum",
+          "link": "/reference/python-api/resulttable/#class_enum"
+        },
+        {
+          "label": "collection",
+          "link": "/reference/python-api/resulttable/#collection"
+        },
+        {
+          "label": "property_name",
+          "link": "/reference/python-api/resulttable/#property_name"
+        },
+        {
+          "label": "table_type",
+          "link": "/reference/python-api/resulttable/#table_type"
+        },
+        {
+          "label": "value_column",
+          "link": "/reference/python-api/resulttable/#value_column"
+        }
+      ]
+    },
+    {
+      "label": "SQLiteRecord",
+      "collapsed": true,
+      "items": [
+        {
+          "label": "SQLiteRecord",
+          "link": "/reference/python-api/sqliterecord/"
+        }
+      ]
+    },
+    {
+      "label": "SQLiteValue",
+      "collapsed": true,
+      "items": [
+        {
+          "label": "SQLiteValue",
+          "link": "/reference/python-api/sqlitevalue/"
+        }
+      ]
+    },
+    {
+      "label": "TableInfo",
+      "collapsed": true,
+      "items": [
+        {
+          "label": "TableInfo",
+          "link": "/reference/python-api/tableinfo/"
+        },
+        {
+          "label": "name",
+          "link": "/reference/python-api/tableinfo/#name"
+        },
+        {
+          "label": "schema",
+          "link": "/reference/python-api/tableinfo/#schema"
+        },
+        {
+          "label": "table_type",
+          "link": "/reference/python-api/tableinfo/#table_type"
+        }
+      ]
+    },
+    {
+      "label": "TableTypeEnum",
+      "collapsed": true,
+      "items": [
+        {
+          "label": "TableTypeEnum",
+          "link": "/reference/python-api/tabletypeenum/"
+        },
+        {
+          "label": "BASE_TABLE",
+          "link": "/reference/python-api/tabletypeenum/#base_table"
+        },
+        {
+          "label": "VIEW",
+          "link": "/reference/python-api/tabletypeenum/#view"
+        }
+      ]
+    },
+    {
+      "label": "ValidationResult",
+      "collapsed": true,
+      "items": [
+        {
+          "label": "ValidationResult",
+          "link": "/reference/python-api/validationresult/"
+        },
+        {
+          "label": "is_valid",
+          "link": "/reference/python-api/validationresult/#is_valid"
+        },
+        {
+          "label": "error_message",
+          "link": "/reference/python-api/validationresult/#error_message"
+        }
+      ]
+    },
+    {
+      "label": "XMLHandler",
+      "collapsed": true,
+      "items": [
+        {
+          "label": "XMLHandler",
+          "link": "/reference/python-api/xmlhandler/"
+        },
+        {
+          "label": "parse",
+          "link": "/reference/python-api/xmlhandler/#parse"
+        },
+        {
+          "label": "create_table_element",
+          "link": "/reference/python-api/xmlhandler/#create_table_element"
+        },
+        {
+          "label": "get_records",
+          "link": "/reference/python-api/xmlhandler/#get_records"
+        },
+        {
+          "label": "iter",
+          "link": "/reference/python-api/xmlhandler/#iter"
+        },
+        {
+          "label": "to_xml",
+          "link": "/reference/python-api/xmlhandler/#to_xml"
+        }
+      ]
+    },
+    {
+      "label": "XMLRecord",
+      "collapsed": true,
+      "items": [
+        {
+          "label": "XMLRecord",
+          "link": "/reference/python-api/xmlrecord/"
+        }
+      ]
+    },
+    {
+      "label": "XMLValue",
+      "collapsed": true,
+      "items": [
+        {
+          "label": "XMLValue",
+          "link": "/reference/python-api/xmlvalue/"
+        }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "label": "Checks",
+      "link": "/reference/api/modules/checks/"
+    },
+    {
+      "label": "DuckDB solution",
+      "link": "/reference/api/modules/db_solution/"
+    },
+    {
+      "label": "Enumerations",
+      "link": "/reference/api/modules/enums/"
+    },
+    {
+      "label": "Exceptions",
+      "link": "/reference/api/modules/exceptions/"
+    },
+    {
+      "label": "PlexosDB",
+      "link": "/reference/api/modules/plexosdb/"
+    },
+    {
+      "label": "SQLite solution reader",
+      "link": "/reference/api/modules/solution_reader/"
+    },
+    {
+      "label": "SQLite manager",
+      "link": "/reference/api/modules/sqlite_manager/"
+    },
+    {
+      "label": "Utilities",
+      "link": "/reference/api/modules/utils/"
+    },
+    {
+      "label": "XML handler",
+      "link": "/reference/api/modules/xml_handler/"
+    }
+  ]
+}

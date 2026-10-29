@@ -161,6 +161,8 @@ instance/
 
 # Sphinx documentation
 docs/_build/
+docs/.astro/
+docs/node_modules/
 
 # Implementation plans (local only)
 docs/plans/
