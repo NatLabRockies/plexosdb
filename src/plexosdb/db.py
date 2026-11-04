@@ -2556,12 +2556,94 @@ class PlexosDB:
         return cast(int, result[0])
 
     def get_config(self, element: str | None = None) -> dict[str, Any] | list[dict[str, Any]]:
-        """Get configuration values from the database."""
-        raise NotImplementedError  # pragma: no cover
+        """Get configuration values from the database.
+
+        Parameters
+        ----------
+        element : str | None, optional
+            Configuration element to retrieve. If omitted, return all
+            configuration entries.
+
+        Returns
+        -------
+        dict[str, Any] | list[dict[str, Any]]
+            A single configuration record when ``element`` is provided, or
+            all configuration records ordered by element.
+
+        Raises
+        ------
+        NotFoundError
+            If the requested element does not exist.
+
+        Examples
+        --------
+        Retrieve a single configuration entry by its element name:
+
+        >>> db.get_config("Culture")
+        {'element': 'Culture', 'value': 'en-AU English (Australia)'}
+
+        Retrieve all entries, ordered by element, and inspect one:
+
+        >>> configurations = db.get_config()
+        >>> configurations[0]
+        {'element': 'Culture', 'value': 'en-AU English (Australia)'}
+        """
+        if element is not None:
+            result = self._db.fetchone_dict(
+                "SELECT element, value FROM t_config WHERE element = ?",
+                (element,),
+            )
+            if result is None:
+                raise NotFoundError(f"Configuration element '{element}' not found.")
+            return result
+
+        return self._db.fetchall_dict("SELECT element, value FROM t_config ORDER BY element")
 
     def get_custom_columns(self, class_enum: ClassEnum | None = None) -> list[dict[str, Any]]:
-        """Get custom columns, optionally filtered by class."""
-        raise NotImplementedError  # pragma: no cover
+        """Get custom columns, optionally filtered by class.
+
+        Parameters
+        ----------
+        class_enum : ClassEnum | None, optional
+            Class to filter by. If omitted, return custom columns for all
+            classes, including columns without an assigned class.
+
+        Returns
+        -------
+        list[dict[str, Any]]
+            Custom-column records with their database fields and the related
+            class name, when available.
+
+        Examples
+        --------
+        For a database containing a custom column assigned to ``Generator``:
+
+        >>> custom_columns = db.get_custom_columns()
+        >>> custom_columns[0]["name"]
+        '__get_custom_columns_test__'
+        >>> generator_columns = db.get_custom_columns(ClassEnum.Generator)
+        >>> generator_columns[0]["class_name"]
+        'Generator'
+        """
+        query = """
+            SELECT
+                custom_column.column_id,
+                custom_column.class_id,
+                custom_column.name,
+                custom_column.position,
+                custom_column.GUID,
+                custom_class.name AS class_name
+            FROM t_custom_column AS custom_column
+            LEFT JOIN t_class AS custom_class
+                ON custom_column.class_id = custom_class.class_id
+        """
+        params: tuple[str, ...] = ()
+        if class_enum is not None:
+            query += " WHERE custom_class.name = ?"
+            params = (class_enum.value,)
+
+        query += " ORDER BY custom_column.column_id"
+        return self._db.fetchall_dict(query, params)
 
     def get_membership_id(
         self,
@@ -2785,8 +2867,66 @@ class PlexosDB:
         class_name: str | None = None,
         property_name: str | None = None,
     ) -> list[dict[str, Any]]:
-        """Retrieve metadata for an entity."""
-        raise NotImplementedError  # pragma: no cover
+        """Retrieve metadata for an entity, optionally filtered by class and property.
+
+        Parameters
+        ----------
+        entity_type : Literal["object", "membership", "data"]
+            Type of entity whose metadata to retrieve.
+        entity_id : int
+            Identifier of the object, membership, or data record.
+        class_name : str | None, optional
+            Metadata class to filter by.
+        property_name : str | None, optional
+            Metadata property to filter by.
+
+        Returns
+        -------
+        list[dict[str, Any]]
+            Matching metadata records with the entity ID, class, property,
+            value, and state fields. Returns an empty list when no records match.
+
+        Raises
+        ------
+        ValueError
+            If ``entity_type`` is not ``"object"``, ``"membership"``, or ``"data"``.
+
+        Examples
+        --------
+        Retrieve all metadata for an object, or narrow it by class and property:
+
+        >>> metadata = db.get_metadata("object", object_id)
+        >>> matching_metadata = db.get_metadata(
+        ...     "object", object_id, class_name="PLEXOS", property_name="Source"
+        ... )
+        """
+        metadata_tables = {
+            "object": ("t_object_meta", "object_id"),
+            "membership": ("t_membership_meta", "membership_id"),
+            "data": ("t_data_meta", "data_id"),
+        }
+        try:
+            table_name, entity_id_column = metadata_tables[entity_type]
+        except KeyError:
+            raise ValueError(f"Unsupported metadata entity type: {entity_type!r}") from None
+
+        conditions = [f"metadata.{entity_id_column} = ?"]
+        params: list[Any] = [entity_id]
+
+        if class_name is not None:
+            conditions.append('metadata."class" = ?')
+            params.append(class_name)
+        if property_name is not None:
+            conditions.append('metadata."property" = ?')
+            params.append(property_name)
+
+        query = f"""
+            SELECT metadata.*
+            FROM {table_name} AS metadata
+            WHERE {" AND ".join(conditions)}
+            ORDER BY metadata."class", metadata."property"
+        """
+        return self._db.fetchall_dict(query, tuple(params))
 
     def get_object_data_ids(
         self,
@@ -3151,8 +3291,37 @@ class PlexosDB:
         parent_class_enum: ClassEnum,
         child_class_enum: ClassEnum,
     ) -> str:
-        """Get the unit for a specific property."""
-        raise NotImplementedError  # pragma: no cover
+        """Get the unit for a specific property.
+
+        Returns an empty string when the property has no unit value.
+
+        Examples
+        --------
+        >>> db.get_property_unit(
+        ...     "Max Capacity",
+        ...     collection_enum=CollectionEnum.Generators,
+        ...     parent_class_enum=ClassEnum.System,
+        ...     child_class_enum=ClassEnum.Generator,
+        ... )
+        'MW'
+        """
+        property_id = self.get_property_id(
+            property_name,
+            collection_enum=collection_enum,
+            parent_class_enum=parent_class_enum,
+            child_class_enum=child_class_enum,
+        )
+        result = self._db.fetchone(
+            """
+            SELECT unit.value
+            FROM t_property AS property
+            LEFT JOIN t_unit AS unit ON unit.unit_id = property.unit_id
+            WHERE property.property_id = ?
+            """,
+            (property_id,),
+        )
+        assert result
+        return cast(str, result[0] or "")
 
     def get_scenario_id(self, name: str) -> int:
         """Return the ID for a given scenario.
@@ -3193,12 +3362,63 @@ class PlexosDB:
         *,
         class_id: int | None = None,
     ) -> list[dict[str, Any]]:
-        """Retrieve text data associated with a property data record."""
-        raise NotImplementedError  # pragma: no cover
+        """Retrieve text data associated with a property data record.
+
+        Parameters
+        ----------
+        data_id : int
+            Property data record identifier.
+        class_id : int | None, optional
+            Limit results to a text class.
+
+        Returns
+        -------
+        list[dict[str, Any]]
+            Matching text records ordered by class ID.
+
+        Examples
+        --------
+        >>> text_row = db.query("SELECT data_id, class_id FROM t_text ORDER BY data_id, class_id LIMIT 1")
+        >>> data_id, class_id = text_row[0]
+        >>> db.get_text(data_id, class_id=class_id))
+        [{'data_id': 1600, 'class_id': 76, 'value': 'M4-10', 'state': None, 'action_id': None}]
+        """
+        conditions = ["data_id = ?"]
+        params: tuple[int, ...] = (data_id,)
+        if class_id is not None:
+            conditions.append("class_id = ?")
+            params += (class_id,)
+
+        query = f"SELECT * FROM t_text WHERE {' AND '.join(conditions)} ORDER BY class_id"
+        return self._db.fetchall_dict(query, params)
 
     def get_unit(self, unit_id: int) -> dict[str, Any]:
-        """Get details for a specific unit."""
-        raise NotImplementedError  # pragma: no cover
+        """Get details for a specific unit.
+
+        Raises
+        ------
+        NotFoundError
+            If the unit does not exist.
+
+        Examples
+        --------
+        >>> unit_row = db.query("SELECT unit_id FROM t_unit ORDER BY unit_id LIMIT 1")
+        >>> unit_id = unit_row[0][0]
+        >>> from pprint import pprint
+        >>> pprint(db.get_unit(unit_id))
+        {'default': '-',
+         'description': None,
+         'imperial_energy': None,
+         'imperial_level': None,
+         'imperial_volume': None,
+         ...
+         'unit_id': 0,
+         'value': '-'}
+        """
+        result = self._db.fetchone_dict("SELECT * FROM t_unit WHERE unit_id = ?", (unit_id,))
+        if result is None:
+            raise NotFoundError(f"Unit '{unit_id}' not found.")
+        return result
 
     def has_properties(
         self,

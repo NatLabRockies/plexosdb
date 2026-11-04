@@ -1,7 +1,7 @@
 import pytest
 
 from plexosdb.db import PlexosDB
-from plexosdb.enums import ClassEnum
+from plexosdb.enums import ClassEnum, CollectionEnum
 from plexosdb.exceptions import NotFoundError
 
 
@@ -52,6 +52,195 @@ def test_create_schema_version_none_leaves_config_unchanged():
     result = db.query("SELECT value FROM t_config WHERE element = ?", ("Version",))
     assert result
     assert result[0][0] == "0.0"
+
+
+def test_get_config_returns_one_or_all_entries():
+    db = PlexosDB()
+    db.create_schema()
+    db._db.executemany(
+        "INSERT INTO t_config(element, value) VALUES (?, ?)",
+        [("Version", "10.0"), ("Dynamic", "1")],
+    )
+
+    assert db.get_config("Version") == {"element": "Version", "value": "10.0"}
+    assert db.get_config() == [
+        {"element": "Dynamic", "value": "1"},
+        {"element": "Version", "value": "10.0"},
+    ]
+
+
+def test_get_config_raises_for_missing_element():
+    db = PlexosDB()
+    db.create_schema()
+
+    with pytest.raises(NotFoundError, match="Configuration element 'Missing' not found"):
+        db.get_config("Missing")
+
+
+def test_get_custom_columns_returns_all_or_filters_by_class():
+    db = PlexosDB()
+    db.create_schema()
+    db._db.executemany(
+        "INSERT INTO t_class(class_id, name) VALUES (?, ?)",
+        [(1, ClassEnum.Generator.value), (2, ClassEnum.Node.value)],
+    )
+    db._db.executemany(
+        "INSERT INTO t_custom_column(column_id, class_id, name, position, GUID) VALUES (?, ?, ?, ?, ?)",
+        [
+            (1, 1, "Notes", 0, "guid-generator"),
+            (2, 2, "Review", 1, "guid-node"),
+            (3, None, "Shared", 2, "guid-unassigned"),
+        ],
+    )
+
+    all_columns = db.get_custom_columns()
+    assert [column["class_name"] for column in all_columns] == ["Generator", "Node", None]
+    assert db.get_custom_columns(ClassEnum.Generator) == [all_columns[0]]
+
+
+def test_get_metadata_selects_entity_table_and_applies_filters():
+    db = PlexosDB()
+    db.create_schema(seed_defaults=True)
+    object_id = db.add_object(ClassEnum.Generator, "GEN1")
+    membership_id = db.get_memberships_system("GEN1", object_class=ClassEnum.Generator)[0]["membership_id"]
+    db._db.execute("INSERT INTO t_data(membership_id) VALUES (?)", (membership_id,))
+    data_id = db._db.last_insert_rowid()
+
+    db._db.executemany(
+        "INSERT INTO t_object_meta(object_id, class, property, value, state) VALUES (?, ?, ?, ?, ?)",
+        [
+            (object_id, "PLEXOS", "Owner", "Operations", 1),
+            (object_id, "PLEXOS", "Source", "Input", 2),
+        ],
+    )
+    db._db.execute(
+        "INSERT INTO t_membership_meta(membership_id, class, property, value, state) VALUES (?, ?, ?, ?, ?)",
+        (membership_id, "PLEXOS", "Link", "System", 3),
+    )
+    db._db.execute(
+        "INSERT INTO t_data_meta(data_id, class, property, value, state) VALUES (?, ?, ?, ?, ?)",
+        (data_id, "PLEXOS", "Source", "Imported", 4),
+    )
+
+    assert db.get_metadata("object", object_id, class_name="PLEXOS", property_name="Source") == [
+        {"object_id": object_id, "class": "PLEXOS", "property": "Source", "value": "Input", "state": 2}
+    ]
+    assert db.get_metadata("membership", membership_id) == [
+        {
+            "membership_id": membership_id,
+            "class": "PLEXOS",
+            "property": "Link",
+            "value": "System",
+            "state": 3,
+        }
+    ]
+    assert db.get_metadata("data", data_id, property_name="Source") == [
+        {"data_id": data_id, "class": "PLEXOS", "property": "Source", "value": "Imported", "state": 4}
+    ]
+    assert db.get_metadata("object", object_id, property_name="Missing") == []
+
+
+def test_get_metadata_rejects_unsupported_entity_type():
+    db = PlexosDB()
+
+    with pytest.raises(ValueError, match="Unsupported metadata entity type"):
+        db.get_metadata("attribute", 1)  # type: ignore[arg-type]
+
+
+def test_get_property_unit_returns_value_or_empty_string():
+    db = PlexosDB()
+    db.create_schema(seed_defaults=True)
+    collection_id = db.get_collection_id(
+        CollectionEnum.Generators,
+        parent_class_enum=ClassEnum.System,
+        child_class_enum=ClassEnum.Generator,
+    )
+    db._db.executemany(
+        "INSERT INTO t_unit(unit_id, value) VALUES (?, ?)",
+        [(1, "MW"), (2, None)],
+    )
+    db._db.executemany(
+        "INSERT INTO t_property(property_id, collection_id, unit_id, name) VALUES (?, ?, ?, ?)",
+        [(1, collection_id, 1, "Max Capacity"), (2, collection_id, 2, "Unspecified Unit")],
+    )
+
+    assert (
+        db.get_property_unit(
+            "Max Capacity",
+            collection_enum=CollectionEnum.Generators,
+            parent_class_enum=ClassEnum.System,
+            child_class_enum=ClassEnum.Generator,
+        )
+        == "MW"
+    )
+    assert (
+        db.get_property_unit(
+            "Unspecified Unit",
+            collection_enum=CollectionEnum.Generators,
+            parent_class_enum=ClassEnum.System,
+            child_class_enum=ClassEnum.Generator,
+        )
+        == ""
+    )
+
+
+def test_get_text_returns_records_with_optional_class_filter():
+    db = PlexosDB()
+    db.create_schema(seed_defaults=True)
+    db.add_object(ClassEnum.Generator, "GEN1")
+    membership_id = db.get_memberships_system("GEN1", object_class=ClassEnum.Generator)[0]["membership_id"]
+    db._db.execute("INSERT INTO t_data(membership_id) VALUES (?)", (membership_id,))
+    data_id = db._db.last_insert_rowid()
+    generator_class_id = db.get_class_id(ClassEnum.Generator)
+    node_class_id = db.get_class_id(ClassEnum.Node)
+    db._db.executemany(
+        "INSERT INTO t_text(data_id, class_id, value, state) VALUES (?, ?, ?, ?)",
+        [
+            (data_id, node_class_id, "node text", 2),
+            (data_id, generator_class_id, "generator text", 1),
+        ],
+    )
+
+    assert db.get_text(data_id) == [
+        {
+            "data_id": data_id,
+            "class_id": generator_class_id,
+            "value": "generator text",
+            "state": 1,
+            "action_id": None,
+        },
+        {
+            "data_id": data_id,
+            "class_id": node_class_id,
+            "value": "node text",
+            "state": 2,
+            "action_id": None,
+        },
+    ]
+    assert db.get_text(data_id, class_id=node_class_id) == [
+        {
+            "data_id": data_id,
+            "class_id": node_class_id,
+            "value": "node text",
+            "state": 2,
+            "action_id": None,
+        }
+    ]
+    assert db.get_text(data_id + 1) == []
+
+
+def test_get_unit_returns_full_record_and_raises_for_missing_id():
+    db = PlexosDB()
+    db.create_schema()
+    db._db.execute('INSERT INTO t_unit(unit_id, value, "default") VALUES (?, ?, ?)', (1, "MW", "1"))
+
+    unit = db.get_unit(1)
+    assert unit["unit_id"] == 1
+    assert unit["value"] == "MW"
+    assert unit["default"] == "1"
+
+    with pytest.raises(NotFoundError, match="Unit '99' not found"):
+        db.get_unit(99)
 
 
 def test_create_schema_plain_version_string_loads_master_template():
