@@ -184,6 +184,65 @@ def test_get_property_unit_returns_value_or_empty_string():
     )
 
 
+def test_get_text_returns_records_with_optional_class_filter():
+    db = PlexosDB()
+    db.create_schema(seed_defaults=True)
+    db.add_object(ClassEnum.Generator, "GEN1")
+    membership_id = db.get_memberships_system("GEN1", object_class=ClassEnum.Generator)[0]["membership_id"]
+    db._db.execute("INSERT INTO t_data(membership_id) VALUES (?)", (membership_id,))
+    data_id = db._db.last_insert_rowid()
+    generator_class_id = db.get_class_id(ClassEnum.Generator)
+    node_class_id = db.get_class_id(ClassEnum.Node)
+    db._db.executemany(
+        "INSERT INTO t_text(data_id, class_id, value, state) VALUES (?, ?, ?, ?)",
+        [
+            (data_id, node_class_id, "node text", 2),
+            (data_id, generator_class_id, "generator text", 1),
+        ],
+    )
+
+    assert db.get_text(data_id) == [
+        {
+            "data_id": data_id,
+            "class_id": generator_class_id,
+            "value": "generator text",
+            "state": 1,
+            "action_id": None,
+        },
+        {
+            "data_id": data_id,
+            "class_id": node_class_id,
+            "value": "node text",
+            "state": 2,
+            "action_id": None,
+        },
+    ]
+    assert db.get_text(data_id, class_id=node_class_id) == [
+        {
+            "data_id": data_id,
+            "class_id": node_class_id,
+            "value": "node text",
+            "state": 2,
+            "action_id": None,
+        }
+    ]
+    assert db.get_text(data_id + 1) == []
+
+
+def test_get_unit_returns_full_record_and_raises_for_missing_id():
+    db = PlexosDB()
+    db.create_schema()
+    db._db.execute('INSERT INTO t_unit(unit_id, value, "default") VALUES (?, ?, ?)', (1, "MW", "1"))
+
+    unit = db.get_unit(1)
+    assert unit["unit_id"] == 1
+    assert unit["value"] == "MW"
+    assert unit["default"] == "1"
+
+    with pytest.raises(NotFoundError, match="Unit '99' not found"):
+        db.get_unit(99)
+
+
 def test_create_schema_plain_version_string_loads_master_template():
     """A plain version string like '11.0' should load the matching master template."""
     db = PlexosDB()

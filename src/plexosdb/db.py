@@ -3362,12 +3362,63 @@ class PlexosDB:
         *,
         class_id: int | None = None,
     ) -> list[dict[str, Any]]:
-        """Retrieve text data associated with a property data record."""
-        raise NotImplementedError  # pragma: no cover
+        """Retrieve text data associated with a property data record.
+
+        Parameters
+        ----------
+        data_id : int
+            Property data record identifier.
+        class_id : int | None, optional
+            Limit results to a text class.
+
+        Returns
+        -------
+        list[dict[str, Any]]
+            Matching text records ordered by class ID.
+
+        Examples
+        --------
+        >>> text_row = db.query("SELECT data_id, class_id FROM t_text ORDER BY data_id, class_id LIMIT 1")
+        >>> data_id, class_id = text_row[0]
+        >>> db.get_text(data_id, class_id=class_id))
+        [{'data_id': 1600, 'class_id': 76, 'value': 'M4-10', 'state': None, 'action_id': None}]
+        """
+        conditions = ["data_id = ?"]
+        params: tuple[int, ...] = (data_id,)
+        if class_id is not None:
+            conditions.append("class_id = ?")
+            params += (class_id,)
+
+        query = f"SELECT * FROM t_text WHERE {' AND '.join(conditions)} ORDER BY class_id"
+        return self._db.fetchall_dict(query, params)
 
     def get_unit(self, unit_id: int) -> dict[str, Any]:
-        """Get details for a specific unit."""
-        raise NotImplementedError  # pragma: no cover
+        """Get details for a specific unit.
+
+        Raises
+        ------
+        NotFoundError
+            If the unit does not exist.
+
+        Examples
+        --------
+        >>> unit_row = db.query("SELECT unit_id FROM t_unit ORDER BY unit_id LIMIT 1")
+        >>> unit_id = unit_row[0][0]
+        >>> from pprint import pprint
+        >>> pprint(db.get_unit(unit_id))
+        {'default': '-',
+         'description': None,
+         'imperial_energy': None,
+         'imperial_level': None,
+         'imperial_volume': None,
+         ...
+         'unit_id': 0,
+         'value': '-'}
+        """
+        result = self._db.fetchone_dict("SELECT * FROM t_unit WHERE unit_id = ?", (unit_id,))
+        if result is None:
+            raise NotFoundError(f"Unit '{unit_id}' not found.")
+        return result
 
     def has_properties(
         self,
