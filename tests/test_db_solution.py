@@ -119,8 +119,9 @@ def test_read_result_returns_filtered_duckdb_relation(solution_duckdb: PlexosSol
     relation = solution_duckdb.get_result(
         table,
         object_names="Coal_Gen",
-        columns=["name", "timestamp", "value"],
+        columns=["name", "timestamp"],
     )
+    assert relation.columns == ["name", "timestamp"]
     rows = relation.fetchall()
     assert len(rows) == 8760
     assert rows[0][0] == "Coal_Gen"
