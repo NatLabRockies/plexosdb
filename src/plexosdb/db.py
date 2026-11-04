@@ -2556,8 +2556,48 @@ class PlexosDB:
         return cast(int, result[0])
 
     def get_config(self, element: str | None = None) -> dict[str, Any] | list[dict[str, Any]]:
-        """Get configuration values from the database."""
-        raise NotImplementedError  # pragma: no cover
+        """Get configuration values from the database.
+
+        Parameters
+        ----------
+        element : str | None, optional
+            Configuration element to retrieve. If omitted, return all
+            configuration entries.
+
+        Returns
+        -------
+        dict[str, Any] | list[dict[str, Any]]
+            A single configuration record when ``element`` is provided, or
+            all configuration records ordered by element.
+
+        Raises
+        ------
+        NotFoundError
+            If the requested element does not exist.
+
+        Examples
+        --------
+        Retrieve a single configuration entry by its element name:
+
+        >>> db.get_config("Culture")
+        {'element': 'Culture', 'value': 'en-AU English (Australia)'}
+
+        Retrieve all entries, ordered by element, and inspect one:
+
+        >>> configurations = db.get_config()
+        >>> configurations[0]
+        {'element': 'Culture', 'value': 'en-AU English (Australia)'}
+        """
+        if element is not None:
+            result = self._db.fetchone_dict(
+                "SELECT element, value FROM t_config WHERE element = ?",
+                (element,),
+            )
+            if result is None:
+                raise NotFoundError(f"Configuration element '{element}' not found.")
+            return result
+
+        return self._db.fetchall_dict("SELECT element, value FROM t_config ORDER BY element")
 
     def get_custom_columns(self, class_enum: ClassEnum | None = None) -> list[dict[str, Any]]:
         """Get custom columns, optionally filtered by class."""

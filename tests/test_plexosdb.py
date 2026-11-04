@@ -54,6 +54,29 @@ def test_create_schema_version_none_leaves_config_unchanged():
     assert result[0][0] == "0.0"
 
 
+def test_get_config_returns_one_or_all_entries():
+    db = PlexosDB()
+    db.create_schema()
+    db._db.executemany(
+        "INSERT INTO t_config(element, value) VALUES (?, ?)",
+        [("Version", "10.0"), ("Dynamic", "1")],
+    )
+
+    assert db.get_config("Version") == {"element": "Version", "value": "10.0"}
+    assert db.get_config() == [
+        {"element": "Dynamic", "value": "1"},
+        {"element": "Version", "value": "10.0"},
+    ]
+
+
+def test_get_config_raises_for_missing_element():
+    db = PlexosDB()
+    db.create_schema()
+
+    with pytest.raises(NotFoundError, match="Configuration element 'Missing' not found"):
+        db.get_config("Missing")
+
+
 def test_create_schema_plain_version_string_loads_master_template():
     """A plain version string like '11.0' should load the matching master template."""
     db = PlexosDB()
