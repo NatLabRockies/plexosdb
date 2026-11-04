@@ -2600,8 +2600,50 @@ class PlexosDB:
         return self._db.fetchall_dict("SELECT element, value FROM t_config ORDER BY element")
 
     def get_custom_columns(self, class_enum: ClassEnum | None = None) -> list[dict[str, Any]]:
-        """Get custom columns, optionally filtered by class."""
-        raise NotImplementedError  # pragma: no cover
+        """Get custom columns, optionally filtered by class.
+
+        Parameters
+        ----------
+        class_enum : ClassEnum | None, optional
+            Class to filter by. If omitted, return custom columns for all
+            classes, including columns without an assigned class.
+
+        Returns
+        -------
+        list[dict[str, Any]]
+            Custom-column records with their database fields and the related
+            class name, when available.
+
+        Examples
+        --------
+        For a database containing a custom column assigned to ``Generator``:
+
+        >>> custom_columns = db.get_custom_columns()
+        >>> custom_columns[0]["name"]
+        '__get_custom_columns_test__'
+        >>> generator_columns = db.get_custom_columns(ClassEnum.Generator)
+        >>> generator_columns[0]["class_name"]
+        'Generator'
+        """
+        query = """
+            SELECT
+                custom_column.column_id,
+                custom_column.class_id,
+                custom_column.name,
+                custom_column.position,
+                custom_column.GUID,
+                custom_class.name AS class_name
+            FROM t_custom_column AS custom_column
+            LEFT JOIN t_class AS custom_class
+                ON custom_column.class_id = custom_class.class_id
+        """
+        params: tuple[str, ...] = ()
+        if class_enum is not None:
+            query += " WHERE custom_class.name = ?"
+            params = (class_enum.value,)
+
+        query += " ORDER BY custom_column.column_id"
+        return self._db.fetchall_dict(query, params)
 
     def get_membership_id(
         self,

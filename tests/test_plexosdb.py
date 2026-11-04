@@ -77,6 +77,27 @@ def test_get_config_raises_for_missing_element():
         db.get_config("Missing")
 
 
+def test_get_custom_columns_returns_all_or_filters_by_class():
+    db = PlexosDB()
+    db.create_schema()
+    db._db.executemany(
+        "INSERT INTO t_class(class_id, name) VALUES (?, ?)",
+        [(1, ClassEnum.Generator.value), (2, ClassEnum.Node.value)],
+    )
+    db._db.executemany(
+        "INSERT INTO t_custom_column(column_id, class_id, name, position, GUID) VALUES (?, ?, ?, ?, ?)",
+        [
+            (1, 1, "Notes", 0, "guid-generator"),
+            (2, 2, "Review", 1, "guid-node"),
+            (3, None, "Shared", 2, "guid-unassigned"),
+        ],
+    )
+
+    all_columns = db.get_custom_columns()
+    assert [column["class_name"] for column in all_columns] == ["Generator", "Node", None]
+    assert db.get_custom_columns(ClassEnum.Generator) == [all_columns[0]]
+
+
 def test_create_schema_plain_version_string_loads_master_template():
     """A plain version string like '11.0' should load the matching master template."""
     db = PlexosDB()
