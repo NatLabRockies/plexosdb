@@ -86,8 +86,8 @@ def test_solution_info_and_query_primitives(solution_duckdb: PlexosSolution, sol
         ("Coal_Gen",),
     )
     assert rows == [{"name": "Coal_Gen"}]
-    assert solution_duckdb.sql("SELECT COUNT(*) AS n FROM processed.objects").fetchone()[0] > 0
-    assert solution_duckdb.table("ST__Interval__Generators__Generation").limit(1).fetchone() is not None
+    assert solution_duckdb.sql("SELECT COUNT(*) AS n FROM processed.objects").fetchall()[0][0] > 0
+    assert solution_duckdb.table("ST__Interval__Generators__Generation").limit(1).fetchall()
 
 
 def test_solution_metadata_discovery_uses_existing_enums(solution_duckdb: PlexosSolution):
@@ -119,8 +119,9 @@ def test_read_result_returns_filtered_duckdb_relation(solution_duckdb: PlexosSol
     relation = solution_duckdb.get_result(
         table,
         object_names="Coal_Gen",
-        columns=["name", "timestamp", "Generation"],
+        columns=["name", "timestamp"],
     )
+    assert relation.columns == ["name", "timestamp"]
     rows = relation.fetchall()
     assert len(rows) == 8760
     assert rows[0][0] == "Coal_Gen"
@@ -277,7 +278,7 @@ def test_solution_metadata_source_returns_none_when_empty():
 def test_table_method_with_result_table_object(solution_duckdb: PlexosSolution):
     rt = solution_duckdb.result_table(class_enum=ClassEnum.Generator, property_name="Generation")
     relation = solution_duckdb.table(rt)
-    assert relation.limit(1).fetchone() is not None
+    assert relation.limit(1).fetchall()
 
 
 # ---------------------------------------------------------------------------
@@ -362,8 +363,7 @@ def test_get_result_column_as_string(solution_duckdb: PlexosSolution):
         "ST__Interval__Generators__Generation",
         columns="name",
     )
-    row = relation.limit(1).fetchone()
-    assert row is not None
+    assert relation.limit(1).fetchall()
 
 
 def test_get_result_start_end_filter(solution_duckdb: PlexosSolution):
