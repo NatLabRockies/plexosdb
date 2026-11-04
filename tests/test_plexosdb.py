@@ -98,6 +98,55 @@ def test_get_custom_columns_returns_all_or_filters_by_class():
     assert db.get_custom_columns(ClassEnum.Generator) == [all_columns[0]]
 
 
+def test_get_metadata_selects_entity_table_and_applies_filters():
+    db = PlexosDB()
+    db.create_schema(seed_defaults=True)
+    object_id = db.add_object(ClassEnum.Generator, "GEN1")
+    membership_id = db.get_memberships_system("GEN1", object_class=ClassEnum.Generator)[0]["membership_id"]
+    db._db.execute("INSERT INTO t_data(membership_id) VALUES (?)", (membership_id,))
+    data_id = db._db.last_insert_rowid()
+
+    db._db.executemany(
+        "INSERT INTO t_object_meta(object_id, class, property, value, state) VALUES (?, ?, ?, ?, ?)",
+        [
+            (object_id, "PLEXOS", "Owner", "Operations", 1),
+            (object_id, "PLEXOS", "Source", "Input", 2),
+        ],
+    )
+    db._db.execute(
+        "INSERT INTO t_membership_meta(membership_id, class, property, value, state) VALUES (?, ?, ?, ?, ?)",
+        (membership_id, "PLEXOS", "Link", "System", 3),
+    )
+    db._db.execute(
+        "INSERT INTO t_data_meta(data_id, class, property, value, state) VALUES (?, ?, ?, ?, ?)",
+        (data_id, "PLEXOS", "Source", "Imported", 4),
+    )
+
+    assert db.get_metadata("object", object_id, class_name="PLEXOS", property_name="Source") == [
+        {"object_id": object_id, "class": "PLEXOS", "property": "Source", "value": "Input", "state": 2}
+    ]
+    assert db.get_metadata("membership", membership_id) == [
+        {
+            "membership_id": membership_id,
+            "class": "PLEXOS",
+            "property": "Link",
+            "value": "System",
+            "state": 3,
+        }
+    ]
+    assert db.get_metadata("data", data_id, property_name="Source") == [
+        {"data_id": data_id, "class": "PLEXOS", "property": "Source", "value": "Imported", "state": 4}
+    ]
+    assert db.get_metadata("object", object_id, property_name="Missing") == []
+
+
+def test_get_metadata_rejects_unsupported_entity_type():
+    db = PlexosDB()
+
+    with pytest.raises(ValueError, match="Unsupported metadata entity type"):
+        db.get_metadata("attribute", 1)  # type: ignore[arg-type]
+
+
 def test_create_schema_plain_version_string_loads_master_template():
     """A plain version string like '11.0' should load the matching master template."""
     db = PlexosDB()

@@ -2867,8 +2867,66 @@ class PlexosDB:
         class_name: str | None = None,
         property_name: str | None = None,
     ) -> list[dict[str, Any]]:
-        """Retrieve metadata for an entity."""
-        raise NotImplementedError  # pragma: no cover
+        """Retrieve metadata for an entity, optionally filtered by class and property.
+
+        Parameters
+        ----------
+        entity_type : Literal["object", "membership", "data"]
+            Type of entity whose metadata to retrieve.
+        entity_id : int
+            Identifier of the object, membership, or data record.
+        class_name : str | None, optional
+            Metadata class to filter by.
+        property_name : str | None, optional
+            Metadata property to filter by.
+
+        Returns
+        -------
+        list[dict[str, Any]]
+            Matching metadata records with the entity ID, class, property,
+            value, and state fields. Returns an empty list when no records match.
+
+        Raises
+        ------
+        ValueError
+            If ``entity_type`` is not ``"object"``, ``"membership"``, or ``"data"``.
+
+        Examples
+        --------
+        Retrieve all metadata for an object, or narrow it by class and property:
+
+        >>> metadata = db.get_metadata("object", object_id)
+        >>> matching_metadata = db.get_metadata(
+        ...     "object", object_id, class_name="PLEXOS", property_name="Source"
+        ... )
+        """
+        metadata_tables = {
+            "object": ("t_object_meta", "object_id"),
+            "membership": ("t_membership_meta", "membership_id"),
+            "data": ("t_data_meta", "data_id"),
+        }
+        try:
+            table_name, entity_id_column = metadata_tables[entity_type]
+        except KeyError:
+            raise ValueError(f"Unsupported metadata entity type: {entity_type!r}") from None
+
+        conditions = [f"metadata.{entity_id_column} = ?"]
+        params: list[Any] = [entity_id]
+
+        if class_name is not None:
+            conditions.append('metadata."class" = ?')
+            params.append(class_name)
+        if property_name is not None:
+            conditions.append('metadata."property" = ?')
+            params.append(property_name)
+
+        query = f"""
+            SELECT metadata.*
+            FROM {table_name} AS metadata
+            WHERE {" AND ".join(conditions)}
+            ORDER BY metadata."class", metadata."property"
+        """
+        return self._db.fetchall_dict(query, tuple(params))
 
     def get_object_data_ids(
         self,
