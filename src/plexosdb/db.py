@@ -3291,8 +3291,37 @@ class PlexosDB:
         parent_class_enum: ClassEnum,
         child_class_enum: ClassEnum,
     ) -> str:
-        """Get the unit for a specific property."""
-        raise NotImplementedError  # pragma: no cover
+        """Get the unit for a specific property.
+
+        Returns an empty string when the property has no unit value.
+
+        Examples
+        --------
+        >>> db.get_property_unit(
+        ...     "Max Capacity",
+        ...     collection_enum=CollectionEnum.Generators,
+        ...     parent_class_enum=ClassEnum.System,
+        ...     child_class_enum=ClassEnum.Generator,
+        ... )
+        'MW'
+        """
+        property_id = self.get_property_id(
+            property_name,
+            collection_enum=collection_enum,
+            parent_class_enum=parent_class_enum,
+            child_class_enum=child_class_enum,
+        )
+        result = self._db.fetchone(
+            """
+            SELECT unit.value
+            FROM t_property AS property
+            LEFT JOIN t_unit AS unit ON unit.unit_id = property.unit_id
+            WHERE property.property_id = ?
+            """,
+            (property_id,),
+        )
+        assert result
+        return cast(str, result[0] or "")
 
     def get_scenario_id(self, name: str) -> int:
         """Return the ID for a given scenario.

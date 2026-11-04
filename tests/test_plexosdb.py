@@ -1,7 +1,7 @@
 import pytest
 
 from plexosdb.db import PlexosDB
-from plexosdb.enums import ClassEnum
+from plexosdb.enums import ClassEnum, CollectionEnum
 from plexosdb.exceptions import NotFoundError
 
 
@@ -145,6 +145,43 @@ def test_get_metadata_rejects_unsupported_entity_type():
 
     with pytest.raises(ValueError, match="Unsupported metadata entity type"):
         db.get_metadata("attribute", 1)  # type: ignore[arg-type]
+
+
+def test_get_property_unit_returns_value_or_empty_string():
+    db = PlexosDB()
+    db.create_schema(seed_defaults=True)
+    collection_id = db.get_collection_id(
+        CollectionEnum.Generators,
+        parent_class_enum=ClassEnum.System,
+        child_class_enum=ClassEnum.Generator,
+    )
+    db._db.executemany(
+        "INSERT INTO t_unit(unit_id, value) VALUES (?, ?)",
+        [(1, "MW"), (2, None)],
+    )
+    db._db.executemany(
+        "INSERT INTO t_property(property_id, collection_id, unit_id, name) VALUES (?, ?, ?, ?)",
+        [(1, collection_id, 1, "Max Capacity"), (2, collection_id, 2, "Unspecified Unit")],
+    )
+
+    assert (
+        db.get_property_unit(
+            "Max Capacity",
+            collection_enum=CollectionEnum.Generators,
+            parent_class_enum=ClassEnum.System,
+            child_class_enum=ClassEnum.Generator,
+        )
+        == "MW"
+    )
+    assert (
+        db.get_property_unit(
+            "Unspecified Unit",
+            collection_enum=CollectionEnum.Generators,
+            parent_class_enum=ClassEnum.System,
+            child_class_enum=ClassEnum.Generator,
+        )
+        == ""
+    )
 
 
 def test_create_schema_plain_version_string_loads_master_template():
