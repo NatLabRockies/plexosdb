@@ -421,8 +421,10 @@ print(f"PLEXOS version: {config.get('Version')}")
 print(f"Dynamic enabled: {config.get('Dynamic')}")
 ```
 
-Note: `get_config` and `set_config` are currently placeholders in the public
-API, so use `query(...)` for now when inspecting `t_config` values directly.
+Use `db.get_config()` to retrieve configuration entries, or
+`db.get_config("Dynamic")` to retrieve one entry. `set_config()` is not yet
+implemented; use `query(...)` when you need to inspect `t_config` with a custom
+selection.
 
 ### 5. Configure report outputs
 
