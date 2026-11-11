@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
+from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
@@ -228,17 +229,19 @@ def list_solution_result_tables(
     property_map = result_property_name_map(connection)
     rows = connection.execute(
         """
-        SELECT table_name, table_type
+        SELECT table_name, table_type, list(column_name)
         FROM information_schema.tables
+        JOIN information_schema.columns USING (table_catalog, table_schema, table_name)
         WHERE table_catalog = current_database()
           AND table_schema = ?
+        GROUP BY table_name, table_type
         ORDER BY table_name
         """,
         (schema,),
     ).fetchall()
 
     result: list[ResultTable] = []
-    for table_name, table_type in rows:
+    for table_name, table_type, columns in rows:
         table = parse_result_table_name(
             str(table_name),
             schema=schema,
@@ -257,7 +260,10 @@ def list_solution_result_tables(
             continue
         if property_name is not None and table_label(property_name) != table_label(table.property_name):
             continue
-        result.append(table)
+        value_column = first_present_column(set(columns), (table.value_column, "value"))
+        if value_column is None:
+            raise ValueError(f"Result table {schema}.{table_name} has no recognized value column.")
+        result.append(replace(table, value_column=value_column))
     return result
 
 

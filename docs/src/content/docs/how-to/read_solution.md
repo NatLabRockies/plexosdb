@@ -85,6 +85,9 @@ print(generation.name)
 
 ## Reading filtered result rows
 
+Use `generation.value_column` for the numerical column name because converter
+versions can name it either `Generation` or `value`.
+
 Use `get_result()` to build a lazy DuckDB relation. Convert to pandas only when
 you need a DataFrame:
 
@@ -94,7 +97,7 @@ relation = sol.get_result(
     object_names="Coal_Gen",
     start="2017-01-01",
     end="2017-01-08",
-    columns=["name", "timestamp", "Generation", "unit"],
+    columns=["name", "timestamp", generation.value_column, "unit"],
 )
 
 df = relation.df()
@@ -137,8 +140,8 @@ Use `sql()` for a lazy DuckDB relation that you can keep composing:
 
 ```python
 summary = sol.sql(
-    '''
-    SELECT name, SUM(Generation) AS generation_mwh
+    f'''
+    SELECT name, SUM("{generation.value_column}") AS generation_mwh
     FROM report."ST__Interval__Generators__Generation"
     WHERE sample_name = 'Mean'
     GROUP BY name

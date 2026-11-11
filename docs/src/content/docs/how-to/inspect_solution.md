@@ -24,11 +24,15 @@ sol = PlexosSolution.from_zip("my_solution.zip")
 sol.to_sqlite("output.sqlite", if_exists="replace", decode_bin_values=False)
 ```
 
-:::{note} `decode_bin_values=False` is only appropriate for catalog inspection.
-If you later call `materialize_table()` on the same instance, BIN decoding will
-be triggered automatically. If you open the database with `from_sqlite()` and
-BIN data was never decoded, you will get a `RuntimeError` asking you to
-re-import from the ZIP with `decode_bin_values=True`. :::
+:::note
+
+`decode_bin_values=False` is only appropriate for catalog inspection. If you
+later call `materialize_table()` on the same instance, BIN decoding will be
+triggered automatically. If you open the database with `from_sqlite()` and BIN
+data was never decoded, you will get a `RuntimeError` asking you to re-import
+from the ZIP with `decode_bin_values=True`.
+
+:::
 
 ## Printing the table catalog
 

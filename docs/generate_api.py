@@ -7,6 +7,7 @@ import json
 import re
 import subprocess
 from pathlib import Path
+from textwrap import dedent
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = Path(__file__).resolve().parent
@@ -103,11 +104,33 @@ def root_export_definitions() -> dict[str, tuple[Path, ast.AST]]:
     return result
 
 
-def doc_summary(node: ast.AST) -> str:
+def render_docstring(node: ast.AST) -> str:
     if not isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
         return ""
     doc = ast.get_docstring(node)
-    return doc.split("\n\n", 1)[0].strip() if doc else ""
+    if not doc:
+        return ""
+    doc = re.sub(r":(?:class|func|meth|exc):`([^`]+)`", r"`\1`", doc)
+    sections = re.split(r"(?m)^([A-Za-z][A-Za-z ]*)\n-{3,}\n", doc)
+    lines = [sections[0].strip()]
+    for title, body in zip(sections[1::2], sections[2::2]):
+        lines.append(f"**{title}**")
+        body = body.strip("\n")
+        if title in {"Parameters", "Attributes", "Returns", "Return", "Yields", "Raises"}:
+            body = re.sub(r"(?m)^(\S.*)$", r"- `\1`", body)
+            body = re.sub(r"(?m)^    ", "  ", body)
+        elif title == "See Also":
+            body = re.sub(r"(?m)^(\S+)(.*)$", r"- `\1`\2", body)
+        elif title == "Examples":
+            if body.startswith("::\n\n"):
+                body = f"```python\n{dedent(body[4:])}\n```"
+            else:
+                body = "\n\n".join(
+                    f"```python\n{block}\n```" if block.startswith(">>>") else block
+                    for block in body.split("\n\n")
+                )
+        lines.append(body)
+    return "\n\n".join(lines)
 
 
 def source_url(path: Path, node: ast.AST, revision: str) -> str:
@@ -117,6 +140,10 @@ def source_url(path: Path, node: ast.AST, revision: str) -> str:
 
 def function_signature(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
     result = ast.unparse(node.returns) if node.returns else "unspecified"
+    if any(
+        isinstance(decorator, ast.Name) and decorator.id == "property" for decorator in node.decorator_list
+    ):
+        return f"{node.name}: {result}"
     return f"{node.name}({ast.unparse(node.args)}) -> {result}"
 
 
@@ -172,7 +199,7 @@ def render_class_methods(
     route: str,
     revision: str,
 ) -> tuple[list[str], list[dict[str, str]]]:
-    lines = ["## Declared methods\n"]
+    lines = ["## Declared methods and properties\n"]
     members: list[dict[str, str]] = []
     for method in class_methods(node):
         lines += [
@@ -180,8 +207,8 @@ def render_class_methods(
             f"[Source]({source_url(path, method, revision)})\n",
             f"```text\n{function_signature(method)}\n```\n",
         ]
-        if summary := doc_summary(method):
-            lines.append(summary + "\n")
+        if documentation := render_docstring(method):
+            lines.append(documentation + "\n")
         members.append({"label": method.name, "link": route + "#" + anchor(method.name)})
     return lines, members
 
@@ -202,6 +229,8 @@ def render_class(
     )
     if constructor:
         lines += ["## Constructor\n", f"```text\n{function_signature(constructor)}\n```\n"]
+        if documentation := render_docstring(constructor):
+            lines.append(documentation + "\n")
     method_lines, method_members = render_class_methods(node, path, route, revision)
     lines.extend(method_lines)
     members.extend(method_members)
@@ -215,9 +244,9 @@ def render_object(name: str, path: Path, node: ast.AST, revision: str) -> tuple[
         f"---\ntitle: {json.dumps(name)}\neditUrl: false\n---\n",
         f"[Source]({source_url(path, node, revision)})\n",
     ]
-    summary = doc_summary(node)
-    if summary:
-        lines.append(summary + "\n")
+    documentation = render_docstring(node)
+    if documentation:
+        lines.append(documentation + "\n")
     module = ".".join(path.relative_to(SOURCE.parent).with_suffix("").parts)
     imported_from = "plexosdb" if name in public_names() else module
     lines += ["## Import\n", f"```python\nfrom {imported_from} import {name}\n```\n"]
@@ -282,12 +311,12 @@ def render_module_methods(
     public_route: str,
     fragments: dict[str, str],
 ) -> list[str]:
-    lines = ["##### Methods\n"]
+    lines = ["##### Methods and properties\n"]
     for method in methods:
         method_anchor = anchor(method.name)
         lines += [f"###### {method.name}\n", f"```text\n{function_signature(method)}\n```\n"]
-        if summary := doc_summary(method):
-            lines.append(summary + "\n")
+        if documentation := render_docstring(method):
+            lines.append(documentation + "\n")
         fragments[f"{module}.{name}.{method.name}"] = public_route + "#" + method_anchor
         fragments[f"plexosdb.{module.removeprefix('plexosdb.')}.{name}.{method.name}"] = (
             public_route + "#" + method_anchor
@@ -297,9 +326,10 @@ def render_module_methods(
 
 def render_module_class(
     module: str,
+    path: Path,
     name: str,
     node: ast.ClassDef,
-    exported: set[str],
+    exported: dict[tuple[Path, str], str],
     public_route: str,
     fragments: dict[str, str],
 ) -> list[str]:
@@ -307,8 +337,8 @@ def render_module_class(
     methods = class_methods(node)
     if methods:
         lines.extend(render_module_methods(module, name, methods, public_route, fragments))
-    if name in exported:
-        object_route = f"/plexosdb/reference/python-api/{slug(name)}/"
+    if export_name := exported.get((path, name)):
+        object_route = f"/plexosdb/reference/python-api/{slug(export_name)}/"
         lines.append(f"Full reference: [`{name}`]({object_route}).\n")
         fragments[f"{module}.{name}"] = object_route
         fragments[f"plexosdb.{module.removeprefix('plexosdb.')}.{name}"] = object_route
@@ -320,18 +350,18 @@ def render_module_definition(
     path: Path,
     node: ast.AST,
     revision: str,
-    exported: set[str],
+    exported: dict[tuple[Path, str], str],
     public_route: str,
     fragments: dict[str, str],
 ) -> list[str]:
     name = module_definition_name(node)
     lines = [f"#### {name}\n", f"[Source]({source_url(path, node, revision)})\n"]
-    if summary := doc_summary(node):
-        lines.append(summary + "\n")
+    if documentation := render_docstring(node):
+        lines.append(documentation + "\n")
     if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
         lines.append(f"```text\n{function_signature(node)}\n```\n")
     elif isinstance(node, ast.ClassDef):
-        lines.extend(render_module_class(module, name, node, exported, public_route, fragments))
+        lines.extend(render_module_class(module, path, name, node, exported, public_route, fragments))
     else:
         lines.append(f"```text\n{ast.unparse(node)}\n```\n")
     name_anchor = anchor(name)
@@ -344,7 +374,7 @@ def append_module_reference(
     page_slug: str,
     module_sources: list[tuple[str, Path]],
     revision: str,
-    exported: set[str],
+    exported: dict[tuple[Path, str], str],
     fragments: dict[str, str],
 ) -> dict[str, str]:
     route = f"/reference/api/modules/{page_slug}/"
@@ -380,7 +410,7 @@ def generate() -> None:
 
     exports: list[dict[str, object]] = []
     fragments: dict[str, str] = {}
-    exported = set(names)
+    exported = {(path, definition_name(node)): name for name, (path, node) in root_definitions.items()}
     for name in sorted(set(names)):
         path, node = root_definitions[name]
         content, members = render_object(name, path, node, revision)

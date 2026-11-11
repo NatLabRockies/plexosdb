@@ -73,8 +73,12 @@ redirected output is plain text. Set `NO_COLOR` to disable coloring. The display
 and failure text reports end with `Validation found N errors.`, where `N` is the
 number of findings, not the number of affected database rows.
 
-:::note Findings still raise an exception even though their display uses `WARN`.
-The suggested fixes are guidance, not actions performed automatically. :::
+:::note
+
+Findings still raise an exception even though their display uses `WARN`. The
+suggested fixes are guidance, not actions performed automatically.
+
+:::
 
 ## Writing a text report
 
@@ -123,8 +127,9 @@ before re-raising validation errors, giving a nonzero exit status when findings
 exist. XML import errors and report-writing errors propagate normally; a
 successful validation report is not written for those failures.
 
-Download the script:
-{download}`validate_database.py <../../../examples/validate_database.py>`.
+The
+[example script](https://github.com/NatLabRockies/plexosdb/blob/main/examples/validate_database.py)
+is also available in the repository.
 
 ## Limited automatic repairs
 

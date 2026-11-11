@@ -89,5 +89,9 @@ for i in range(1, 101):
     )
 ```
 
-:::note When creating objects, PlexosDB automatically creates a system
-membership for the object. :::
+:::note
+
+When creating objects, PlexosDB automatically creates a system membership for
+the object.
+
+:::
