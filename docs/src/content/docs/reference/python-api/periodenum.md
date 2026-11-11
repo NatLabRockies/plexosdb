@@ -3,7 +3,7 @@ title: "PeriodEnum"
 editUrl: false
 ---
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/783cbe719e0b53a41cf7731131ad55dd171c274a/src/plexosdb/enums.py#L149)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/enums.py#L149)
 
 PLEXOS result periods used in result table names.
 
@@ -57,4 +57,4 @@ HOUR = 'HOUR'
 QUARTER = 'QUARTER'
 ```
 
-## Declared methods
+## Declared methods and properties

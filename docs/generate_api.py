@@ -414,7 +414,7 @@ def generate() -> None:
     for name in sorted(set(names)):
         path, node = root_definitions[name]
         content, members = render_object(name, path, node, revision)
-        (PAGES / f"{slug(name)}.md").write_text(content)
+        (PAGES / f"{slug(name)}.md").write_text(content.rstrip() + "\n")
         module = ".".join(path.relative_to(SOURCE.parent).with_suffix("").parts)
         object_route = f"/plexosdb/reference/python-api/{slug(name)}/"
         fragments[f"plexosdb.{name}"] = object_route

@@ -3,7 +3,7 @@ title: "ClassEnum"
 editUrl: false
 ---
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/783cbe719e0b53a41cf7731131ad55dd171c274a/src/plexosdb/enums.py#L59)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/enums.py#L59)
 
 Enum that defines the different Plexos classes.
 
@@ -189,4 +189,4 @@ Constraint = 'Constraint'
 Purchaser = 'Purchaser'
 ```
 
-## Declared methods
+## Declared methods and properties

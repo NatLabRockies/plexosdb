@@ -10,31 +10,41 @@ title: "Enumerations"
 
 #### Schema
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/783cbe719e0b53a41cf7731131ad55dd171c274a/src/plexosdb/enums.py#L7)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/enums.py#L7)
 
 Enum that defines the Plexos Schema.
 
-##### Methods
+##### Methods and properties
 
 ###### name
 
 ```text
-name(self) -> str
+name: str
 ```
 
 Table name associated with this schema element.
 
+**Returns**
+
+- `str`
+  The underlying table name parsed from the enum value.
+
 ###### label
 
 ```text
-label(self) -> str | None
+label: str | None
 ```
 
 Primary label column name for the schema element, if any.
 
+**Returns**
+
+- `str | None`
+  The label column used as a default identifier when available.
+
 #### ClassEnum
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/783cbe719e0b53a41cf7731131ad55dd171c274a/src/plexosdb/enums.py#L59)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/enums.py#L59)
 
 Enum that defines the different Plexos classes.
 
@@ -42,7 +52,7 @@ Full reference: [`ClassEnum`](/plexosdb/reference/python-api/classenum/).
 
 #### plexos_class_mapping
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/783cbe719e0b53a41cf7731131ad55dd171c274a/src/plexosdb/enums.py#L93)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/enums.py#L93)
 
 ```text
 plexos_class_mapping = {enum_member.name: enum_member.value for enum_member in ClassEnum}
@@ -50,16 +60,15 @@ plexos_class_mapping = {enum_member.name: enum_member.value for enum_member in C
 
 #### CollectionEnum
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/783cbe719e0b53a41cf7731131ad55dd171c274a/src/plexosdb/enums.py#L96)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/enums.py#L96)
 
 Enum that defines the different Plexos colections via Collection Name.
 
-Full reference:
-[`CollectionEnum`](/plexosdb/reference/python-api/collectionenum/).
+Full reference: [`CollectionEnum`](/plexosdb/reference/python-api/collectionenum/).
 
 #### PhaseEnum
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/783cbe719e0b53a41cf7731131ad55dd171c274a/src/plexosdb/enums.py#L140)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/enums.py#L140)
 
 PLEXOS solve phases used in result table names.
 
@@ -67,7 +76,7 @@ Full reference: [`PhaseEnum`](/plexosdb/reference/python-api/phaseenum/).
 
 #### PeriodEnum
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/783cbe719e0b53a41cf7731131ad55dd171c274a/src/plexosdb/enums.py#L149)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/enums.py#L149)
 
 PLEXOS result periods used in result table names.
 
@@ -75,16 +84,15 @@ Full reference: [`PeriodEnum`](/plexosdb/reference/python-api/periodenum/).
 
 #### TableTypeEnum
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/783cbe719e0b53a41cf7731131ad55dd171c274a/src/plexosdb/enums.py#L161)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/enums.py#L161)
 
 DuckDB information_schema table types used by solution results.
 
-Full reference:
-[`TableTypeEnum`](/plexosdb/reference/python-api/tabletypeenum/).
+Full reference: [`TableTypeEnum`](/plexosdb/reference/python-api/tabletypeenum/).
 
 #### str2enum
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/783cbe719e0b53a41cf7731131ad55dd171c274a/src/plexosdb/enums.py#L168)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/enums.py#L168)
 
 Convert string to enum.
 
@@ -94,7 +102,7 @@ str2enum(string: str, schema_enum: type[Enum]=Schema) -> Schema | None
 
 #### get_default_collection
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/783cbe719e0b53a41cf7731131ad55dd171c274a/src/plexosdb/enums.py#L176)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/enums.py#L176)
 
 Return default collection for class.
 
@@ -104,7 +112,7 @@ get_default_collection(class_enum: ClassEnum) -> CollectionEnum
 
 #### parse_class_enum
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/783cbe719e0b53a41cf7731131ad55dd171c274a/src/plexosdb/enums.py#L214)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/enums.py#L214)
 
 Parse a string or ClassEnum to a ClassEnum instance.
 
@@ -114,7 +122,7 @@ parse_class_enum(value: str | ClassEnum) -> ClassEnum
 
 #### parse_collection_enum
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/783cbe719e0b53a41cf7731131ad55dd171c274a/src/plexosdb/enums.py#L219)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/enums.py#L219)
 
 Parse a string or CollectionEnum to a CollectionEnum instance.
 

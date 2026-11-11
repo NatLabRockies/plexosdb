@@ -160,9 +160,9 @@ instance/
 .scrapy
 
 # Sphinx documentation
+.astro/
 docs/_build/
-docs/.astro/
-docs/node_modules/
+node_modules/
 
 # Implementation plans (local only)
 docs/plans/
