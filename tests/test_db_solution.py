@@ -17,6 +17,7 @@ from plexosdb.db_solution_helpers import (
     add_in_filter,
     convert_solution_to_duckdb,
     copy_duckdb_to_memory,
+    list_solution_result_tables,
     normalize_bands,
     normalize_collection,
     normalize_columns,
@@ -58,6 +59,15 @@ def solution_duckdb(
         sol.close()
 
 
+def _make_simple_conn(columns: str, *, table_name: str = "t") -> duckdb.DuckDBPyConnection:
+    """Return an in-memory DuckDB connection with a single-row report table."""
+    conn = duckdb.connect(":memory:")
+    conn.execute("CREATE SCHEMA report")
+    conn.execute(f"CREATE TABLE report.{table_name} ({columns})")
+    conn.execute(f"INSERT INTO report.{table_name} VALUES ({', '.join(['1'] * columns.count(',') + ['1'])})")
+    return conn
+
+
 def test_top_level_exports_use_duckdb_solution_api():
     assert ExportedPlexosSolution is PlexosSolution
     assert ExportedDuckDBSolutionInfo is DuckDBSolutionInfo
@@ -86,8 +96,8 @@ def test_solution_info_and_query_primitives(solution_duckdb: PlexosSolution, sol
         ("Coal_Gen",),
     )
     assert rows == [{"name": "Coal_Gen"}]
-    assert solution_duckdb.sql("SELECT COUNT(*) AS n FROM processed.objects").fetchone()[0] > 0
-    assert solution_duckdb.table("ST__Interval__Generators__Generation").limit(1).fetchone() is not None
+    assert solution_duckdb.sql("SELECT COUNT(*) AS n FROM processed.objects").fetchall()[0][0] > 0
+    assert solution_duckdb.table("ST__Interval__Generators__Generation").limit(1).fetchall()
 
 
 def test_solution_metadata_discovery_uses_existing_enums(solution_duckdb: PlexosSolution):
@@ -102,13 +112,37 @@ def test_solution_metadata_discovery_uses_existing_enums(solution_duckdb: Plexos
     assert isinstance(table, ResultTable)
     assert table.collection == CollectionEnum.Generators
     assert table.class_enum == ClassEnum.Generator
-    assert table.value_column == "Generation"
+    assert table.value_column in solution_duckdb.table(table).columns
 
     tables = solution_duckdb.list_result_tables(
         collection=CollectionEnum.Generators,
         property_name="Generation",
     )
     assert tables == [table]
+
+
+@pytest.mark.parametrize("value_column", ["Generation", "value"])
+def test_result_table_discovers_value_column(value_column: str):
+    conn = _make_simple_conn(
+        f"name VARCHAR, {value_column} DOUBLE",
+        table_name="ST__Interval__Generators__Generation",
+    )
+    try:
+        table = list_solution_result_tables(conn)[0]
+        assert table.value_column == value_column
+        relation = read_solution_result(conn, table, sample_names=None, columns=[table.value_column])
+        assert relation.fetchall() == [(1.0,)]
+    finally:
+        conn.close()
+
+
+def test_result_table_rejects_missing_value_column():
+    conn = _make_simple_conn("name VARCHAR", table_name="ST__Interval__Generators__Generation")
+    try:
+        with pytest.raises(ValueError, match="no recognized value column"):
+            list_solution_result_tables(conn)
+    finally:
+        conn.close()
 
 
 def test_read_result_returns_filtered_duckdb_relation(solution_duckdb: PlexosSolution):
@@ -119,11 +153,13 @@ def test_read_result_returns_filtered_duckdb_relation(solution_duckdb: PlexosSol
     relation = solution_duckdb.get_result(
         table,
         object_names="Coal_Gen",
-        columns=["name", "timestamp", "Generation"],
+        columns=["name", "timestamp", table.value_column],
     )
-    rows = relation.fetchall()
+    assert relation.columns == ["name", "timestamp", table.value_column]
+    rows = relation.order("timestamp").fetchall()
     assert len(rows) == 8760
     assert rows[0][0] == "Coal_Gen"
+    assert [row[2] for row in rows[:3]] == [353.0, 306.0, 299.0]
 
     one_day = solution_duckdb.get_result(
         "ST__Interval__Generators__Generation",
@@ -277,7 +313,7 @@ def test_solution_metadata_source_returns_none_when_empty():
 def test_table_method_with_result_table_object(solution_duckdb: PlexosSolution):
     rt = solution_duckdb.result_table(class_enum=ClassEnum.Generator, property_name="Generation")
     relation = solution_duckdb.table(rt)
-    assert relation.limit(1).fetchone() is not None
+    assert relation.limit(1).fetchall()
 
 
 # ---------------------------------------------------------------------------
@@ -362,8 +398,7 @@ def test_get_result_column_as_string(solution_duckdb: PlexosSolution):
         "ST__Interval__Generators__Generation",
         columns="name",
     )
-    row = relation.limit(1).fetchone()
-    assert row is not None
+    assert relation.limit(1).fetchall()
 
 
 def test_get_result_start_end_filter(solution_duckdb: PlexosSolution):
@@ -379,15 +414,6 @@ def test_get_result_start_end_filter(solution_duckdb: PlexosSolution):
 # ---------------------------------------------------------------------------
 # read_solution_result error paths (no timestamp / no band column)
 # ---------------------------------------------------------------------------
-
-
-def _make_simple_conn(columns: str) -> duckdb.DuckDBPyConnection:
-    """Return an in-memory DuckDB connection with a single-row report.t table."""
-    conn = duckdb.connect(":memory:")
-    conn.execute("CREATE SCHEMA report")
-    conn.execute(f"CREATE TABLE report.t ({columns})")
-    conn.execute(f"INSERT INTO report.t VALUES ({', '.join(['1'] * columns.count(',') + ['1'])})")
-    return conn
 
 
 def test_read_solution_result_start_no_timestamp_raises():

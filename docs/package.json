@@ -1,0 +1,21 @@
+{
+  "name": "plexosdb-docs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "astro build",
+    "dev": "astro dev",
+    "preview": "astro preview",
+    "prebuild": "python3 generate_api.py && node --test test_redirects.mjs",
+    "predev": "python3 generate_api.py",
+    "postbuild": "python3 validate_build.py"
+  },
+  "dependencies": {
+    "@astrojs/markdown-remark": "^7.3.0",
+    "@astrojs/starlight": "^0.42.6",
+    "astro": "^7.3.8"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
