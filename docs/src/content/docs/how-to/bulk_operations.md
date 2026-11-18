@@ -65,6 +65,16 @@ The `add_properties_from_records` method processes records in batches (default
 This makes it much faster than individual property insertions, especially for
 large datasets.
 
+### Chunking Policy for Contributors
+
+The public `chunksize` argument on bulk-write methods controls how many records
+are written in each batch. It is independent of internal query chunking, which
+limits the number of bound parameters in SQLite `IN (...)` lookups and is not
+exposed as a method option. Internal batches use a shared conservative parameter
+budget and account for both fixed query parameters and all variable lists in the
+query. Keep these two batching concerns separate when adding bulk or lookup
+methods.
+
 Key performance features:
 
 - Single transaction for all insertions (atomic operations)

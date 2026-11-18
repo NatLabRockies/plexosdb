@@ -37,4 +37,4 @@ tables: Annotated[list[str], 'Names of tables present in the raw DuckDB schema a
 is_in_memory: bool
 ```
 
-Return *True* when the database lives in memory only.
+Return _True_ when the database lives in memory only.

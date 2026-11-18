@@ -5,12 +5,12 @@ editUrl: false
 
 [Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db_solution.py#L40)
 
-PLEXOS solution wrapper backed by ``plexos2duckdb``.
+PLEXOS solution wrapper backed by `plexos2duckdb`.
 
-Passing ``database`` to `to_duckdb` creates or reuses a file-backed
-DuckDB database, which is the fastest path for large solutions.  Omitting
-``database`` keeps the result in memory by converting through a temporary
-DuckDB file and copying it into an in-memory DuckDB connection.
+Passing `database` to `to_duckdb` creates or reuses a file-backed DuckDB
+database, which is the fastest path for large solutions. Omitting `database`
+keeps the result in memory by converting through a temporary DuckDB file and
+copying it into an in-memory DuckDB connection.
 
 ## Import
 
@@ -72,24 +72,21 @@ Create a solution wrapper bound to a PLEXOS solution path.
 to_duckdb(self, database: str | Path | None=None, *, if_exists: IfExists='reuse', n_threads: int | None=None, table_name_pattern: str | None=None, in_memory: bool | None=None) -> DuckDBResult
 ```
 
-Convert the solution with ``plexos2duckdb`` and open a DuckDB connection.
+Convert the solution with `plexos2duckdb` and open a DuckDB connection.
 
 **Parameters**
 
-- `database`
-  Output DuckDB path. When omitted, the result is in memory unless
-  ``in_memory=False`` is provided.
-- `if_exists`
-  File-backed overwrite policy: ``'fail'``, ``'reuse'``, or ``'replace'``.
+- `database` Output DuckDB path. When omitted, the result is in memory unless
+  `in_memory=False` is provided.
+- `if_exists` File-backed overwrite policy: `'fail'`, `'reuse'`, or `'replace'`.
   Ignored for in-memory conversion because the intermediate database is
   temporary.
-- `n_threads`
-  Optional thread count passed to ``plexos2duckdb`` for time-series table writes.
-- `table_name_pattern`
-  Optional regex passed to ``plexos2duckdb`` to restrict generated data tables.
-- `in_memory`
-  ``True`` forces an in-memory final connection, ``False`` forces a
-  file-backed database, and ``None`` uses in memory when *database* is omitted.
+- `n_threads` Optional thread count passed to `plexos2duckdb` for time-series
+  table writes.
+- `table_name_pattern` Optional regex passed to `plexos2duckdb` to restrict
+  generated data tables.
+- `in_memory` `True` forces an in-memory final connection, `False` forces a
+  file-backed database, and `None` uses in memory when _database_ is omitted.
 
 ### info
 

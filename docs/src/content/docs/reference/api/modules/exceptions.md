@@ -32,7 +32,8 @@ Raised for generic errors related to model relationships.
 
 Stable categories for database validation findings.
 
-Full reference: [`DatabaseValidationCategory`](/plexosdb/reference/python-api/databasevalidationcategory/).
+Full reference:
+[`DatabaseValidationCategory`](/plexosdb/reference/python-api/databasevalidationcategory/).
 
 #### DatabaseValidationFinding
 
@@ -40,7 +41,8 @@ Full reference: [`DatabaseValidationCategory`](/plexosdb/reference/python-api/da
 
 One structured finding produced by database validation.
 
-Full reference: [`DatabaseValidationFinding`](/plexosdb/reference/python-api/databasevalidationfinding/).
+Full reference:
+[`DatabaseValidationFinding`](/plexosdb/reference/python-api/databasevalidationfinding/).
 
 #### DatabaseValidationError
 
@@ -51,7 +53,8 @@ Raised when database validation finds integrity or consistency issues.
 WARN labels are yellow when stderr is a terminal, unless NO_COLOR is set.
 Redirected output remains plain text.
 
-Full reference: [`DatabaseValidationError`](/plexosdb/reference/python-api/databasevalidationerror/).
+Full reference:
+[`DatabaseValidationError`](/plexosdb/reference/python-api/databasevalidationerror/).
 
 #### MultipleFilesError
 
