@@ -10,12 +10,12 @@ declared methods are reserved for future implementation and currently raise
 `NotImplementedError`; they are listed in the API for transparency but should
 not be used as supported workflows yet.
 
-Currently unimplemented methods include `add_custom_column`, `add_metadata`,
-`add_time_slice`, `add_variable_tag`, `backup_database`,
-`create_object_scenario`, `delete_category`, `delete_membership`,
-`delete_metadata`, `delete_text`, `import_from_csv`, `list_reports`,
-`set_config`, `set_date_range`, `to_csv`, `update_attribute`, `update_category`,
-`update_properties`, `update_property`, `update_scenario`, and `update_text`.
+Currently unimplemented methods include `add_metadata`, `add_time_slice`,
+`add_variable_tag`, `backup_database`, `create_object_scenario`,
+`delete_category`, `delete_membership`, `delete_metadata`, `delete_text`,
+`import_from_csv`, `list_reports`, `set_config`, `set_date_range`, `to_csv`,
+`update_attribute`, `update_category`, `update_properties`, `update_property`,
+`update_scenario`, and `update_text`.
 
 <!-- Generated API reference -->
 
@@ -25,7 +25,7 @@ Currently unimplemented methods include `add_custom_column`, `add_metadata`,
 
 #### PropertyRecord
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L60)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L60)
 
 Type definition for property records returned by iterate_properties.
 
@@ -78,7 +78,7 @@ Full reference: [`PropertyRecord`](/plexosdb/reference/python-api/propertyrecord
 
 #### PlexosDB
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L110)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L110)
 
 High-level API for PlexosDB schema manipulation.
 
@@ -249,6 +249,40 @@ add_custom_column(self, class_enum: ClassEnum, name: str, /, *, position: int | 
 ```
 
 Add a custom column to a class.
+
+**Parameters**
+
+- `class_enum : ClassEnum`
+  Class to associate with the custom column.
+- `name : str`
+  Name of the custom column.
+- `position : int | None, optional`
+  Optional column position. If omitted, the database stores ``NULL``.
+
+**Returns**
+
+- `int`
+  ID of the created custom column.
+
+**Notes**
+
+A UUID is generated for the new custom column. If ``position`` is
+omitted, the database stores ``NULL`` for its position.
+
+**Raises**
+
+- `AssertionError`
+  If the class does not exist in the database.
+- `sqlite3.IntegrityError`
+  If inserting the custom column violates a database constraint.
+
+**Examples**
+
+```python
+>>> db = PlexosDB()
+>>> db.create_schema(seed_defaults=True)
+>>> column_id = db.add_custom_column(ClassEnum.Generator, "Operator note", position=0)
+```
 
 ###### add_datafile_tag
 

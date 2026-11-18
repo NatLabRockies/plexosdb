@@ -439,8 +439,55 @@ class PlexosDB:
         *,
         position: int | None = None,
     ) -> int:
-        """Add a custom column to a class."""
-        raise NotImplementedError  # pragma: no cover
+        """Add a custom column to a class.
+
+        Parameters
+        ----------
+        class_enum : ClassEnum
+            Class to associate with the custom column.
+        name : str
+            Name of the custom column.
+        position : int | None, optional
+            Optional column position. If omitted, the database stores ``NULL``.
+
+        Returns
+        -------
+        int
+            ID of the created custom column.
+
+        Notes
+        -----
+        A UUID is generated for the new custom column. If ``position`` is
+        omitted, the database stores ``NULL`` for its position.
+
+        Raises
+        ------
+        AssertionError
+            If the class does not exist in the database.
+        sqlite3.IntegrityError
+            If inserting the custom column violates a database constraint.
+
+        Examples
+        --------
+        >>> db = PlexosDB()
+        >>> db.create_schema(seed_defaults=True)
+        >>> column_id = db.add_custom_column(ClassEnum.Generator, "Operator note", position=0)
+        """
+        class_id = self.get_class_id(class_enum)
+        query = """
+            INSERT INTO t_custom_column(column_id, class_id, name, position, GUID)
+            VALUES (?, ?, ?, ?, ?)
+        """
+        with self._db.transaction():
+            result = self._db.fetchone("SELECT COALESCE(MAX(column_id), 0) + 1 FROM t_custom_column")
+            assert result
+            column_id = cast(int, result[0])
+            success = self._db.execute(
+                query,
+                (column_id, class_id, name, position, str(uuid.uuid4())),
+            )
+            assert success
+        return column_id
 
     def add_datafile_tag(
         self,

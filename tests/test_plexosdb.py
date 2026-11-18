@@ -1,3 +1,5 @@
+import uuid
+
 import pytest
 
 from plexosdb.db import PlexosDB
@@ -96,6 +98,40 @@ def test_get_custom_columns_returns_all_or_filters_by_class():
     all_columns = db.get_custom_columns()
     assert [column["class_name"] for column in all_columns] == ["Generator", "Node", None]
     assert db.get_custom_columns(ClassEnum.Generator) == [all_columns[0]]
+
+
+def test_add_custom_column_inserts_column_with_optional_position_and_guid():
+    db = PlexosDB()
+    db.create_schema(seed_defaults=True)
+    class_id = db.get_class_id(ClassEnum.Generator)
+    db._db.execute(
+        "INSERT INTO t_custom_column(column_id, class_id, name, position, GUID) VALUES (?, ?, ?, ?, ?)",
+        (10, class_id, "Existing", 0, "existing-guid"),
+    )
+
+    positioned_id = db.add_custom_column(ClassEnum.Generator, "Notes", position=0)
+    unpositioned_id = db.add_custom_column(ClassEnum.Generator, "Review")
+
+    columns = [
+        column
+        for column in db.get_custom_columns(ClassEnum.Generator)
+        if column["name"] in {"Notes", "Review"}
+    ]
+    assert [column["column_id"] for column in columns] == [positioned_id, unpositioned_id]
+    assert [column["name"] for column in columns] == ["Notes", "Review"]
+    assert [column["position"] for column in columns] == [0, None]
+    assert [column["class_name"] for column in columns] == [ClassEnum.Generator.value] * 2
+    assert uuid.UUID(columns[0]["GUID"])
+    assert uuid.UUID(columns[1]["GUID"])
+    assert columns[0]["GUID"] != columns[1]["GUID"]
+
+
+def test_add_custom_column_requires_existing_class():
+    db = PlexosDB()
+    db.create_schema()
+
+    with pytest.raises(AssertionError):
+        db.add_custom_column(ClassEnum.Generator, "Notes")
 
 
 def test_get_metadata_selects_entity_table_and_applies_filters():
