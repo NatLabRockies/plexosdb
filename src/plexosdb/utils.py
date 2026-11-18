@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
-from .db_constants import SQLITE_INT64_MIN, SQLITE_INT64_MAX
+from .db_constants import SQLITE_INT64_MIN, SQLITE_INT64_MAX, sqlite_query_chunk_size
 from .db_constants import get_sql_query as get_sql_query
 from .enums import ClassEnum
 from .exceptions import NotFoundError
@@ -368,18 +368,23 @@ def _resolve_membership_map(
         )
         parent_class_id = db.get_class_id(parent_class)
         child_class_id = db.get_class_id(object_class)
-        placeholders = ",".join("?" for _ in component_names)
-        query = f"""
-            SELECT child_object.name, mem.membership_id
-            FROM t_membership AS mem
-            INNER JOIN t_object AS child_object ON child_object.object_id = mem.child_object_id
-            WHERE mem.parent_class_id = ?
-              AND mem.child_class_id = ?
-              AND mem.collection_id = ?
-              AND child_object.name IN ({placeholders})
-        """
-        params: tuple[Any, ...] = (parent_class_id, child_class_id, collection_id, *component_names)
-        memberships = db._db.fetchall(query, params)
+        memberships = []
+        for name_batch in batched(
+            component_names,
+            sqlite_query_chunk_size(fixed_parameters=3),
+        ):
+            placeholders = ",".join("?" for _ in name_batch)
+            query = f"""
+                SELECT child_object.name, mem.membership_id
+                FROM t_membership AS mem
+                INNER JOIN t_object AS child_object ON child_object.object_id = mem.child_object_id
+                WHERE mem.parent_class_id = ?
+                  AND mem.child_class_id = ?
+                  AND mem.collection_id = ?
+                  AND child_object.name IN ({placeholders})
+            """
+            params = (parent_class_id, child_class_id, collection_id, *name_batch)
+            memberships.extend(db._db.fetchall(query, params))
 
     if not memberships:
         missing = ", ".join(sorted(name for name in component_names if name))
@@ -611,10 +616,7 @@ def insert_property_values(
 
     unique_membership_ids = list({mid for mid, _, _ in params})
     membership_to_name: dict[int, str] = {}
-    # Specify bound parameter limit
-    CHUNK = 900  # noqa: N806
-    for i in range(0, len(unique_membership_ids), CHUNK):
-        chunk = tuple(unique_membership_ids[i : i + CHUNK])
+    for chunk in batched(unique_membership_ids, sqlite_query_chunk_size()):
         ph = ",".join("?" * len(chunk))
         rows = db._db.fetchall(
             f"""SELECT m.membership_id, o.name
