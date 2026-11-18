@@ -6,7 +6,6 @@ from collections.abc import Iterable, Iterator
 from datetime import datetime
 from importlib.resources import as_file, files
 from pathlib import Path
-from string import Template
 from typing import Any, Literal, TypedDict, cast
 from collections.abc import Sequence
 import warnings
@@ -17,9 +16,7 @@ from . import checks as checks_module
 from .db_constants import (
     SQLITE_ASCII_CASE_FOLD,
     SQLITE_BACKEND_KWARGS,
-    sqlite_query_chunk_size,
     PLEXOS_DEFAULT_SCHEMA,
-    PROPERTY_QUERY,
     MASTER_TEMPLATE_FILES,
 )
 from .db_manager import SQLiteManager
@@ -47,6 +44,8 @@ from .utils import (
     get_system_object_name,
     insert_property_texts,
     insert_property_values,
+    _iterate_property_filter_batches,
+    _sqlite_query_chunk_size,
     no_space,
     normalize_names,
     plan_property_inserts,
@@ -1084,7 +1083,7 @@ class PlexosDB:
         object_names = tuple({record["name"] for record in records})
         name_to_object_id: dict[str, int] = {}
 
-        for chunk in batched(object_names, sqlite_query_chunk_size(fixed_parameters=1)):
+        for chunk in batched(object_names, _sqlite_query_chunk_size(fixed_parameters=1)):
             object_placeholders = ", ".join("?" for _ in chunk)
 
             object_rows = self._db.query(
@@ -2195,7 +2194,7 @@ class PlexosDB:
             # Delete the data records (cascade will handle related tables)
             data_ids = [row[0] for row in data_results]
             with self._db.transaction():
-                for data_id_batch in batched(data_ids, sqlite_query_chunk_size()):
+                for data_id_batch in batched(data_ids, _sqlite_query_chunk_size()):
                     placeholders = ",".join("?" * len(data_id_batch))
                     delete_query = f"DELETE FROM t_data WHERE data_id IN ({placeholders})"
                     self._db.execute(delete_query, data_id_batch)
@@ -2354,7 +2353,7 @@ class PlexosDB:
             ORDER BY attr.name
         """
         name_batches = (
-            batched(names, sqlite_query_chunk_size(fixed_parameters=len(params))) if names else [()]
+            batched(names, _sqlite_query_chunk_size(fixed_parameters=len(params))) if names else [()]
         )
         results: list[dict[str, Any]] = []
         for name_batch in name_batches:
@@ -2856,7 +2855,7 @@ class PlexosDB:
             extra_params = [ClassEnum.System.value, collection.value]
 
         all_rows: list[dict[str, Any]] = []
-        for chunk in batched(names, sqlite_query_chunk_size(fixed_parameters=1 + len(extra_params))):
+        for chunk in batched(names, _sqlite_query_chunk_size(fixed_parameters=1 + len(extra_params))):
             ph = ",".join("?" * len(chunk))
             params = (class_id, *chunk, *extra_params)
             all_rows.extend(
@@ -3036,9 +3035,8 @@ class PlexosDB:
         ORDER BY
             d.data_id
         """
-        property_batches = (
-            batched(properties, sqlite_query_chunk_size(fixed_parameters=len(params))) if properties else [()]
-        )
+        property_chunk_size = _sqlite_query_chunk_size(fixed_parameters=len(params))
+        property_batches = batched(properties, property_chunk_size) if properties else [()]
         data_ids: list[int] = []
         for property_batch in property_batches:
             property_filter = ""
@@ -3502,6 +3500,12 @@ class PlexosDB:
             m["membership_id"] for m in self.list_object_memberships(class_enum, name, category=category)
         ]
         if not memberships:
+            logger.debug(
+                "No memberships found for {} '{}' (category={!r}); has_properties returns False.",
+                class_enum,
+                name,
+                category,
+            )
             return False
         query_template = """
             SELECT
@@ -3515,7 +3519,7 @@ class PlexosDB:
                 AND col.name = ?
             LIMIT 1
         """
-        chunk_size = sqlite_query_chunk_size(fixed_parameters=1)
+        chunk_size = _sqlite_query_chunk_size(fixed_parameters=1)
         for membership_batch in batched(memberships, chunk_size):
             membership_placeholders = ", ".join("?" for _ in membership_batch)
             if self._db.query(
@@ -3634,47 +3638,16 @@ class PlexosDB:
             msg = f"Category '{category}' does not exist for class {class_enum}."
             raise NotFoundError(msg)
 
-        yield from self._iterate_property_filter_batches(
-            conditions,
-            scenarios=normalize_names(scenario) if scenario else [],
-            scenario_categories=normalize_names(scenario_category) if scenario_category else [],
-            batch_size=batch_size,
+        yield from cast(
+            Iterator[PropertyRecord],
+            _iterate_property_filter_batches(
+                self,
+                conditions,
+                scenarios=normalize_names(scenario) if scenario else [],
+                scenario_categories=normalize_names(scenario_category) if scenario_category else [],
+                batch_size=batch_size,
+            ),
         )
-
-    def _iterate_property_filter_batches(
-        self,
-        conditions: list[str],
-        *,
-        scenarios: list[str],
-        scenario_categories: list[str],
-        batch_size: int,
-    ) -> Iterator[PropertyRecord]:
-        """Query property rows using parameter-safe scenario filter batches."""
-        in_clause_count = int(bool(scenarios)) + int(bool(scenario_categories))
-        chunk_size = sqlite_query_chunk_size(parameters_per_item=max(in_clause_count, 1))
-        scenario_batches = batched(scenarios, chunk_size) if scenarios else [()]
-
-        for scenario_batch in scenario_batches:
-            category_batches = batched(scenario_categories, chunk_size) if scenario_categories else [()]
-            for category_batch in category_batches:
-                batch_conditions = list(conditions)
-                query_params: list[Any] = []
-                if scenario_batch:
-                    placeholders = ", ".join("?" for _ in scenario_batch)
-                    batch_conditions.append(f"scenario.name IN ({placeholders})")
-                    query_params.extend(scenario_batch)
-                if category_batch:
-                    placeholders = ", ".join("?" for _ in category_batch)
-                    batch_conditions.append(f"scenario_category.name IN ({placeholders})")
-                    query_params.extend(category_batch)
-
-                where_clause = "WHERE " + " AND ".join(batch_conditions) if batch_conditions else ""
-                query = Template(PROPERTY_QUERY).safe_substitute(where_clause=where_clause)
-                params = tuple(query_params) if query_params else None
-                yield from cast(
-                    Iterator[PropertyRecord],
-                    self._db.iter_dicts(query, params=params, batch_size=batch_size),
-                )
 
     def list_attributes(self, class_enum: ClassEnum) -> list[str]:
         """Get all attributes for a specific class.
@@ -4660,7 +4633,7 @@ class PlexosDB:
         object_names = tuple({update["object_name"] for update in group})
         object_class_id = self.get_class_id(object_class)
         existing_object_names: set[str] = set()
-        for object_batch in batched(object_names, sqlite_query_chunk_size(fixed_parameters=1)):
+        for object_batch in batched(object_names, _sqlite_query_chunk_size(fixed_parameters=1)):
             object_placeholders = ", ".join("?" for _ in object_batch)
             object_rows = self._db.fetchall(
                 f"SELECT name FROM t_object WHERE class_id = ? AND name IN ({object_placeholders})",
@@ -4761,7 +4734,7 @@ class PlexosDB:
         # Keep the two name lists together below SQLite's 999-variable limit.
         for update_batch in batched(
             explicit_updates,
-            sqlite_query_chunk_size(fixed_parameters=3, parameters_per_item=2),
+            _sqlite_query_chunk_size(fixed_parameters=3, parameters_per_item=2),
         ):
             parent_names = tuple({update["parent_object_name"] for update in update_batch})
             child_names = tuple({update["object_name"] for update in update_batch})
@@ -4798,7 +4771,7 @@ class PlexosDB:
         if not scenario_names:
             return {}
         scenario_ids: dict[str, int] = {}
-        for scenario_batch in batched(scenario_names, sqlite_query_chunk_size(fixed_parameters=1)):
+        for scenario_batch in batched(scenario_names, _sqlite_query_chunk_size(fixed_parameters=1)):
             placeholders = ", ".join("?" for _ in scenario_batch)
             rows = self._db.fetchall(
                 f"SELECT object_id, name FROM t_object WHERE class_id = ? AND name IN ({placeholders})",
@@ -4868,7 +4841,7 @@ class PlexosDB:
         data_ids_by_index: dict[int, list[int]] = {}
         for selector_batch in batched(
             selectors,
-            sqlite_query_chunk_size(fixed_parameters=1, parameters_per_item=5),
+            _sqlite_query_chunk_size(fixed_parameters=1, parameters_per_item=5),
         ):
             values_sql = ", ".join("(?, ?, ?, ?, ?)" for _ in selector_batch)
             selector_params = [value for selector in selector_batch for value in selector]

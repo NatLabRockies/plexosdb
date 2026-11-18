@@ -294,7 +294,7 @@ def test_iterate_properties_query_plan_has_no_per_row_scans(db_with_topology: Pl
     import re
     from string import Template
 
-    from plexosdb.db import PROPERTY_QUERY
+    from plexosdb.db_constants import PROPERTY_QUERY
 
     _setup_scenario_tagged_generator_properties(db_with_topology)
     query = Template(PROPERTY_QUERY).safe_substitute(where_clause="")

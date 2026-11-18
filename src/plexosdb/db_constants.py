@@ -28,19 +28,6 @@ SQLITE_BACKEND_KWARGS = {"in_memory"}
 SQLITE_QUERY_PARAMETER_LIMIT = 900
 
 
-def sqlite_query_chunk_size(*, fixed_parameters: int = 0, parameters_per_item: int = 1) -> int:
-    """Return a conservative batch size that stays within SQLite's bind limit."""
-    if fixed_parameters < 0:
-        raise ValueError("fixed_parameters must be non-negative")
-    if parameters_per_item < 1:
-        raise ValueError("parameters_per_item must be positive")
-
-    chunk_size = (SQLITE_QUERY_PARAMETER_LIMIT - fixed_parameters) // parameters_per_item
-    if chunk_size < 1:
-        raise ValueError("fixed_parameters and parameters_per_item exceed the SQLite query parameter limit")
-    return chunk_size
-
-
 CHECK_QUERY = "SELECT 1 FROM ${schema} ${where_clause}"
 PLEXOS_DEFAULT_SCHEMA = files("plexosdb").joinpath("schema.sql").read_text(encoding="utf-8-sig")
 PROPERTY_QUERY = files("plexosdb.sql").joinpath("object_properties.sql").read_text(encoding="utf-8-sig")
