@@ -228,6 +228,30 @@ def test_iterate_properties_filters_by_scenario_category(db_with_topology: Plexo
     assert {row["scenario_name"] for row in results} == {"ScenarioA", "ScenarioC"}
 
 
+def test_iterate_properties_chunks_combined_scenario_filters(db_with_topology: PlexosDB) -> None:
+    """Keep both scenario IN filters within the shared SQLite bind budget."""
+    from plexosdb import ClassEnum, CollectionEnum
+
+    db = db_with_topology
+    _setup_scenario_tagged_generator_properties(db)
+    scenarios = [f"MissingScenario_{index}" for index in range(950)] + ["ScenarioA"]
+    categories = [f"MissingCategory_{index}" for index in range(450)] + ["CatA"]
+
+    results = list(
+        db.iterate_properties(
+            class_enum=ClassEnum.Generator,
+            object_names="thermal-01",
+            property_names="Heat Rate",
+            collection=CollectionEnum.Generators,
+            scenario=scenarios,
+            scenario_category=categories,
+        )
+    )
+
+    assert len(results) == 1
+    assert results[0]["scenario_name"] == "ScenarioA"
+
+
 def test_get_object_properties_filters_by_scenario(db_with_topology: PlexosDB) -> None:
     from plexosdb import ClassEnum, CollectionEnum
 
