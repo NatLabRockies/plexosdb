@@ -23,14 +23,12 @@ Initialize XML handler for PLEXOS datasets.
 
 **Parameters**
 
-- `fpath : str or PathLike, optional`
-  Path to an existing XML file to load.
-- `namespace : str, optional`
-  XML namespace to use when serializing.
-- `in_memory : bool, optional`
-  Store element caches in memory for faster lookups.
-- `initialize : bool, optional`
-  Build an empty XML tree instead of parsing a file.
+- `fpath : str or PathLike, optional` Path to an existing XML file to load.
+- `namespace : str, optional` XML namespace to use when serializing.
+- `in_memory : bool, optional` Store element caches in memory for faster
+  lookups.
+- `initialize : bool, optional` Build an empty XML tree instead of parsing a
+  file.
 
 **Returns**
 
@@ -85,18 +83,16 @@ This functions serves as a low-level query to the XML file.
 
 **Parameters**
 
-- `element_type`
-  Enum of the Schema wanted, e.g., `Schema.Class`, `Schema.Objects`.
-- `*elements`
-  Sequence of ids, strings, or ints to get.
-- `label`
-  XML child label to extract. Defaults to `Schema[elementy_type].label`.
-- `**tags`
-  Additional key: value pairs to match the XML, e.g., `kwargs = {"class_id": 1}`.
+- `element_type` Enum of the Schema wanted, e.g., `Schema.Class`,
+  `Schema.Objects`.
+- `*elements` Sequence of ids, strings, or ints to get.
+- `label` XML child label to extract. Defaults to `Schema[elementy_type].label`.
+- `**tags` Additional key: value pairs to match the XML, e.g.,
+  `kwargs = {"class_id": 1}`.
 
 **Return**
 
-  XML query match.
+XML query match.
 
 ### to_xml
 

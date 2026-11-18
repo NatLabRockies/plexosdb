@@ -409,6 +409,24 @@ def test_add_attributes_from_records_explicit_format(db_with_model_attributes: P
     ]
 
 
+def test_add_attributes_from_records_chunks_large_object_lookups(
+    db_with_model_attributes: PlexosDB,
+) -> None:
+    """Resolve object names across SQLite bind-parameter chunk boundaries."""
+    from plexosdb import ClassEnum
+
+    db = db_with_model_attributes
+    names = [f"ChunkAttrModel_{i}" for i in range(950)]
+    db.add_objects(ClassEnum.Model, *names)
+
+    db.add_attributes_from_records(
+        [{"name": name, "attribute": "Enabled", "value": -1} for name in names],
+        object_class=ClassEnum.Model,
+    )
+
+    assert db._db.fetchone("SELECT COUNT(*) FROM t_attribute_data")[0] == 950
+
+
 def test_add_attributes_from_records_wide_format(db_with_model_attributes: PlexosDB):
     """Insert attribute records using wide-column attribute format."""
     from plexosdb import ClassEnum

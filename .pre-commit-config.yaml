@@ -29,7 +29,7 @@ repos:
         language: node
         additional_dependencies: ["prettier@3"]
         types: [markdown]
-        exclude: ^CHANGELOG\.md$
+        exclude: ^(CHANGELOG\.md|docs/src/content/docs/reference/(api/modules|python-api)/)
 
   - repo: builtin
     hooks:

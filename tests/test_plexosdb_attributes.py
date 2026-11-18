@@ -117,6 +117,26 @@ def test_get_attributes_filters_by_attribute_names(
     ]
 
 
+def test_get_attributes_chunks_large_attribute_name_filters(
+    db_with_model_attributes: PlexosDB,
+) -> None:
+    """Filter assigned attributes across SQLite bind-parameter chunk boundaries."""
+    from plexosdb import ClassEnum
+
+    db = db_with_model_attributes
+    db.add_object(ClassEnum.Model, "ChunkFilterModel")
+    db.add_attribute(ClassEnum.Model, "ChunkFilterModel", attribute_name="Enabled", attribute_value=-1)
+
+    attribute_names = ["Enabled", *(f"MissingAttribute_{i}" for i in range(950))]
+    result = db.get_attributes(
+        "ChunkFilterModel",
+        object_class=ClassEnum.Model,
+        attribute_names=attribute_names,
+    )
+
+    assert [record["attribute"] for record in result] == ["Enabled"]
+
+
 def test_get_attributes_returns_empty_list_without_assignments(
     db_with_model_attributes: PlexosDB,
 ):

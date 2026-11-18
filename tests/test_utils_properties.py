@@ -917,6 +917,55 @@ def test_insert_property_values_chunks_over_900_membership_ids(db_base: PlexosDB
     assert all(obj_name != "" for _, obj_name in data_id_map.values())
 
 
+def test_resolve_membership_map_chunks_non_system_names(
+    db_with_reserve_collection_property: PlexosDB,
+) -> None:
+    """Resolve non-System memberships when names exceed one bind-parameter batch."""
+    from plexosdb import ClassEnum, CollectionEnum
+    from plexosdb.utils import _resolve_membership_map
+
+    db = db_with_reserve_collection_property
+    names = [f"ChunkRegion_{i}" for i in range(950)]
+    db.add_objects(ClassEnum.Region, *names)
+
+    parent_class_id = db.get_class_id(ClassEnum.Reserve)
+    child_class_id = db.get_class_id(ClassEnum.Region)
+    collection_id = db.get_collection_id(
+        CollectionEnum.Regions,
+        parent_class_enum=ClassEnum.Reserve,
+        child_class_enum=ClassEnum.Region,
+    )
+    object_ids = {
+        name: object_id
+        for object_id, name in db._db.fetchall(
+            "SELECT object_id, name FROM t_object WHERE class_id = ?",
+            (child_class_id,),
+        )
+    }
+    db.add_memberships_from_records(
+        [
+            {
+                "parent_class_id": parent_class_id,
+                "parent_object_id": db.get_object_id(ClassEnum.Reserve, "TestReserve"),
+                "collection_id": collection_id,
+                "child_class_id": child_class_id,
+                "child_object_id": object_ids[name],
+            }
+            for name in names
+        ]
+    )
+
+    membership_map = _resolve_membership_map(
+        db,
+        [{"name": name} for name in names],
+        object_class=ClassEnum.Region,
+        parent_class=ClassEnum.Reserve,
+        collection=CollectionEnum.Regions,
+    )
+
+    assert set(membership_map) == set(names)
+
+
 def test_resolve_membership_map_empty_names_returns_empty(db_instance_with_schema: PlexosDB) -> None:
     """_resolve_membership_map returns {} immediately when all record names are None (line 320)."""
     from plexosdb import ClassEnum, CollectionEnum

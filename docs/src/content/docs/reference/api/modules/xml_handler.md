@@ -63,18 +63,16 @@ This functions serves as a low-level query to the XML file.
 
 **Parameters**
 
-- `element_type`
-  Enum of the Schema wanted, e.g., `Schema.Class`, `Schema.Objects`.
-- `*elements`
-  Sequence of ids, strings, or ints to get.
-- `label`
-  XML child label to extract. Defaults to `Schema[elementy_type].label`.
-- `**tags`
-  Additional key: value pairs to match the XML, e.g., `kwargs = {"class_id": 1}`.
+- `element_type` Enum of the Schema wanted, e.g., `Schema.Class`,
+  `Schema.Objects`.
+- `*elements` Sequence of ids, strings, or ints to get.
+- `label` XML child label to extract. Defaults to `Schema[elementy_type].label`.
+- `**tags` Additional key: value pairs to match the XML, e.g.,
+  `kwargs = {"class_id": 1}`.
 
 **Return**
 
-  XML query match.
+XML query match.
 
 ###### to_xml
 
@@ -94,12 +92,9 @@ Construct XPath query for extracting data from a XML with no namespace.
 
 **Parameters**
 
-- `element_name`
-  String that matches the desired element
-- `*tags`
-  Tag names to filter
-- `**kwargs`
-  Tag name and value child of the element. (E.g., class_id=2)
+- `element_name` String that matches the desired element
+- `*tags` Tag names to filter
+- `**kwargs` Tag name and value child of the element. (E.g., class_id=2)
 
 **Returns**
 
