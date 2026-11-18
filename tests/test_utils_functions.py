@@ -453,24 +453,24 @@ def test_batched_with_batch_size_larger_than_data():
 
 def test_sqlite_query_chunk_size_accounts_for_query_parameters() -> None:
     """Reserve bind slots for fixed query parameters and multiple values per record."""
-    from plexosdb.utils import _sqlite_query_chunk_size
+    from plexosdb.utils import sqlite_query_chunk_size
 
-    assert _sqlite_query_chunk_size() == 900
-    assert _sqlite_query_chunk_size(fixed_parameters=3) == 897
-    assert _sqlite_query_chunk_size(fixed_parameters=3, parameters_per_item=2) == 448
-    assert _sqlite_query_chunk_size(fixed_parameters=1, parameters_per_item=5) == 179
+    assert sqlite_query_chunk_size() == 900
+    assert sqlite_query_chunk_size(fixed_parameters=3) == 897
+    assert sqlite_query_chunk_size(fixed_parameters=3, parameters_per_item=2) == 448
+    assert sqlite_query_chunk_size(fixed_parameters=1, parameters_per_item=5) == 179
 
 
 def test_sqlite_query_chunk_size_rejects_invalid_parameter_budgets() -> None:
     """Reject budgets that cannot safely fit at least one query item."""
-    from plexosdb.utils import _sqlite_query_chunk_size
+    from plexosdb.utils import sqlite_query_chunk_size
 
     with pytest.raises(ValueError, match="fixed_parameters must be non-negative"):
-        _sqlite_query_chunk_size(fixed_parameters=-1)
+        sqlite_query_chunk_size(fixed_parameters=-1)
     with pytest.raises(ValueError, match="parameters_per_item must be positive"):
-        _sqlite_query_chunk_size(parameters_per_item=0)
+        sqlite_query_chunk_size(parameters_per_item=0)
     with pytest.raises(ValueError, match="exceed the SQLite query parameter limit"):
-        _sqlite_query_chunk_size(fixed_parameters=900)
+        sqlite_query_chunk_size(fixed_parameters=900)
 
 
 def test_batched_with_empty_list():
