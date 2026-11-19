@@ -10,6 +10,6 @@ npm run dev
 npm run build
 ```
 
-The dev and build hooks generate the Python API reference from `src/plexosdb/`.
-Edit pages in `src/content/docs/` and Python docstrings; generated API pages and
-navigation are refreshed automatically.
+Generated API references are checked into the repository. Routine dev and build
+commands do not rewrite them. After changing public Python APIs or their
+docstrings, run `npm run generate:api` and review the generated changes.

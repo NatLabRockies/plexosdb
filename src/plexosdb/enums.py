@@ -131,6 +131,7 @@ class CollectionEnum(StrEnum):
     Diagnostics = "Diagnostics"
     Performance = "Performance"
     DataFiles = "DataFiles"
+    Timeslices = "Timeslices"
     Constraint = "Constraint"
     Constraints = "Constraints"
     Variables = "Variables"

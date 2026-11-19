@@ -1,3 +1,6 @@
+import sqlite3
+import uuid
+
 import pytest
 
 from plexosdb.db import PlexosDB
@@ -98,6 +101,40 @@ def test_get_custom_columns_returns_all_or_filters_by_class():
     assert db.get_custom_columns(ClassEnum.Generator) == [all_columns[0]]
 
 
+def test_add_custom_column_inserts_column_with_optional_position_and_guid():
+    db = PlexosDB()
+    db.create_schema(seed_defaults=True)
+    class_id = db.get_class_id(ClassEnum.Generator)
+    db._db.execute(
+        "INSERT INTO t_custom_column(column_id, class_id, name, position, GUID) VALUES (?, ?, ?, ?, ?)",
+        (10, class_id, "Existing", 0, "existing-guid"),
+    )
+
+    positioned_id = db.add_custom_column(ClassEnum.Generator, "Notes", position=0)
+    unpositioned_id = db.add_custom_column(ClassEnum.Generator, "Review")
+
+    columns = [
+        column
+        for column in db.get_custom_columns(ClassEnum.Generator)
+        if column["name"] in {"Notes", "Review"}
+    ]
+    assert [column["column_id"] for column in columns] == [positioned_id, unpositioned_id]
+    assert [column["name"] for column in columns] == ["Notes", "Review"]
+    assert [column["position"] for column in columns] == [0, None]
+    assert [column["class_name"] for column in columns] == [ClassEnum.Generator.value] * 2
+    assert uuid.UUID(columns[0]["GUID"])
+    assert uuid.UUID(columns[1]["GUID"])
+    assert columns[0]["GUID"] != columns[1]["GUID"]
+
+
+def test_add_custom_column_requires_existing_class():
+    db = PlexosDB()
+    db.create_schema()
+
+    with pytest.raises(AssertionError):
+        db.add_custom_column(ClassEnum.Generator, "Notes")
+
+
 def test_get_metadata_selects_entity_table_and_applies_filters():
     db = PlexosDB()
     db.create_schema(seed_defaults=True)
@@ -145,6 +182,74 @@ def test_get_metadata_rejects_unsupported_entity_type():
 
     with pytest.raises(ValueError, match="Unsupported metadata entity type"):
         db.get_metadata("attribute", 1)  # type: ignore[arg-type]
+
+
+def test_add_metadata_inserts_object_membership_and_data_metadata():
+    db = PlexosDB()
+    db.create_schema(seed_defaults=True)
+    object_id = db.add_object(ClassEnum.Generator, "GEN1")
+    membership_id = db.get_memberships_system("GEN1", object_class=ClassEnum.Generator)[0]["membership_id"]
+    db._db.execute("INSERT INTO t_data(membership_id) VALUES (?)", (membership_id,))
+    data_id = db._db.last_insert_rowid()
+
+    db.add_metadata("object", object_id, "PLEXOS", "Owner", "Operations")
+    db.add_metadata("membership", membership_id, "PLEXOS", "Link", "System", state=3)
+    db.add_metadata("data", data_id, "PLEXOS", "Source", "Imported", state=4)
+
+    with pytest.raises(sqlite3.IntegrityError):
+        db.add_metadata("object", object_id, "PLEXOS", "Owner", "Duplicate")
+
+    assert db.get_metadata("object", object_id) == [
+        {"object_id": object_id, "class": "PLEXOS", "property": "Owner", "value": "Operations", "state": None}
+    ]
+    assert db.get_metadata("membership", membership_id) == [
+        {"membership_id": membership_id, "class": "PLEXOS", "property": "Link", "value": "System", "state": 3}
+    ]
+    assert db.get_metadata("data", data_id) == [
+        {"data_id": data_id, "class": "PLEXOS", "property": "Source", "value": "Imported", "state": 4}
+    ]
+
+
+def test_add_metadata_rejects_unsupported_entity_type():
+    db = PlexosDB()
+    db.create_schema(seed_defaults=True)
+
+    with pytest.raises(ValueError, match="Unsupported metadata entity type"):
+        db.add_metadata("attribute", 1, "PLEXOS", "Source", "Imported")  # type: ignore[arg-type]
+
+
+def test_delete_metadata_removes_only_the_matching_record():
+    db = PlexosDB()
+    db.create_schema(seed_defaults=True)
+    object_id = db.add_object(ClassEnum.Generator, "GEN1")
+    db.add_metadata("object", object_id, "PLEXOS", "Owner", "Operations")
+    db.add_metadata("object", object_id, "PLEXOS", "Source", "Input")
+
+    db.delete_metadata("object", object_id, "PLEXOS", "Owner")
+
+    assert db.get_metadata("object", object_id) == [
+        {"object_id": object_id, "class": "PLEXOS", "property": "Source", "value": "Input", "state": None}
+    ]
+    db.delete_metadata("object", object_id, "PLEXOS", "Owner")
+
+
+def test_delete_metadata_rejects_unsupported_entity_type():
+    db = PlexosDB()
+
+    with pytest.raises(ValueError, match="Unsupported metadata entity type"):
+        db.delete_metadata("attribute", 1, "PLEXOS", "Source")  # type: ignore[arg-type]
+
+
+def test_set_config_inserts_and_updates_values():
+    db = PlexosDB()
+    db.create_schema()
+
+    db.set_config("Dynamic", "0")
+    assert db.get_config("Dynamic") == {"element": "Dynamic", "value": "0"}
+
+    db.set_config("Dynamic", "1")
+    assert db.get_config("Dynamic") == {"element": "Dynamic", "value": "1"}
+    assert db.get_config() == [{"element": "Dynamic", "value": "1"}]
 
 
 def test_get_property_unit_returns_value_or_empty_string():

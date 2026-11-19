@@ -87,6 +87,22 @@ for membership in memberships:
     print("---")
 ```
 
+## Deleting a relationship
+
+Use `delete_membership()` with the same parent, child, classes, and collection
+to remove the relationship. Property data and metadata attached to that
+membership are removed by the database's cascade rules.
+
+```python
+db.delete_membership(
+    "Region1",
+    "Node1",
+    parent_class=ClassEnum.Region,
+    child_class=ClassEnum.Node,
+    collection=CollectionEnum.ReferenceNode,
+)
+```
+
 ## Listing Child Objects
 
 List all child objects for a parent:
