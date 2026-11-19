@@ -914,7 +914,8 @@ Add a Variable tag to a property data record.
 backup_database(self, target_path: str | Path) -> None
 ```
 
-Backup the in-memory database to a file.
+Create a SQLite backup at the target path. Works for in-memory and file-backed
+databases and creates missing parent directories.
 
 ### copy_object
 
@@ -2107,7 +2108,8 @@ True
 import_from_csv(self, source_path: str | Path, /, *, tables: list[str] | None=None) -> None
 ```
 
-Import data from CSV files into the database.
+Append data from table-named CSV files to existing database tables. Imports are
+atomic across the selected tables.
 
 ### iterate_properties
 
@@ -2515,7 +2517,7 @@ child object, optionally filtered by parent class and collection.
 list_reports(self) -> list[dict[str, Any]]
 ```
 
-List all defined reports in the database.
+List configured reports with their report, property, and collection names.
 
 ### list_scenarios
 
@@ -2800,7 +2802,8 @@ Set the date range for a property data record.
 to_csv(self, target_path: str | Path, /, *, tables: list[str] | None=None) -> None
 ```
 
-Export selected tables or the entire database to CSV files.
+Export selected tables or all non-internal tables to `<table>.csv` files in the
+target directory.
 
 ### to_xml
 

@@ -1,8 +1,12 @@
 """Main API for interacting with the Plexos database schema."""
 
+import base64
+import binascii
+import csv
 import sqlite3
 import uuid
 from collections.abc import Iterable, Iterator
+from contextlib import closing
 from datetime import datetime
 from importlib.resources import as_file, files
 from pathlib import Path
@@ -69,6 +73,121 @@ def _metadata_table_for_entity(entity_type: str) -> tuple[str, str]:
         return _METADATA_TABLES[entity_type]
     except KeyError:
         raise ValueError(f"Unsupported metadata entity type: {entity_type!r}") from None
+
+
+def _quote_sqlite_identifier(identifier: str) -> str:
+    return '"' + identifier.replace('"', '""') + '"'
+
+
+def _encode_csv_value(value: Any) -> str:
+    if value is None:
+        return r"\N"
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        return r"\B" + base64.b64encode(bytes(value)).decode("ascii")
+    text = str(value)
+    return f"\\{text}" if text.startswith("\\") else text
+
+
+def _decode_csv_value(value: str) -> str | bytes | None:
+    if value == r"\N":
+        return None
+    if value.startswith(r"\B"):
+        try:
+            return base64.b64decode(value[2:], validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise ValueError("Invalid base64-encoded BLOB value in CSV.") from exc
+    if value.startswith("\\\\"):
+        return value[1:]
+    return value
+
+
+def _csv_files_in_directory(source: Path) -> dict[str, Path]:
+    csv_files: dict[str, Path] = {}
+    for csv_path in source.iterdir():
+        if not csv_path.is_file() or csv_path.suffix.lower() != ".csv":
+            continue
+        table_name = csv_path.stem
+        if table_name in csv_files:
+            raise ValueError(f"Multiple CSV files map to table `{table_name}`.")
+        csv_files[table_name] = csv_path
+    return csv_files
+
+
+def _match_csv_import_files(
+    selected_tables: list[str],
+    csv_files: dict[str, Path],
+) -> list[tuple[str, Path]]:
+    if len(set(selected_tables)) != len(selected_tables):
+        raise ValueError("The tables list must not contain duplicates.")
+    if not selected_tables:
+        raise ValueError("No CSV files were selected for import.")
+
+    missing_files = set(selected_tables) - csv_files.keys()
+    if missing_files:
+        raise FileNotFoundError(
+            f"Missing CSV file(s): {', '.join(f'{name}.csv' for name in sorted(missing_files))}."
+        )
+    return [(table_name, csv_files[table_name]) for table_name in selected_tables]
+
+
+def _resolve_csv_import_files(
+    source_path: str | Path,
+    tables: list[str] | None,
+) -> list[tuple[str, Path]]:
+    source = Path(source_path)
+    if not source.exists():
+        raise FileNotFoundError(source)
+    if not source.is_dir() and not source.is_file():
+        raise ValueError(f"CSV source must be a file or directory: {source}")
+    if tables is not None and not tables:
+        return []
+
+    if source.is_dir():
+        csv_files = _csv_files_in_directory(source)
+        selected_tables = sorted(csv_files) if tables is None else list(tables)
+    else:
+        if source.suffix.lower() != ".csv":
+            raise ValueError(f"CSV source file must have a .csv extension: {source}")
+        table_name = source.stem
+        if tables is not None and tables != [table_name]:
+            raise ValueError("A single CSV file can only be imported into its matching table.")
+        csv_files = {table_name: source}
+        selected_tables = [table_name]
+
+    return _match_csv_import_files(selected_tables, csv_files)
+
+
+def _import_csv_table(connection: sqlite3.Connection, table_name: str, csv_path: Path) -> None:
+    quoted_table = _quote_sqlite_identifier(table_name)
+    schema = connection.execute(f"PRAGMA table_info({quoted_table})").fetchall()
+    table_columns = [column[1] for column in schema]
+
+    with csv_path.open(encoding="utf-8-sig", newline="") as csv_file:
+        reader = csv.reader(csv_file)
+        header = next(reader, None)
+        if not header:
+            raise ValueError(f"CSV file has no header row: {csv_path}")
+        if len(header) != len(set(header)):
+            raise ValueError(f"CSV header contains duplicate columns: {csv_path}")
+        unknown_columns = set(header) - set(table_columns)
+        if unknown_columns:
+            raise ValueError(f"Unknown column(s) in {csv_path}: {', '.join(sorted(unknown_columns))}.")
+
+        quoted_columns = ", ".join(_quote_sqlite_identifier(column) for column in header)
+        placeholders = ", ".join("?" for _ in header)
+        insert_query = f"INSERT INTO {quoted_table} ({quoted_columns}) VALUES ({placeholders})"
+        batch: list[tuple[str | bytes | None, ...]] = []
+        for row in reader:
+            if len(row) != len(header):
+                raise ValueError(
+                    f"CSV row {reader.line_num} in {csv_path} has {len(row)} fields; expected {len(header)}."
+                )
+            batch.append(tuple(_decode_csv_value(value) for value in row))
+            if len(batch) >= 1000:
+                connection.executemany(insert_query, batch)
+                batch.clear()
+        if batch:
+            connection.executemany(insert_query, batch)
 
 
 class PropertyRecord(TypedDict, total=False):
@@ -1644,8 +1763,24 @@ class PlexosDB:
         raise NotImplementedError  # pragma: no cover
 
     def backup_database(self, target_path: str | Path) -> None:
-        """Backup the in-memory database to a file."""
-        raise NotImplementedError  # pragma: no cover
+        """Create a SQLite backup at ``target_path``.
+
+        Parent directories are created when needed. The backup works for
+        both in-memory and file-backed databases.
+
+        Raises
+        ------
+        ValueError
+            If the target is the same file as the source database.
+        OSError
+            If the backup cannot be written.
+        """
+        target = Path(target_path)
+        source = self._db.connection.execute("PRAGMA database_list").fetchone()
+        if source is not None and source[2] and Path(source[2]).resolve() == target.resolve():
+            raise ValueError("The backup target must differ from the source database.")
+        if not self._db.backup(target):
+            raise OSError(f"Could not back up database to {target}.")
 
     def copy_object(
         self,
@@ -3668,8 +3803,53 @@ class PlexosDB:
         return bool(self._db.query(query, tuple(params)))
 
     def import_from_csv(self, source_path: str | Path, /, *, tables: list[str] | None = None) -> None:
-        """Import data from CSV files into the database."""
-        raise NotImplementedError  # pragma: no cover
+        r"""Append table data from CSV files to this database.
+
+        ``source_path`` may be a directory containing ``<table>.csv`` files or
+        a single CSV file named after its table. The target tables must already
+        exist. CSV files must have a header row; imports are atomic across all
+        selected tables.
+
+        NULL values use ``\N``. Text values beginning with a backslash are
+        escaped with an additional backslash, and BLOB values use a ``\B``
+        prefix followed by base64 data. These conventions preserve empty
+        strings, NULLs, backslashes, and binary values on round-trip.
+
+        Parameters
+        ----------
+        source_path : str | Path
+            CSV file or directory of table-named CSV files.
+        tables : list[str] | None, optional
+            Tables to import. If omitted for a directory, every CSV file in
+            that directory is imported. For a single-file source, its table
+            name is inferred from the file stem.
+
+        Raises
+        ------
+        FileNotFoundError
+            If the source file or a selected table's CSV file is missing.
+        ValueError
+            If a table, CSV header, or row does not match the database schema.
+        sqlite3.Error
+            If inserting any row violates a database constraint.
+        """
+        import_files = _resolve_csv_import_files(source_path, tables)
+        if not import_files:
+            return
+
+        database_tables = {name for name in self._db.tables if not name.startswith("sqlite_")}
+        selected_tables = [table_name for table_name, _ in import_files]
+        unknown_tables = set(selected_tables) - database_tables
+        if unknown_tables:
+            raise ValueError(f"Unknown database table(s): {', '.join(sorted(unknown_tables))}.")
+        if any("/" in name or "\\" in name for name in selected_tables):
+            raise ValueError("CSV table names cannot contain path separators.")
+
+        connection = self._db.connection
+        with self._db.transaction():
+            connection.execute("PRAGMA defer_foreign_keys = ON")
+            for table_name, csv_path in import_files:
+                _import_csv_table(connection, table_name, csv_path)
 
     def iterate_properties(
         self,
@@ -4263,8 +4443,38 @@ class PlexosDB:
         return result
 
     def list_reports(self) -> list[dict[str, Any]]:
-        """List all defined reports in the database."""
-        raise NotImplementedError  # pragma: no cover
+        """List configured reports with their report, property, and collection names.
+
+        Returns
+        -------
+        list[dict[str, Any]]
+            Report rows, including their IDs, phase/settings, and related names.
+            Returns an empty list when no reports are configured.
+        """
+        query = """
+            SELECT
+                report.object_id,
+                report_object.name AS report_name,
+                report.property_id,
+                report_property.name AS property_name,
+                report_property.collection_id,
+                collection.name AS collection_name,
+                report.phase_id,
+                report.report_period,
+                report.report_summary,
+                report.report_statistics,
+                report.report_samples,
+                report.write_flat_files,
+                report.state
+            FROM t_report AS report
+            LEFT JOIN t_object AS report_object ON report_object.object_id = report.object_id
+            LEFT JOIN t_property_report AS report_property
+                ON report_property.property_id = report.property_id
+            LEFT JOIN t_collection AS collection
+                ON collection.collection_id = report_property.collection_id
+            ORDER BY report_object.name, report.phase_id, report_property.name
+        """
+        return self._db.fetchall_dict(query)
 
     def list_scenarios(self) -> list[str]:
         """Return all scenarios in the database.
@@ -4555,8 +4765,50 @@ class PlexosDB:
         raise NotImplementedError  # pragma: no cover
 
     def to_csv(self, target_path: str | Path, /, *, tables: list[str] | None = None) -> None:
-        """Export selected tables or the entire database to CSV files."""
-        raise NotImplementedError  # pragma: no cover
+        """Export selected tables or all user tables as table-named CSV files.
+
+        ``target_path`` is a directory; each exported table is written to
+        ``<table>.csv`` with a header row. NULL and BLOB values use the encoding
+        conventions documented by :meth:`import_from_csv`.
+
+        Parameters
+        ----------
+        target_path : str | Path
+            Directory where the CSV files are written. It is created if needed.
+        tables : list[str] | None, optional
+            Tables to export. If omitted, all non-internal database tables are
+            exported.
+
+        Raises
+        ------
+        ValueError
+            If a requested table does not exist or cannot be represented as a
+            table-named CSV file.
+        OSError
+            If the target directory or a CSV file cannot be written.
+        """
+        available_tables = {name for name in self._db.tables if not name.startswith("sqlite_")}
+        selected_tables = sorted(available_tables) if tables is None else list(tables)
+        if len(set(selected_tables)) != len(selected_tables):
+            raise ValueError("The tables list must not contain duplicates.")
+        unknown_tables = set(selected_tables) - available_tables
+        if unknown_tables:
+            raise ValueError(f"Unknown database table(s): {', '.join(sorted(unknown_tables))}.")
+        if any("/" in name or "\\" in name for name in selected_tables):
+            raise ValueError("CSV table names cannot contain path separators.")
+
+        target = Path(target_path)
+        target.mkdir(parents=True, exist_ok=True)
+        connection = self._db.connection
+        for table_name in selected_tables:
+            quoted_table = _quote_sqlite_identifier(table_name)
+            with closing(connection.execute(f"SELECT * FROM {quoted_table}")) as cursor:
+                columns = [description[0] for description in cursor.description or ()]
+                with (target / f"{table_name}.csv").open("w", encoding="utf-8", newline="") as csv_file:
+                    writer = csv.writer(csv_file)
+                    writer.writerow(columns)
+                    for row in cursor:
+                        writer.writerow(_encode_csv_value(value) for value in row)
 
     def to_xml(self, target_path: str | Path) -> bool:
         """Convert SQLite to XML format.
