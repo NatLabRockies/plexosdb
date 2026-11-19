@@ -2361,8 +2361,32 @@ class PlexosDB:
             self._db.execute(delete_query, (object_id, attribute_id))
 
     def delete_category(self, category: str, /, *, class_name: ClassEnum) -> None:
-        """Delete a category from the database."""
-        raise NotImplementedError  # pragma: no cover
+        """Delete an unused category from a class.
+
+        Categories assigned to objects cannot be deleted. Reassign those
+        objects first, then retry.
+
+        Raises
+        ------
+        NotFoundError
+            If the category does not exist for ``class_name``.
+        ValueError
+            If any object still uses the category.
+        """
+        with self._db.transaction():
+            if not checks_module.check_category_exists(self, class_name, category):
+                raise NotFoundError(f"Category `{category}` does not exist for class `{class_name}`.")
+
+            category_id = self.get_category_id(class_name, category)
+            assigned_objects = self._db.fetchone(
+                "SELECT 1 FROM t_object WHERE category_id = ? LIMIT 1",
+                (category_id,),
+            )
+            if assigned_objects:
+                raise ValueError(f"Category `{category}` cannot be deleted because objects still use it.")
+
+            result = self._db.execute("DELETE FROM t_category WHERE category_id = ?", (category_id,))
+            assert result
 
     def delete_membership(
         self,
@@ -2374,8 +2398,55 @@ class PlexosDB:
         child_class: ClassEnum,
         collection: CollectionEnum,
     ) -> None:
-        """Delete a membership between two objects."""
-        raise NotImplementedError  # pragma: no cover
+        """Delete a membership and its dependent property and metadata rows.
+
+        Raises
+        ------
+        NotFoundError
+            If either object or the specified membership does not exist.
+        """
+        if not checks_module.check_object_exists(self, parent_class, parent_object_name):
+            raise NotFoundError(
+                f"Parent object `{parent_object_name}` does not exist for class `{parent_class}`."
+            )
+        if not checks_module.check_object_exists(self, child_class, child_object_name):
+            raise NotFoundError(
+                f"Child object `{child_object_name}` does not exist for class `{child_class}`."
+            )
+
+        parent_object_id = self.get_object_id(parent_class, parent_object_name)
+        child_object_id = self.get_object_id(child_class, child_object_name)
+        parent_class_id = self.get_class_id(parent_class)
+        child_class_id = self.get_class_id(child_class)
+        collection_id = self.get_collection_id(
+            collection,
+            parent_class_enum=parent_class,
+            child_class_enum=child_class,
+        )
+
+        with self._db.transaction():
+            membership = self._db.fetchone(
+                """
+                SELECT membership_id
+                FROM t_membership
+                WHERE parent_object_id = ?
+                  AND child_object_id = ?
+                  AND parent_class_id = ?
+                  AND child_class_id = ?
+                  AND collection_id = ?
+                """,
+                (parent_object_id, child_object_id, parent_class_id, child_class_id, collection_id),
+            )
+            if membership is None:
+                raise NotFoundError(
+                    f"Membership from `{parent_object_name}` to `{child_object_name}` "
+                    f"in collection `{collection}` does not exist."
+                )
+            result = self._db.execute(
+                "DELETE FROM t_membership WHERE membership_id = ?",
+                (membership[0],),
+            )
+            assert result
 
     def delete_metadata(
         self,
@@ -4895,12 +4966,59 @@ class PlexosDB:
         object_name: str,
         object_class: ClassEnum,
     ) -> None:
-        """Update an attribute value for an object."""
-        raise NotImplementedError  # pragma: no cover
+        """Update an assigned attribute value without changing its state.
+
+        Raises
+        ------
+        NotFoundError
+            If the object, attribute definition, or assigned value does not exist.
+        """
+        if not checks_module.check_object_exists(self, object_class, object_name):
+            raise NotFoundError(f"Object `{object_name}` does not exist for class `{object_class}`.")
+
+        object_id = self.get_object_id(object_class, object_name)
+        attribute_id = self.get_attribute_id(object_class, attribute_name)
+        with self._db.transaction():
+            assigned_value = self._db.fetchone(
+                "SELECT 1 FROM t_attribute_data WHERE object_id = ? AND attribute_id = ?",
+                (object_id, attribute_id),
+            )
+            if assigned_value is None:
+                raise NotFoundError(
+                    f"Attribute `{attribute_name}` is not assigned to object `{object_name}`."
+                )
+            result = self._db.execute(
+                "UPDATE t_attribute_data SET value = ? WHERE object_id = ? AND attribute_id = ?",
+                (new_value, object_id, attribute_id),
+            )
+            assert result
 
     def update_category(self, category: str, new_name: str, /, *, class_name: ClassEnum) -> None:
-        """Update a category name."""
-        raise NotImplementedError  # pragma: no cover
+        """Rename a category for a class.
+
+        Objects assigned to the category remain assigned to it.
+
+        Raises
+        ------
+        NotFoundError
+            If ``category`` does not exist for ``class_name``.
+        ValueError
+            If ``new_name`` is already used by another category for the class.
+        """
+        with self._db.transaction():
+            if not checks_module.check_category_exists(self, class_name, category):
+                raise NotFoundError(f"Category `{category}` does not exist for class `{class_name}`.")
+            if category == new_name:
+                return
+            if checks_module.check_category_exists(self, class_name, new_name):
+                raise ValueError(f"Category `{new_name}` already exists for class `{class_name}`.")
+
+            category_id = self.get_category_id(class_name, category)
+            result = self._db.execute(
+                "UPDATE t_category SET name = ? WHERE category_id = ?",
+                (new_name, category_id),
+            )
+            assert result
 
     def update_object(
         self,

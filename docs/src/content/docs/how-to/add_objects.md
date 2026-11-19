@@ -50,6 +50,15 @@ db.add_object(
 )
 ```
 
+Categories can be renamed, which keeps existing objects assigned to the
+renamed category. An unused category can be deleted; categories assigned to
+objects must be cleared or renamed instead.
+
+```python
+db.update_category("Renewable", "Clean Energy", class_name=ClassEnum.Generator)
+db.delete_category("Unused", class_name=ClassEnum.Generator)
+```
+
 ## Checking if Objects Exist
 
 Before adding objects, you can check if they already exist:

@@ -11,9 +11,8 @@ declared methods are reserved for future implementation and currently raise
 not be used as supported workflows yet.
 
 Currently unimplemented methods include `add_time_slice`, `add_variable_tag`,
-`delete_category`, `delete_membership`, `delete_text`, `set_date_range`,
-`update_attribute`, `update_category`, `update_properties`, `update_property`,
-and `update_text`.
+`delete_text`, `set_date_range`, `update_properties`, `update_property`, and
+`update_text`.
 
 <!-- Generated API reference -->
 
@@ -1078,7 +1077,8 @@ Removes an object-level attribute value from the database.
 delete_category(self, category: str, /, *, class_name: ClassEnum) -> None
 ```
 
-Delete a category from the database.
+Delete an unused category from a class. A category assigned to an object cannot
+be deleted.
 
 ###### delete_membership
 
@@ -1086,7 +1086,7 @@ Delete a category from the database.
 delete_membership(self, parent_object_name: str, child_object_name: str, /, *, parent_class: ClassEnum, child_class: ClassEnum, collection: CollectionEnum) -> None
 ```
 
-Delete a membership between two objects.
+Delete a membership and its dependent property and metadata rows.
 
 ###### delete_metadata
 
@@ -2769,7 +2769,7 @@ True
 update_attribute(self, attribute_name: str, new_value: str | float | int, /, *, object_name: str, object_class: ClassEnum) -> None
 ```
 
-Update an attribute value for an object.
+Update an assigned attribute value without changing its state.
 
 ###### update_category
 
@@ -2777,7 +2777,7 @@ Update an attribute value for an object.
 update_category(self, category: str, new_name: str, /, *, class_name: ClassEnum) -> None
 ```
 
-Update a category name.
+Rename a category for a class; objects assigned to it remain assigned.
 
 ###### update_object
 
