@@ -949,8 +949,11 @@ Copy all existing memberships of old object to the new object.
 create_object_scenario(self, object_name: str, scenario_name: str, properties: dict[str, Any], /, *, object_class: ClassEnum, description: str | None=None, collection: CollectionEnum | None=None, parent_class: ClassEnum | None=None, base_scenario: str | None=None) -> int
 ```
 
-Create a scenario for an object, optionally inheriting property values from a
-base scenario before applying the supplied overrides. The operation is atomic.
+Create a scenario for an object, optionally inheriting all property data rows
+from a base scenario with their bands, dates, tags, and text metadata intact.
+Overrides update values on every inherited row with the matching property name;
+properties absent from the base scenario are added as unqualified rows. The
+operation is atomic.
 
 ###### create_schema
 

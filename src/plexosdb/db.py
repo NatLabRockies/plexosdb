@@ -2168,6 +2168,122 @@ class PlexosDB:
         """
         return self._db.execute(query, (new_object_id, old_object_id))
 
+    def _copy_scenario_property_rows(
+        self,
+        membership_id: int,
+        base_scenario_id: int,
+        scenario_id: int,
+    ) -> set[int]:
+        """Copy scenario-specific data rows and their qualifiers to another scenario."""
+        source_filter = """
+            d.membership_id = ?
+            AND EXISTS (
+                SELECT 1
+                FROM t_tag AS scenario_tag
+                WHERE scenario_tag.data_id = d.data_id
+                  AND scenario_tag.object_id = ?
+            )
+        """
+        source_count_row = self._db.fetchone(
+            f"SELECT COUNT(*) FROM t_data AS d WHERE {source_filter}",
+            (membership_id, base_scenario_id),
+        )
+        assert source_count_row is not None
+        source_count = cast(int, source_count_row[0])
+        if source_count == 0:
+            return set()
+
+        property_rows = self._db.query(
+            (
+                "SELECT DISTINCT d.property_id FROM t_data AS d "
+                f"WHERE {source_filter} AND d.property_id IS NOT NULL"
+            ),
+            (membership_id, base_scenario_id),
+        )
+        property_ids = {cast(int, row[0]) for row in property_rows}
+
+        latest_data_id_row = self._db.fetchone("SELECT COALESCE(MAX(data_id), 0) FROM t_data")
+        assert latest_data_id_row is not None
+        latest_data_id = cast(int, latest_data_id_row[0])
+
+        self._db.execute("DROP TABLE IF EXISTS temp_scenario_data_mapping")
+        self._db.execute(
+            "CREATE TEMPORARY TABLE temp_scenario_data_mapping "
+            "(old_id INTEGER PRIMARY KEY, new_id INTEGER NOT NULL UNIQUE)"
+        )
+        self._db.execute(
+            f"""
+            INSERT INTO t_data (membership_id, property_id, value, state)
+            SELECT d.membership_id, d.property_id, d.value, d.state
+            FROM t_data AS d
+            WHERE {source_filter}
+            ORDER BY d.data_id
+            """,
+            (membership_id, base_scenario_id),
+        )
+        self._db.execute(
+            """
+            WITH source_rows AS (
+                SELECT d.data_id AS old_id,
+                       ROW_NUMBER() OVER (ORDER BY d.data_id) AS row_number
+                FROM t_data AS d
+                WHERE d.membership_id = ?
+                  AND EXISTS (
+                      SELECT 1 FROM t_tag AS scenario_tag
+                      WHERE scenario_tag.data_id = d.data_id
+                        AND scenario_tag.object_id = ?
+                  )
+            ),
+            new_rows AS (
+                SELECT d.data_id AS new_id,
+                       ROW_NUMBER() OVER (ORDER BY d.data_id) AS row_number
+                FROM t_data AS d
+                WHERE d.membership_id = ?
+                  AND d.data_id > ?
+            )
+            INSERT INTO temp_scenario_data_mapping (old_id, new_id)
+            SELECT source_rows.old_id, new_rows.new_id
+            FROM source_rows
+            JOIN new_rows USING (row_number)
+            """,
+            (membership_id, base_scenario_id, membership_id, latest_data_id),
+        )
+        mapping_count_row = self._db.fetchone("SELECT COUNT(*) FROM temp_scenario_data_mapping")
+        assert mapping_count_row is not None
+        if cast(int, mapping_count_row[0]) != source_count:
+            raise RuntimeError("Could not map all copied scenario property records.")
+
+        self._db.execute(
+            """
+            INSERT INTO t_tag (data_id, object_id, state, action_id)
+            SELECT mapping.new_id,
+                   CASE WHEN source_tag.object_id = ? THEN ? ELSE source_tag.object_id END,
+                   source_tag.state,
+                   source_tag.action_id
+            FROM t_tag AS source_tag
+            JOIN temp_scenario_data_mapping AS mapping ON mapping.old_id = source_tag.data_id
+            """,
+            (base_scenario_id, scenario_id),
+        )
+        for table, columns in (
+            ("t_text", "class_id, value, state, action_id"),
+            ("t_band", "band_id, state"),
+            ("t_date_from", "date, state"),
+            ("t_date_to", "date, state"),
+            ("t_memo_data", "value, state"),
+            ("t_data_meta", '"class", property, value, state'),
+        ):
+            self._db.execute(
+                f"""
+                INSERT INTO {table} (data_id, {columns})
+                SELECT mapping.new_id, {columns}
+                FROM {table} AS source
+                JOIN temp_scenario_data_mapping AS mapping ON mapping.old_id = source.data_id
+                """
+            )
+        self._db.execute("DROP TABLE temp_scenario_data_mapping")
+        return property_ids
+
     def create_object_scenario(
         self,
         object_name: str,
@@ -2183,8 +2299,11 @@ class PlexosDB:
     ) -> int:
         """Create a scenario and assign property values for one object.
 
-        When ``base_scenario`` is provided, property values for the same object
-        are inherited first; values in ``properties`` override matching names.
+        When ``base_scenario`` is provided, all of its property data rows for
+        the same object are inherited with their bands, dates, tags, and text
+        metadata. Values in ``properties`` replace the values for matching
+        property names without removing those qualifiers. A property not
+        present in the base scenario is added as an unqualified row.
         The scenario and its property records are created atomically.
 
         Parameters
@@ -2227,24 +2346,6 @@ class PlexosDB:
         parent_class = parent_class or ClassEnum.System
 
         with self._db.transaction():
-            property_values: dict[str, Any] = {}
-            if base_scenario is not None:
-                if not checks_module.check_scenario_exists(self, base_scenario):
-                    raise NotFoundError(f"Base scenario `{base_scenario}` does not exist.")
-                property_values.update(
-                    {
-                        record["property"]: record["value"]
-                        for record in self.iterate_properties(
-                            class_enum=object_class,
-                            object_names=object_name,
-                            collection=collection,
-                            parent_class=parent_class,
-                            scenario=base_scenario,
-                        )
-                    }
-                )
-            property_values.update(properties)
-
             scenario_id = self.add_scenario(scenario_name)
             if description is not None:
                 result = self._db.execute(
@@ -2252,16 +2353,62 @@ class PlexosDB:
                 )
                 assert result
 
-            for property_name, value in property_values.items():
-                self.add_property(
-                    object_class,
+            inherited_property_ids: set[int] = set()
+            if base_scenario is not None:
+                if not checks_module.check_scenario_exists(self, base_scenario):
+                    raise NotFoundError(f"Base scenario `{base_scenario}` does not exist.")
+                membership_id = resolve_membership_id(
+                    self,
                     object_name,
+                    object_class=object_class,
+                    collection=collection,
+                    parent_class=parent_class,
+                )
+                inherited_property_ids = self._copy_scenario_property_rows(
+                    membership_id,
+                    self.get_scenario_id(base_scenario),
+                    scenario_id,
+                )
+
+            for property_name, value in properties.items():
+                property_name = self._validate_properties(
                     property_name,
-                    value,
-                    scenario=scenario_name,
+                    collection,
+                    object_class,
+                    parent_class=parent_class,
+                )[0]
+                property_id = self.get_property_id(
+                    property_name,
                     collection_enum=collection,
+                    child_class_enum=object_class,
                     parent_class_enum=parent_class,
                 )
+                if property_id in inherited_property_ids:
+                    self._db.execute(
+                        """
+                        UPDATE t_data
+                        SET value = ?
+                        WHERE membership_id = ?
+                          AND property_id = ?
+                          AND EXISTS (
+                              SELECT 1
+                              FROM t_tag AS scenario_tag
+                              WHERE scenario_tag.data_id = t_data.data_id
+                                AND scenario_tag.object_id = ?
+                          )
+                        """,
+                        (value, membership_id, property_id, scenario_id),
+                    )
+                else:
+                    self.add_property(
+                        object_class,
+                        object_name,
+                        property_name,
+                        value,
+                        scenario=scenario_name,
+                        collection_enum=collection,
+                        parent_class_enum=parent_class,
+                    )
 
         return scenario_id
 

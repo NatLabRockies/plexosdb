@@ -77,9 +77,11 @@ else:
 
 You can create scenarios with specific property values for an object:
 
-When `base_scenario` is provided, the new scenario inherits that scenario's
-property values for the same object. Values in `properties` override inherited
-values with the same property name.
+When `base_scenario` is provided, the new scenario inherits every property data
+row for the same object, including its bands, date bounds, tags, and text
+metadata. A value in `properties` overrides the value on every inherited row
+with that property name without removing its qualifiers. A property absent from
+the base scenario is added as a new unqualified row.
 
 ```python
 # Create a new scenario with specific property values
