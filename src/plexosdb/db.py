@@ -57,6 +57,20 @@ from .utils import (
 from .xml_handler import XMLHandler
 
 
+_METADATA_TABLES: dict[str, tuple[str, str]] = {
+    "object": ("t_object_meta", "object_id"),
+    "membership": ("t_membership_meta", "membership_id"),
+    "data": ("t_data_meta", "data_id"),
+}
+
+
+def _metadata_table_for_entity(entity_type: str) -> tuple[str, str]:
+    try:
+        return _METADATA_TABLES[entity_type]
+    except KeyError:
+        raise ValueError(f"Unsupported metadata entity type: {entity_type!r}") from None
+
+
 class PropertyRecord(TypedDict, total=False):
     """Type definition for property records returned by iterate_properties.
 
@@ -752,8 +766,27 @@ class PlexosDB:
         *,
         state: int | None = None,
     ) -> None:
-        """Add metadata to an entity (object, membership, or data)."""
-        raise NotImplementedError  # pragma: no cover
+        """Insert metadata for an object, membership, or data record.
+
+        The entity ID, metadata class, and property identify the row. When
+        ``state`` is omitted, NULL is stored.
+
+        Raises
+        ------
+        ValueError
+            If ``entity_type`` is not ``"object"``, ``"membership"``, or ``"data"``.
+        sqlite3.Error
+            If the entity does not exist or the metadata key already exists.
+        """
+        table_name, entity_id_column = _metadata_table_for_entity(entity_type)
+        query = f"""
+            INSERT INTO {table_name} (
+                {entity_id_column}, "class", "property", value, state
+            )
+            VALUES (?, ?, ?, ?, ?)
+        """
+        with self._db.transaction():
+            self._db.execute(query, (entity_id, class_name, property_name, value, state))
 
     def add_object(
         self,
@@ -2132,8 +2165,22 @@ class PlexosDB:
         class_name: str,
         property_name: str,
     ) -> None:
-        """Delete metadata from an entity."""
-        raise NotImplementedError  # pragma: no cover
+        """Delete metadata matching an entity ID, class, and property.
+
+        Missing metadata is ignored.
+
+        Raises
+        ------
+        ValueError
+            If ``entity_type`` is not ``"object"``, ``"membership"``, or ``"data"``.
+        """
+        table_name, entity_id_column = _metadata_table_for_entity(entity_type)
+        query = f"""
+            DELETE FROM {table_name}
+            WHERE {entity_id_column} = ? AND "class" = ? AND "property" = ?
+        """
+        with self._db.transaction():
+            self._db.execute(query, (entity_id, class_name, property_name))
 
     def delete_object(self, class_enum: ClassEnum, /, *, name: str) -> None:
         """Delete an object and its memberships from the database.
@@ -2947,15 +2994,7 @@ class PlexosDB:
         ...     "object", object_id, class_name="PLEXOS", property_name="Source"
         ... )
         """
-        metadata_tables = {
-            "object": ("t_object_meta", "object_id"),
-            "membership": ("t_membership_meta", "membership_id"),
-            "data": ("t_data_meta", "data_id"),
-        }
-        try:
-            table_name, entity_id_column = metadata_tables[entity_type]
-        except KeyError:
-            raise ValueError(f"Unsupported metadata entity type: {entity_type!r}") from None
+        table_name, entity_id_column = _metadata_table_for_entity(entity_type)
 
         conditions = [f"metadata.{entity_id_column} = ?"]
         params: list[Any] = [entity_id]
@@ -4411,8 +4450,14 @@ class PlexosDB:
         return self._db.query(query=query_string, params=params)
 
     def set_config(self, element: str, value: str) -> None:
-        """Set a configuration value in the database."""
-        raise NotImplementedError  # pragma: no cover
+        """Insert a configuration value or update the value for an existing element."""
+        query = """
+            INSERT INTO t_config (element, value)
+            VALUES (?, ?)
+            ON CONFLICT (element) DO UPDATE SET value = excluded.value
+        """
+        with self._db.transaction():
+            self._db.execute(query, (element, value))
 
     def set_date_range(
         self,

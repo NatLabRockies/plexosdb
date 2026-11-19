@@ -412,7 +412,17 @@ True
 add_metadata(self, entity_type: Literal['object', 'membership', 'data'], entity_id: int, class_name: str, property_name: str, value: str, /, *, state: int | None=None) -> None
 ```
 
-Add metadata to an entity (object, membership, or data).
+Insert metadata for an object, membership, or data record.
+
+The entity ID, metadata class, and property identify the row. When
+``state`` is omitted, NULL is stored.
+
+**Raises**
+
+- `ValueError`
+  If ``entity_type`` is not ``"object"``, ``"membership"``, or ``"data"``.
+- `sqlite3.Error`
+  If the entity does not exist or the metadata key already exists.
 
 ### add_object
 
@@ -1088,7 +1098,14 @@ Delete a membership between two objects.
 delete_metadata(self, entity_type: Literal['object', 'membership', 'data'], entity_id: int, class_name: str, property_name: str) -> None
 ```
 
-Delete metadata from an entity.
+Delete metadata matching an entity ID, class, and property.
+
+Missing metadata is ignored.
+
+**Raises**
+
+- `ValueError`
+  If ``entity_type`` is not ``"object"``, ``"membership"``, or ``"data"``.
 
 ### delete_object
 
@@ -2762,7 +2779,7 @@ use execute() instead.
 set_config(self, element: str, value: str) -> None
 ```
 
-Set a configuration value in the database.
+Insert a configuration value or update the value for an existing element.
 
 ### set_date_range
 

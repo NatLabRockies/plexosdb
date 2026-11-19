@@ -10,12 +10,11 @@ declared methods are reserved for future implementation and currently raise
 `NotImplementedError`; they are listed in the API for transparency but should
 not be used as supported workflows yet.
 
-Currently unimplemented methods include `add_metadata`, `add_time_slice`,
-`add_variable_tag`, `backup_database`, `create_object_scenario`,
-`delete_category`, `delete_membership`, `delete_metadata`, `delete_text`,
-`import_from_csv`, `list_reports`, `set_config`, `set_date_range`, `to_csv`,
-`update_attribute`, `update_category`, `update_properties`, `update_property`,
-`update_scenario`, and `update_text`.
+Currently unimplemented methods include `add_time_slice`, `add_variable_tag`,
+`backup_database`, `create_object_scenario`, `delete_category`,
+`delete_membership`, `delete_text`, `import_from_csv`, `list_reports`,
+`set_date_range`, `to_csv`, `update_attribute`, `update_category`,
+`update_properties`, `update_property`, `update_scenario`, and `update_text`.
 
 <!-- Generated API reference -->
 
@@ -25,7 +24,7 @@ Currently unimplemented methods include `add_metadata`, `add_time_slice`,
 
 #### PropertyRecord
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L60)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/7cd90c878feea8b41974fe3987eb0239bebbf385/src/plexosdb/db.py#L74)
 
 Type definition for property records returned by iterate_properties.
 
@@ -78,7 +77,7 @@ Full reference: [`PropertyRecord`](/plexosdb/reference/python-api/propertyrecord
 
 #### PlexosDB
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L110)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/7cd90c878feea8b41974fe3987eb0239bebbf385/src/plexosdb/db.py#L124)
 
 High-level API for PlexosDB schema manipulation.
 
@@ -446,7 +445,17 @@ True
 add_metadata(self, entity_type: Literal['object', 'membership', 'data'], entity_id: int, class_name: str, property_name: str, value: str, /, *, state: int | None=None) -> None
 ```
 
-Add metadata to an entity (object, membership, or data).
+Insert metadata for an object, membership, or data record.
+
+The entity ID, metadata class, and property identify the row. When
+``state`` is omitted, NULL is stored.
+
+**Raises**
+
+- `ValueError`
+  If ``entity_type`` is not ``"object"``, ``"membership"``, or ``"data"``.
+- `sqlite3.Error`
+  If the entity does not exist or the metadata key already exists.
 
 ###### add_object
 
@@ -1084,7 +1093,14 @@ Delete a membership between two objects.
 delete_metadata(self, entity_type: Literal['object', 'membership', 'data'], entity_id: int, class_name: str, property_name: str) -> None
 ```
 
-Delete metadata from an entity.
+Delete metadata matching an entity ID, class, and property.
+
+Missing metadata is ignored.
+
+**Raises**
+
+- `ValueError`
+  If ``entity_type`` is not ``"object"``, ``"membership"``, or ``"data"``.
 
 ###### delete_object
 
@@ -2668,7 +2684,7 @@ use execute() instead.
 set_config(self, element: str, value: str) -> None
 ```
 
-Set a configuration value in the database.
+Insert a configuration value or update the value for an existing element.
 
 ###### set_date_range
 

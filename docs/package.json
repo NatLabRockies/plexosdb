@@ -6,8 +6,8 @@
     "build": "astro build",
     "dev": "astro dev",
     "preview": "astro preview",
-    "prebuild": "python3 generate_api.py && node --test test_redirects.mjs",
-    "predev": "python3 generate_api.py",
+    "generate:api": "python3 generate_api.py",
+    "prebuild": "node --test test_redirects.mjs",
     "postbuild": "python3 validate_build.py"
   },
   "dependencies": {
