@@ -11,10 +11,10 @@ declared methods are reserved for future implementation and currently raise
 not be used as supported workflows yet.
 
 Currently unimplemented methods include `add_time_slice`, `add_variable_tag`,
-`backup_database`, `create_object_scenario`, `delete_category`,
-`delete_membership`, `delete_text`, `import_from_csv`, `list_reports`,
-`set_date_range`, `to_csv`, `update_attribute`, `update_category`,
-`update_properties`, `update_property`, `update_scenario`, and `update_text`.
+`backup_database`, `delete_category`, `delete_membership`, `delete_text`,
+`import_from_csv`, `list_reports`, `set_date_range`, `to_csv`,
+`update_attribute`, `update_category`, `update_properties`, `update_property`,
+and `update_text`.
 
 <!-- Generated API reference -->
 
@@ -949,7 +949,8 @@ Copy all existing memberships of old object to the new object.
 create_object_scenario(self, object_name: str, scenario_name: str, properties: dict[str, Any], /, *, object_class: ClassEnum, description: str | None=None, collection: CollectionEnum | None=None, parent_class: ClassEnum | None=None, base_scenario: str | None=None) -> int
 ```
 
-Create a new scenario with specific property values for an object.
+Create a scenario for an object, optionally inheriting property values from a
+base scenario before applying the supplied overrides. The operation is atomic.
 
 ###### create_schema
 
@@ -2901,7 +2902,8 @@ dates, and text metadata are preserved.
 update_scenario(self, scenario_name: str, /, *, new_name: str | None=None, new_category: str | None=None, new_description: str | None=None) -> None
 ```
 
-Update a scenario's properties.
+Update a scenario's name, category, and/or description. Unspecified fields
+remain unchanged.
 
 ###### update_text
 

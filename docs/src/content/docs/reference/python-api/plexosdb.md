@@ -944,7 +944,8 @@ Copy all existing memberships of old object to the new object.
 create_object_scenario(self, object_name: str, scenario_name: str, properties: dict[str, Any], /, *, object_class: ClassEnum, description: str | None=None, collection: CollectionEnum | None=None, parent_class: ClassEnum | None=None, base_scenario: str | None=None) -> int
 ```
 
-Create a new scenario with specific property values for an object.
+Create a scenario for an object, optionally inheriting property values from a
+base scenario before applying the supplied overrides. The operation is atomic.
 
 ### create_schema
 
@@ -3014,7 +3015,8 @@ dates, and text metadata are preserved.
 update_scenario(self, scenario_name: str, /, *, new_name: str | None=None, new_category: str | None=None, new_description: str | None=None) -> None
 ```
 
-Update a scenario's properties.
+Update a scenario's name, category, and/or description. Unspecified fields
+remain unchanged.
 
 ### update_text
 

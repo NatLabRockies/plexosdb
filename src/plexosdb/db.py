@@ -120,6 +120,9 @@ class PropertyRecord(TypedDict, total=False):
         Name of associated scenario
     """
 
+    property: str
+    value: float | str | None
+
 
 class PlexosDB:
     """High-level API for PlexosDB schema manipulation."""
@@ -1869,8 +1872,89 @@ class PlexosDB:
         parent_class: ClassEnum | None = None,
         base_scenario: str | None = None,
     ) -> int:
-        """Create a new scenario with specific property values for an object."""
-        raise NotImplementedError  # pragma: no cover
+        """Create a scenario and assign property values for one object.
+
+        When ``base_scenario`` is provided, property values for the same object
+        are inherited first; values in ``properties`` override matching names.
+        The scenario and its property records are created atomically.
+
+        Parameters
+        ----------
+        object_name : str
+            Name of the object receiving the scenario property values.
+        scenario_name : str
+            Name of the scenario to create.
+        properties : dict[str, Any]
+            Property names and values to assign in the new scenario.
+        object_class : ClassEnum
+            Class of the object receiving the properties.
+        description : str | None, optional
+            Description for the new scenario.
+        collection : CollectionEnum | None, optional
+            Collection containing the object's properties. Defaults to the
+            collection for ``object_class``.
+        parent_class : ClassEnum | None, optional
+            Parent class for the object's membership. Defaults to System.
+        base_scenario : str | None, optional
+            Existing scenario whose property values for this object are
+            inherited before applying ``properties``.
+
+        Returns
+        -------
+        int
+            ID of the newly created scenario.
+
+        Raises
+        ------
+        NameError
+            If ``scenario_name`` already exists or a property is invalid.
+        NotFoundError
+            If the object or ``base_scenario`` does not exist.
+        """
+        if not checks_module.check_object_exists(self, object_class, object_name):
+            raise NotFoundError(f"Object `{object_name}` does not exist in class `{object_class}`.")
+
+        collection = collection or get_default_collection(object_class)
+        parent_class = parent_class or ClassEnum.System
+
+        with self._db.transaction():
+            property_values: dict[str, Any] = {}
+            if base_scenario is not None:
+                if not checks_module.check_scenario_exists(self, base_scenario):
+                    raise NotFoundError(f"Base scenario `{base_scenario}` does not exist.")
+                property_values.update(
+                    {
+                        record["property"]: record["value"]
+                        for record in self.iterate_properties(
+                            class_enum=object_class,
+                            object_names=object_name,
+                            collection=collection,
+                            parent_class=parent_class,
+                            scenario=base_scenario,
+                        )
+                    }
+                )
+            property_values.update(properties)
+
+            scenario_id = self.add_scenario(scenario_name)
+            if description is not None:
+                result = self._db.execute(
+                    "UPDATE t_object SET description = ? WHERE object_id = ?", (description, scenario_id)
+                )
+                assert result
+
+            for property_name, value in property_values.items():
+                self.add_property(
+                    object_class,
+                    object_name,
+                    property_name,
+                    value,
+                    scenario=scenario_name,
+                    collection_enum=collection,
+                    parent_class_enum=parent_class,
+                )
+
+        return scenario_id
 
     def _seed_default_model_data(self) -> None:
         """Seed minimal lookup data so object workflows work on a fresh schema.
@@ -5111,8 +5195,56 @@ class PlexosDB:
         new_category: str | None = None,
         new_description: str | None = None,
     ) -> None:
-        """Update a scenario's properties."""
-        raise NotImplementedError  # pragma: no cover
+        """Update a scenario's name, category, and/or description.
+
+        Any field left as ``None`` remains unchanged.
+
+        Parameters
+        ----------
+        scenario_name : str
+            Current name of the scenario.
+        new_name : str | None, optional
+            Replacement name for the scenario.
+        new_category : str | None, optional
+            Existing Scenario category to assign.
+        new_description : str | None, optional
+            Replacement description for the scenario.
+
+        Raises
+        ------
+        NotFoundError
+            If ``scenario_name`` does not identify an existing scenario.
+        AssertionError
+            If ``new_category`` does not identify an existing Scenario category.
+        sqlite3.IntegrityError
+            If ``new_name`` conflicts with another object name in the database.
+        """
+        if not checks_module.check_scenario_exists(self, scenario_name):
+            raise NotFoundError(f"Scenario `{scenario_name}` does not exist.")
+
+        set_clauses: list[str] = []
+        params: list[Any] = []
+        if new_name is not None:
+            set_clauses.append("name = ?")
+            params.append(new_name)
+        if new_category is not None:
+            set_clauses.append("category_id = ?")
+            params.append(self.get_category_id(ClassEnum.Scenario, new_category))
+        if new_description is not None:
+            set_clauses.append("description = ?")
+            params.append(new_description)
+
+        if not set_clauses:
+            return
+
+        scenario_id = self.get_scenario_id(scenario_name)
+        params.append(scenario_id)
+        with self._db.transaction():
+            result = self._db.execute(
+                f"UPDATE {Schema.Objects.name} SET {', '.join(set_clauses)} WHERE object_id = ?",
+                tuple(params),
+            )
+            assert result
 
     def update_text(
         self,

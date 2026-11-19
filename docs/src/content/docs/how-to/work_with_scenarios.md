@@ -77,6 +77,10 @@ else:
 
 You can create scenarios with specific property values for an object:
 
+When `base_scenario` is provided, the new scenario inherits that scenario's
+property values for the same object. Values in `properties` override inherited
+values with the same property name.
+
 ```python
 # Create a new scenario with specific property values
 db.create_object_scenario(
