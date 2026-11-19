@@ -131,7 +131,10 @@ updates that row's property value. `update_text` and `delete_text` operate on a
 specific text class for a property data row.
 
 ```python
-data_id = db.add_property(ClassEnum.Generator, "Generator1", "Max Capacity", 100.0)
+db.add_object(ClassEnum.Variable, "LoadProfile")
+data_id = db.add_property(
+    ClassEnum.Generator, "Generator1", "Max Capacity", 100.0, timeslice="Peak"
+)
 db.set_date_range(data_id, date_from="2024-01-01T00:00:00")
 db.add_variable_tag(data_id, "LoadProfile", value=110.0)
 
