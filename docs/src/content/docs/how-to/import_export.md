@@ -83,7 +83,7 @@ db.to_csv("/path/to/model-csv", tables=["t_object", "t_data"])
 
 # The target database must already have the corresponding tables.
 restored = PlexosDB()
-restored.create_schema(version=10)
+restored.create_schema()
 restored.import_from_csv("/path/to/model-csv")
 ```
 
