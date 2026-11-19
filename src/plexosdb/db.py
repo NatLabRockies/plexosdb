@@ -4253,10 +4253,14 @@ class PlexosDB:
             raise ValueError("CSV table names cannot contain path separators.")
 
         connection = self._db.connection
-        with self._db.transaction():
-            connection.execute("PRAGMA defer_foreign_keys = ON")
-            for table_name, csv_path in import_files:
-                _import_csv_table(connection, table_name, csv_path)
+        try:
+            with self._db.transaction():
+                connection.execute("PRAGMA defer_foreign_keys = ON")
+                for table_name, csv_path in import_files:
+                    _import_csv_table(connection, table_name, csv_path)
+        except sqlite3.Error:
+            connection.rollback()
+            raise
 
     def iterate_properties(
         self,
