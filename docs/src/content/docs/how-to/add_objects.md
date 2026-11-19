@@ -50,9 +50,9 @@ db.add_object(
 )
 ```
 
-Categories can be renamed, which keeps existing objects assigned to the
-renamed category. An unused category can be deleted; categories assigned to
-objects must be cleared or renamed instead.
+Categories can be renamed, which keeps existing objects assigned to the renamed
+category. An unused category can be deleted; categories assigned to objects must
+be cleared or renamed instead.
 
 ```python
 db.update_category("Renewable", "Clean Energy", class_name=ClassEnum.Generator)

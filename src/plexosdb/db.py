@@ -3,16 +3,17 @@
 import base64
 import binascii
 import csv
+import re
 import sqlite3
 import uuid
 from collections.abc import Iterable, Iterator
+from collections.abc import Sequence
 from contextlib import closing
-from datetime import datetime
+from datetime import datetime, timedelta
 from importlib.resources import as_file, files
 from pathlib import Path
 from string import Template
 from typing import Any, Literal, TypedDict, cast
-from collections.abc import Sequence
 import warnings
 
 from loguru import logger
@@ -66,6 +67,64 @@ _METADATA_TABLES: dict[str, tuple[str, str]] = {
     "membership": ("t_membership_meta", "membership_id"),
     "data": ("t_data_meta", "data_id"),
 }
+
+_ISO_DURATION_PATTERN = re.compile(
+    r"P(?:(?P<weeks>\d+(?:\.\d+)?)W|"
+    r"(?:(?P<days>\d+(?:\.\d+)?)D)?"
+    r"(?:T(?:(?P<hours>\d+(?:\.\d+)?)H)?"
+    r"(?:(?P<minutes>\d+(?:\.\d+)?)M)?"
+    r"(?:(?P<seconds>\d+(?:\.\d+)?)S)?)?)",
+    re.IGNORECASE,
+)
+_UNIT_DURATION_PATTERN = re.compile(
+    r"(?P<value>\d+(?:\.\d+)?)\s*(?P<unit>weeks?|w|days?|d|hours?|hrs?|h|minutes?|mins?|m|seconds?|secs?|s)",
+    re.IGNORECASE,
+)
+
+
+def _parse_fixed_duration(value: str) -> timedelta:
+    """Parse a positive fixed duration in ISO 8601 or single-unit form."""
+    if not isinstance(value, str):
+        raise TypeError("interval must be a string")
+
+    text = value.strip()
+    iso_match = _ISO_DURATION_PATTERN.fullmatch(text)
+    if iso_match is not None:
+        parts = {unit: float(amount) for unit, amount in iso_match.groupdict().items() if amount is not None}
+        if not parts:
+            raise ValueError
+        duration = timedelta(**parts)
+    else:
+        unit_match = _UNIT_DURATION_PATTERN.fullmatch(text)
+        if unit_match is None:
+            raise ValueError("interval must be a positive fixed duration such as 'PT1H' or '1 hour'.")
+        unit = unit_match.group("unit").lower()
+        unit_name = (
+            "weeks"
+            if unit in {"w", "week", "weeks"}
+            else "days"
+            if unit in {"d", "day", "days"}
+            else "hours"
+            if unit in {"h", "hr", "hrs", "hour", "hours"}
+            else "minutes"
+            if unit in {"m", "min", "mins", "minute", "minutes"}
+            else "seconds"
+        )
+        duration = timedelta(**{unit_name: float(unit_match.group("value"))})
+
+    if duration <= timedelta(0):
+        raise ValueError("interval must be a positive fixed duration.")
+    return duration
+
+
+def _parse_datetime_string(value: str, parameter: str) -> datetime:
+    """Parse an ISO 8601 date-time string with a parameter-specific error."""
+    if not isinstance(value, str):
+        raise TypeError(f"{parameter} must be a string")
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError as error:
+        raise ValueError(f"{parameter} must be an ISO 8601 date-time string.") from error
 
 
 def _metadata_table_for_entity(entity_type: str) -> tuple[str, str]:
@@ -1748,8 +1807,97 @@ class PlexosDB:
         end_datetime: str,
         description: str | None = None,
     ) -> int:
-        """Add a time slice definition to the database."""
-        raise NotImplementedError  # pragma: no cover
+        """Create a native Timeslice object with dated Include property rows.
+
+        ``interval`` accepts a positive fixed duration such as ``PT1H`` or
+        ``1 hour``. The generated periods start at ``start_datetime`` and end
+        at ``end_datetime``; the final period is shortened when necessary.
+
+        Returns
+        -------
+        int
+            ID of the created Timeslice object.
+
+        Raises
+        ------
+        ValueError
+            If the interval or date-time range is invalid.
+        """
+        duration = _parse_fixed_duration(interval)
+        start = _parse_datetime_string(start_datetime, "start_datetime")
+        end = _parse_datetime_string(end_datetime, "end_datetime")
+        try:
+            if start >= end:
+                raise ValueError("end_datetime must be later than start_datetime.")
+        except TypeError as error:
+            raise ValueError("start_datetime and end_datetime must use compatible time zones.") from error
+
+        with self._db.transaction():
+            object_id = self.add_object(
+                ClassEnum.Timeslice,
+                name,
+                description=description,
+                collection_enum=CollectionEnum.Timeslices,
+            )
+            _, _, property_id, membership_id = self._resolve_property_context(
+                name,
+                "Include",
+                object_class=ClassEnum.Timeslice,
+                collection=CollectionEnum.Timeslices,
+                parent_class=ClassEnum.System,
+            )
+            latest_data_id_row = self._db.fetchone("SELECT COALESCE(MAX(data_id), 0) FROM t_data")
+            assert latest_data_id_row is not None
+            latest_data_id = cast(int, latest_data_id_row[0])
+
+            def insert_interval_batch(intervals: list[tuple[datetime, datetime]]) -> None:
+                nonlocal latest_data_id
+                self._db.executemany(
+                    "INSERT INTO t_data(membership_id, property_id, value) VALUES (?, ?, ?)",
+                    [(membership_id, property_id, -1)] * len(intervals),
+                )
+                data_id_rows = self._db.query(
+                    """
+                    SELECT data_id
+                    FROM t_data
+                    WHERE data_id > ? AND membership_id = ? AND property_id = ?
+                    ORDER BY data_id
+                    """,
+                    (latest_data_id, membership_id, property_id),
+                )
+                if len(data_id_rows) != len(intervals):
+                    raise RuntimeError("Could not resolve all data IDs for the Timeslice Include rows.")
+
+                self._db.executemany(
+                    "INSERT INTO t_date_from(data_id, date) VALUES (?, ?)",
+                    [
+                        (data_id_row[0], interval_start.isoformat())
+                        for data_id_row, (interval_start, _) in zip(data_id_rows, intervals, strict=True)
+                    ],
+                )
+                self._db.executemany(
+                    "INSERT INTO t_date_to(data_id, date) VALUES (?, ?)",
+                    [
+                        (data_id_row[0], interval_end.isoformat())
+                        for data_id_row, (_, interval_end) in zip(data_id_rows, intervals, strict=True)
+                    ],
+                )
+                latest_data_id = cast(int, data_id_rows[-1][0])
+
+            intervals: list[tuple[datetime, datetime]] = []
+            interval_start = start
+            while interval_start < end:
+                remaining = end - interval_start
+                interval_end = end if duration >= remaining else interval_start + duration
+                intervals.append((interval_start, interval_end))
+                if len(intervals) == 1000:
+                    insert_interval_batch(intervals)
+                    intervals.clear()
+                interval_start = interval_end
+            if intervals:
+                insert_interval_batch(intervals)
+
+        return object_id
 
     def add_variable_tag(
         self,
@@ -1759,8 +1907,34 @@ class PlexosDB:
         *,
         value: str | float | None = None,
     ) -> int:
-        """Add a Variable tag to a property data record."""
-        raise NotImplementedError  # pragma: no cover
+        """Tag a property data record with an existing Variable object.
+
+        When ``value`` is provided, it also replaces the value on the tagged
+        property data record.
+
+        Returns
+        -------
+        int
+            The tagged data ID.
+
+        Raises
+        ------
+        NotFoundError
+            If the data record or Variable object does not exist.
+        sqlite3.IntegrityError
+            If the Variable is already tagged to the data record.
+        """
+        if not checks_module.check_data_id_exist(self, data_id):
+            raise NotFoundError(f"Data record `{data_id}` was not found.")
+        if not checks_module.check_object_exists(self, ClassEnum.Variable, variable_name):
+            raise NotFoundError(f"Variable `{variable_name}` was not found.")
+
+        variable_id = self.get_object_id(ClassEnum.Variable, variable_name)
+        with self._db.transaction():
+            if value is not None:
+                self._db.execute("UPDATE t_data SET value = ? WHERE data_id = ?", (value, data_id))
+            self._db.execute("INSERT INTO t_tag(data_id, object_id) VALUES (?, ?)", (data_id, variable_id))
+        return data_id
 
     def backup_database(self, target_path: str | Path) -> None:
         """Create a SQLite backup at ``target_path``.
@@ -2610,8 +2784,23 @@ class PlexosDB:
         *,
         class_id: int,
     ) -> None:
-        """Delete text data from a property data record."""
-        raise NotImplementedError  # pragma: no cover
+        """Delete text metadata for a property data record.
+
+        Raises
+        ------
+        NotFoundError
+            If the text record does not exist.
+        """
+        with self._db.transaction():
+            text_row = self._db.fetchone(
+                "SELECT 1 FROM t_text WHERE data_id = ? AND class_id = ?",
+                (data_id, class_id),
+            )
+            if text_row is None:
+                raise NotFoundError(
+                    f"Text record for data_id `{data_id}` and class_id `{class_id}` was not found."
+                )
+            self._db.execute("DELETE FROM t_text WHERE data_id = ? AND class_id = ?", (data_id, class_id))
 
     def get_attribute(
         self,
@@ -4832,8 +5021,47 @@ class PlexosDB:
         date_from: str | None = None,
         date_to: str | None = None,
     ) -> None:
-        """Set the date range for a property data record."""
-        raise NotImplementedError  # pragma: no cover
+        """Set supplied ISO 8601 date boundaries on a property data record.
+
+        A boundary omitted as ``None`` is left unchanged. If both boundaries
+        are supplied, ``date_from`` must not be later than ``date_to``.
+
+        Raises
+        ------
+        NotFoundError
+            If ``data_id`` does not exist.
+        ValueError
+            If a date boundary is invalid or the range is reversed.
+        """
+        if not checks_module.check_data_id_exist(self, data_id):
+            raise NotFoundError(f"Data record `{data_id}` was not found.")
+
+        parsed_from = _parse_datetime_string(date_from, "date_from") if date_from is not None else None
+        parsed_to = _parse_datetime_string(date_to, "date_to") if date_to is not None else None
+        if parsed_from is not None and parsed_to is not None:
+            try:
+                if parsed_from > parsed_to:
+                    raise ValueError("date_from must not be later than date_to.")
+            except TypeError as error:
+                raise ValueError("date_from and date_to must use compatible time zones.") from error
+
+        with self._db.transaction():
+            if date_from is not None:
+                self._db.execute(
+                    """
+                    INSERT INTO t_date_from(data_id, date) VALUES (?, ?)
+                    ON CONFLICT(data_id) DO UPDATE SET date = excluded.date
+                    """,
+                    (data_id, date_from),
+                )
+            if date_to is not None:
+                self._db.execute(
+                    """
+                    INSERT INTO t_date_to(data_id, date) VALUES (?, ?)
+                    ON CONFLICT(data_id) DO UPDATE SET date = excluded.date
+                    """,
+                    (data_id, date_to),
+                )
 
     def to_csv(self, target_path: str | Path, /, *, tables: list[str] | None = None) -> None:
         """Export selected tables or all user tables as table-named CSV files.
@@ -5624,8 +5852,26 @@ class PlexosDB:
         *,
         class_id: int,
     ) -> None:
-        """Update text data for a property data record."""
-        raise NotImplementedError  # pragma: no cover
+        """Replace text metadata for a property data record.
+
+        Raises
+        ------
+        NotFoundError
+            If the text record does not exist.
+        """
+        with self._db.transaction():
+            text_row = self._db.fetchone(
+                "SELECT 1 FROM t_text WHERE data_id = ? AND class_id = ?",
+                (data_id, class_id),
+            )
+            if text_row is None:
+                raise NotFoundError(
+                    f"Text record for data_id `{data_id}` and class_id `{class_id}` was not found."
+                )
+            self._db.execute(
+                "UPDATE t_text SET value = ? WHERE data_id = ? AND class_id = ?",
+                (text_value, data_id, class_id),
+            )
 
     @staticmethod
     def validate_value_by_rule(value: SQLiteValue, validation_rule: str) -> ValidationResult:

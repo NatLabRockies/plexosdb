@@ -894,7 +894,10 @@ Add text data to a property data record.
 add_time_slice(self, name: str, /, *, interval: str, start_datetime: str, end_datetime: str, description: str | None=None) -> int
 ```
 
-Add a time slice definition to the database.
+Create a native Timeslice object and dated `Include` property rows. `interval`
+accepts a positive fixed duration such as `PT1H` or `1 hour`. Periods begin at
+`start_datetime`; the final period is shortened when needed to end at
+`end_datetime`. The returned integer is the Timeslice object ID.
 
 ### add_variable_tag
 
@@ -904,7 +907,8 @@ Add a time slice definition to the database.
 add_variable_tag(self, data_id: int, variable_name: str, /, *, value: str | float | None=None) -> int
 ```
 
-Add a Variable tag to a property data record.
+Link an existing Variable object to a property data record. If `value` is
+provided, it also replaces that property's value. Returns the tagged `data_id`.
 
 ### backup_database
 
@@ -1188,7 +1192,8 @@ specified, only the property data associated with that scenario is deleted.
 delete_text(self, data_id: int, /, *, class_id: int) -> None
 ```
 
-Delete text data from a property data record.
+Delete the text record identified by `data_id` and `class_id`. Raises
+`NotFoundError` if no matching text record exists.
 
 ### get_attribute
 
@@ -2793,7 +2798,9 @@ Insert a configuration value or update the value for an existing element.
 set_date_range(self, data_id: int, /, *, date_from: str | None=None, date_to: str | None=None) -> None
 ```
 
-Set the date range for a property data record.
+Insert or update the supplied ISO 8601 date boundaries for a property data
+record. A boundary passed as `None` is left unchanged. A reversed date range
+raises `ValueError`; a missing data row raises `NotFoundError`.
 
 ### to_csv
 
@@ -3030,7 +3037,9 @@ remain unchanged.
 update_text(self, data_id: int, text_value: str, /, *, class_id: int) -> None
 ```
 
-Update text data for a property data record.
+Replace the value of the text record identified by `data_id` and `class_id`,
+preserving its other fields. Raises `NotFoundError` if no matching text record
+exists.
 
 ### validate_value_by_rule
 

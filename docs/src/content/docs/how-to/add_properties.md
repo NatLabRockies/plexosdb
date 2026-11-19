@@ -101,6 +101,45 @@ db.add_property(
 they do not change the property's numeric or string `value`. A DataFile or
 Timeslice object does not need to be created manually for these associations.
 
+## Defining a Native Timeslice
+
+Use `add_time_slice` when the database needs a PLEXOS Timeslice object with
+dated `Include` property rows. The interval accepts a positive fixed duration
+such as `PT1H` or `1 hour`; the start is inclusive, the end is the final bound,
+and a partial final interval is shortened to that end.
+
+```python
+timeslice_id = db.add_time_slice(
+    "Peak",
+    interval="PT1H",
+    start_datetime="2024-01-01T16:00:00",
+    end_datetime="2024-01-01T20:00:00",
+    description="Afternoon peak",
+)
+```
+
+Each generated period is stored as a `Timeslice.Include` data row with value
+`-1` and matching `t_date_from`/`t_date_to` boundaries. Use the `timeslice`
+argument to `add_property` when only property-level text metadata is needed.
+
+## Updating Property Metadata
+
+`set_date_range` inserts or updates only the date boundaries supplied; an
+omitted boundary is left unchanged. `add_variable_tag` links an existing
+Variable object to a property data row and, when `value` is provided, also
+updates that row's property value. `update_text` and `delete_text` operate on a
+specific text class for a property data row.
+
+```python
+data_id = db.add_property(ClassEnum.Generator, "Generator1", "Max Capacity", 100.0)
+db.set_date_range(data_id, date_from="2024-01-01T00:00:00")
+db.add_variable_tag(data_id, "LoadProfile", value=110.0)
+
+class_id = db.get_class_id(ClassEnum.Timeslice)
+db.update_text(data_id, "Peak", class_id=class_id)
+db.delete_text(data_id, class_id=class_id)
+```
+
 ## Adding Date- and Scenario-Specific Properties
 
 Scenarios are created automatically when the supplied scenario does not yet

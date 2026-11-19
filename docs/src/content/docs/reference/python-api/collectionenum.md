@@ -243,6 +243,12 @@ Constraints = 'Constraints'
 Variables = 'Variables'
 ```
 
+### Timeslices
+
+```text
+Timeslices = 'Timeslices'
+```
+
 ### Purchasers
 
 ```text
