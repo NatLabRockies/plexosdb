@@ -71,6 +71,9 @@ else:
     print("Export failed")
 ```
 
+Custom columns and object, membership, and data metadata are preserved when an
+exported XML model is imported with `PlexosDB.from_xml()`.
+
 ## CSV and database backups
 
 Export tables to a directory as `<table>.csv` files, then import those files
