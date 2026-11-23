@@ -63,6 +63,58 @@ def test_create_object_scenario_inherits_and_overrides_properties(db_base: Plexo
     assert description == ("High demand assumptions",)
 
 
+@pytest.mark.parametrize("override", [False, True])
+def test_create_object_scenario_does_not_copy_other_scenario_tags(db_base: PlexosDB, override: bool) -> None:
+    from plexosdb import ClassEnum
+
+    object_name = "Shared Scenario Generator"
+    db_base.add_object(ClassEnum.Generator, object_name)
+    db_base.add_object(ClassEnum.Variable, "Shared Variable")
+    other_scenario_id = db_base.add_scenario("Other Scenario")
+    data_id = db_base.add_property(
+        ClassEnum.Generator, object_name, "Max Capacity", 100.0, scenario="Base Case"
+    )
+    db_base._db.execute("INSERT INTO t_tag (data_id, object_id) VALUES (?, ?)", (data_id, other_scenario_id))
+    db_base.add_variable_tag(data_id, "Shared Variable")
+    original_tags = db_base.query(
+        "SELECT object_id, state, action_id FROM t_tag WHERE data_id = ? ORDER BY object_id", (data_id,)
+    )
+
+    new_scenario_id = db_base.create_object_scenario(
+        object_name,
+        "New Scenario",
+        {"Max Capacity": 200.0} if override else {},
+        object_class=ClassEnum.Generator,
+        base_scenario="Base Case",
+    )
+
+    other_records = db_base.get_object_properties(ClassEnum.Generator, object_name, scenario="Other Scenario")
+    new_records = db_base.get_object_properties(ClassEnum.Generator, object_name, scenario="New Scenario")
+    assert [record["value"] for record in other_records] == [100.0]
+    assert [record["value"] for record in new_records] == [200.0 if override else 100.0]
+    assert (
+        db_base.query(
+            "SELECT object_id, state, action_id FROM t_tag WHERE data_id = ? ORDER BY object_id", (data_id,)
+        )
+        == original_tags
+    )
+    copied_tags = db_base.query(
+        """
+        SELECT tag.object_id, tag.state, tag.action_id
+        FROM t_tag AS tag
+        WHERE tag.data_id = (SELECT data_id FROM t_tag WHERE object_id = ?)
+        ORDER BY tag.object_id
+        """,
+        (new_scenario_id,),
+    )
+    base_scenario_id = db_base.get_scenario_id("Base Case")
+    assert sorted(copied_tags) == sorted(
+        (new_scenario_id if object_id == base_scenario_id else object_id, state, action_id)
+        for object_id, state, action_id in original_tags
+        if object_id != other_scenario_id
+    )
+
+
 def test_create_object_scenario_preserves_qualified_records_when_overriding(db_base: PlexosDB) -> None:
     from plexosdb import ClassEnum, CollectionEnum
 

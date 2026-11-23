@@ -2262,8 +2262,14 @@ class PlexosDB:
                    source_tag.action_id
             FROM t_tag AS source_tag
             JOIN temp_scenario_data_mapping AS mapping ON mapping.old_id = source_tag.data_id
+            WHERE source_tag.object_id = ?
+               OR NOT EXISTS (
+                   SELECT 1 FROM t_object AS tagged_object
+                   WHERE tagged_object.object_id = source_tag.object_id
+                     AND tagged_object.class_id = ?
+               )
             """,
-            (base_scenario_id, scenario_id),
+            (base_scenario_id, scenario_id, base_scenario_id, self.get_class_id(ClassEnum.Scenario)),
         )
         for table, columns in (
             ("t_text", "class_id, value, state, action_id"),
@@ -2300,10 +2306,11 @@ class PlexosDB:
         """Create a scenario and assign property values for one object.
 
         When ``base_scenario`` is provided, all of its property data rows for
-        the same object are inherited with their bands, dates, tags, and text
-        metadata. Values in ``properties`` replace the values for matching
-        property names without removing those qualifiers. A property not
-        present in the base scenario is added as an unqualified row.
+        the same object are inherited with their bands, dates, non-scenario
+        tags, and text metadata. Other scenario tags are not inherited.
+        Values in ``properties`` replace the values for matching property
+        names without removing those qualifiers. A property not present in
+        the base scenario is added as an unqualified row.
         The scenario and its property records are created atomically.
 
         Parameters
@@ -5174,8 +5181,8 @@ class PlexosDB:
     ) -> None:
         """Set supplied ISO 8601 date boundaries on a property data record.
 
-        A boundary omitted as ``None`` is left unchanged. If both boundaries
-        are supplied, ``date_from`` must not be later than ``date_to``.
+        A boundary omitted as ``None`` is left unchanged. The resulting
+        ``date_from`` must not be later than ``date_to`` when both exist.
 
         Raises
         ------
@@ -5189,14 +5196,24 @@ class PlexosDB:
 
         parsed_from = _parse_datetime_string(date_from, "date_from") if date_from is not None else None
         parsed_to = _parse_datetime_string(date_to, "date_to") if date_to is not None else None
-        if parsed_from is not None and parsed_to is not None:
-            try:
-                if parsed_from > parsed_to:
-                    raise ValueError("date_from must not be later than date_to.")
-            except TypeError as error:
-                raise ValueError("date_from and date_to must use compatible time zones.") from error
 
         with self._db.transaction():
+            if (date_from is None) != (date_to is None):
+                table = "t_date_from" if date_from is None else "t_date_to"
+                row = self._db.fetchone(f"SELECT date FROM {table} WHERE data_id = ?", (data_id,))
+                if row is not None and row[0] is not None:
+                    if date_from is None:
+                        parsed_from = _parse_datetime_string(row[0], "stored date_from")
+                    else:
+                        parsed_to = _parse_datetime_string(row[0], "stored date_to")
+
+            if parsed_from is not None and parsed_to is not None:
+                try:
+                    if parsed_from > parsed_to:
+                        raise ValueError("date_from must not be later than date_to.")
+                except TypeError as error:
+                    raise ValueError("date_from and date_to must use compatible time zones.") from error
+
             if date_from is not None:
                 self._db.execute(
                     """

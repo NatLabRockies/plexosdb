@@ -125,10 +125,11 @@ argument to `add_property` when only property-level text metadata is needed.
 ## Updating Property Metadata
 
 `set_date_range` inserts or updates only the date boundaries supplied; an
-omitted boundary is left unchanged. `add_variable_tag` links an existing
-Variable object to a property data row and, when `value` is provided, also
-updates that row's property value. `update_text` and `delete_text` operate on a
-specific text class for a property data row.
+omitted boundary is left unchanged. The resulting boundaries must be in order
+and use compatible time zones, including when one boundary is already stored.
+`add_variable_tag` links an existing Variable object to a property data row and,
+when `value` is provided, also updates that row's property value. `update_text`
+and `delete_text` operate on a specific text class for a property data row.
 
 ```python
 db.add_object(ClassEnum.Variable, "LoadProfile")

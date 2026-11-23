@@ -120,6 +120,79 @@ def test_set_date_range_rejects_reversed_or_missing_records(db: PlexosDB) -> Non
         db.set_date_range(data_id + 1, date_from="2024-01-01")
 
 
+@pytest.mark.parametrize(
+    ("boundary", "value", "error"),
+    [
+        ("date_from", "2025-01-01", "date_from must not be later"),
+        ("date_to", "2023-12-31", "date_from must not be later"),
+        ("date_from", "2024-06-01T00:00:00+00:00", "compatible time zones"),
+        ("date_to", "2024-06-01T00:00:00+00:00", "compatible time zones"),
+    ],
+)
+def test_set_date_range_validates_single_boundary_against_stored_opposite(
+    db: PlexosDB, boundary: str, value: str, error: str
+) -> None:
+    data_id = _add_generator_property(db)
+    db.set_date_range(data_id, date_from="2024-01-01", date_to="2024-12-31")
+
+    with pytest.raises(ValueError, match=error):
+        db.set_date_range(data_id, **{boundary: value})
+
+    assert db.query("SELECT date FROM t_date_from WHERE data_id = ?", (data_id,)) == [("2024-01-01",)]
+    assert db.query("SELECT date FROM t_date_to WHERE data_id = ?", (data_id,)) == [("2024-12-31",)]
+
+
+@pytest.mark.parametrize(
+    ("boundary", "value"),
+    [("date_from", "2024-12-31"), ("date_to", "2024-01-01")],
+)
+def test_set_date_range_accepts_single_boundary_equal_to_stored_opposite(
+    db: PlexosDB, boundary: str, value: str
+) -> None:
+    data_id = _add_generator_property(db)
+    db.set_date_range(data_id, date_from="2024-01-01", date_to="2024-12-31")
+
+    db.set_date_range(data_id, **{boundary: value})
+
+    assert db.query(f"SELECT date FROM t_{boundary} WHERE data_id = ?", (data_id,)) == [(value,)]
+
+
+@pytest.mark.parametrize(("boundary", "opposite"), [("date_from", "date_to"), ("date_to", "date_from")])
+@pytest.mark.parametrize("null_row", [False, True])
+def test_set_date_range_allows_missing_opposite_boundary(
+    db: PlexosDB, boundary: str, opposite: str, null_row: bool
+) -> None:
+    data_id = _add_generator_property(db)
+    if null_row:
+        db._db.execute(f"INSERT INTO t_{opposite} (data_id, date) VALUES (?, NULL)", (data_id,))
+
+    db.set_date_range(data_id, **{boundary: "2024-01-01"})
+
+    assert db.query(f"SELECT date FROM t_{boundary} WHERE data_id = ?", (data_id,)) == [("2024-01-01",)]
+
+
+def test_set_date_range_replaces_both_old_boundaries(db: PlexosDB) -> None:
+    data_id = _add_generator_property(db)
+    db.set_date_range(data_id, date_from="2024-01-01", date_to="2024-12-31")
+
+    db.set_date_range(data_id, date_from="2025-01-01", date_to="2025-12-31")
+
+    assert db.query("SELECT date FROM t_date_from WHERE data_id = ?", (data_id,)) == [("2025-01-01",)]
+    assert db.query("SELECT date FROM t_date_to WHERE data_id = ?", (data_id,)) == [("2025-12-31",)]
+
+
+def test_set_date_range_compares_timezone_offsets(db: PlexosDB) -> None:
+    data_id = _add_generator_property(db)
+    db.set_date_range(data_id, date_to="2024-01-01T10:00:00+00:00")
+
+    db.set_date_range(data_id, date_from="2024-01-01T11:00:00+02:00")
+    with pytest.raises(ValueError, match="date_from must not be later"):
+        db.set_date_range(data_id, date_from="2024-01-01T11:00:00+00:00")
+    assert db.query("SELECT date FROM t_date_from WHERE data_id = ?", (data_id,)) == [
+        ("2024-01-01T11:00:00+02:00",)
+    ]
+
+
 def test_update_and_delete_text_preserve_other_fields_and_report_missing_rows(db: PlexosDB) -> None:
     data_id = _add_generator_property(db)
     class_id = db.get_class_id(ClassEnum.Node)
