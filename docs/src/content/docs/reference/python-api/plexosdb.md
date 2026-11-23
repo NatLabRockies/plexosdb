@@ -949,11 +949,11 @@ Copy all existing memberships of old object to the new object.
 create_object_scenario(self, object_name: str, scenario_name: str, properties: dict[str, Any], /, *, object_class: ClassEnum, description: str | None=None, collection: CollectionEnum | None=None, parent_class: ClassEnum | None=None, base_scenario: str | None=None) -> int
 ```
 
-Create a scenario for an object, optionally inheriting all property data rows
-from a base scenario with their bands, dates, tags, and text metadata intact.
-Overrides update values on every inherited row with the matching property name;
-properties absent from the base scenario are added as unqualified rows. The
-operation is atomic.
+Create a scenario for an object, optionally inheriting property data rows from a
+base scenario with their bands, dates, non-scenario tags, and text metadata.
+Other scenario tags are not copied. Overrides update values on every inherited
+row with the matching property name; properties absent from the base scenario
+are added as unqualified rows. The operation is atomic.
 
 ### create_schema
 
@@ -2802,8 +2802,9 @@ set_date_range(self, data_id: int, /, *, date_from: str | None=None, date_to: st
 ```
 
 Insert or update the supplied ISO 8601 date boundaries for a property data
-record. A boundary passed as `None` is left unchanged. A reversed date range
-raises `ValueError`; a missing data row raises `NotFoundError`.
+record. A boundary passed as `None` is left unchanged. The resulting range,
+including any stored boundary, must be ordered and use compatible time zones.
+An invalid range raises `ValueError`; a missing data row raises `NotFoundError`.
 
 ### to_csv
 

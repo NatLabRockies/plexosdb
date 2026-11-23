@@ -43,9 +43,8 @@ cannot be attached and many downstream queries return empty.
   "who points at me?".
 - `db.list_child_objects(class_enum, name, collection_enum=...)`, navigates "who
   do I point at?".
-- `db.delete_membership(...)`, remove a single membership. Not implemented in
-  current plexosdb (raises `NotImplementedError`); use `delete_object(...)`,
-  which cascades memberships, instead.
+- `db.delete_membership(...)`, remove a single membership and its dependent
+  property and metadata rows.
 - `db.copy_object_memberships(class_enum, original_name, new_name)`, duplicates
   every membership row from one object to another.
 
@@ -188,8 +187,8 @@ primitive for replicating memberships onto an object you created some other way.
   is no `copy_memberships` parameter.
 - Using raw strings for class/collection names instead of `ClassEnum` and
   `CollectionEnum`.
-- Reaching for `delete_membership(...)` — it is not implemented (raises
-  `NotImplementedError`); use `delete_object(...)`, which cascades memberships.
+- Deleting a membership without accounting for its dependent property and
+  metadata rows, which are also deleted.
 
 ## Related references
 
