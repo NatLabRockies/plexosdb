@@ -1,14 +1,19 @@
 """Main API for interacting with the Plexos database schema."""
 
+import base64
+import binascii
+import csv
+import re
 import sqlite3
 import uuid
 from collections.abc import Iterable, Iterator
-from datetime import datetime
+from collections.abc import Sequence
+from contextlib import closing
+from datetime import datetime, timedelta
 from importlib.resources import as_file, files
 from pathlib import Path
 from string import Template
 from typing import Any, Literal, TypedDict, cast
-from collections.abc import Sequence
 import warnings
 
 from loguru import logger
@@ -55,6 +60,193 @@ from .utils import (
     _normalize_attribute_records,
 )
 from .xml_handler import XMLHandler
+
+
+_METADATA_TABLES: dict[str, tuple[str, str]] = {
+    "object": ("t_object_meta", "object_id"),
+    "membership": ("t_membership_meta", "membership_id"),
+    "data": ("t_data_meta", "data_id"),
+}
+
+_ISO_DURATION_PATTERN = re.compile(
+    r"P(?:(?P<weeks>\d+(?:\.\d+)?)W|"
+    r"(?:(?P<days>\d+(?:\.\d+)?)D)?"
+    r"(?:T(?:(?P<hours>\d+(?:\.\d+)?)H)?"
+    r"(?:(?P<minutes>\d+(?:\.\d+)?)M)?"
+    r"(?:(?P<seconds>\d+(?:\.\d+)?)S)?)?)",
+    re.IGNORECASE,
+)
+_UNIT_DURATION_PATTERN = re.compile(
+    r"(?P<value>\d+(?:\.\d+)?)\s*(?P<unit>weeks?|w|days?|d|hours?|hrs?|h|minutes?|mins?|m|seconds?|secs?|s)",
+    re.IGNORECASE,
+)
+
+
+def _parse_fixed_duration(value: str) -> timedelta:
+    """Parse a positive fixed duration in ISO 8601 or single-unit form."""
+    if not isinstance(value, str):
+        raise TypeError("interval must be a string")
+
+    text = value.strip()
+    iso_match = _ISO_DURATION_PATTERN.fullmatch(text)
+    if iso_match is not None:
+        parts = {unit: float(amount) for unit, amount in iso_match.groupdict().items() if amount is not None}
+        if not parts:
+            raise ValueError
+        duration = timedelta(**parts)
+    else:
+        unit_match = _UNIT_DURATION_PATTERN.fullmatch(text)
+        if unit_match is None:
+            raise ValueError("interval must be a positive fixed duration such as 'PT1H' or '1 hour'.")
+        unit = unit_match.group("unit").lower()
+        unit_name = (
+            "weeks"
+            if unit in {"w", "week", "weeks"}
+            else "days"
+            if unit in {"d", "day", "days"}
+            else "hours"
+            if unit in {"h", "hr", "hrs", "hour", "hours"}
+            else "minutes"
+            if unit in {"m", "min", "mins", "minute", "minutes"}
+            else "seconds"
+        )
+        duration = timedelta(**{unit_name: float(unit_match.group("value"))})
+
+    if duration <= timedelta(0):
+        raise ValueError("interval must be a positive fixed duration.")
+    return duration
+
+
+def _parse_datetime_string(value: str, parameter: str) -> datetime:
+    """Parse an ISO 8601 date-time string with a parameter-specific error."""
+    if not isinstance(value, str):
+        raise TypeError(f"{parameter} must be a string")
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError as error:
+        raise ValueError(f"{parameter} must be an ISO 8601 date-time string.") from error
+
+
+def _metadata_table_for_entity(entity_type: str) -> tuple[str, str]:
+    try:
+        return _METADATA_TABLES[entity_type]
+    except KeyError:
+        raise ValueError(f"Unsupported metadata entity type: {entity_type!r}") from None
+
+
+def _quote_sqlite_identifier(identifier: str) -> str:
+    return '"' + identifier.replace('"', '""') + '"'
+
+
+def _encode_csv_value(value: Any) -> str:
+    if value is None:
+        return r"\N"
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        return r"\B" + base64.b64encode(bytes(value)).decode("ascii")
+    text = str(value)
+    return f"\\{text}" if text.startswith("\\") else text
+
+
+def _decode_csv_value(value: str) -> str | bytes | None:
+    if value == r"\N":
+        return None
+    if value.startswith(r"\B"):
+        try:
+            return base64.b64decode(value[2:], validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise ValueError("Invalid base64-encoded BLOB value in CSV.") from exc
+    if value.startswith("\\\\"):
+        return value[1:]
+    return value
+
+
+def _csv_files_in_directory(source: Path) -> dict[str, Path]:
+    csv_files: dict[str, Path] = {}
+    for csv_path in source.iterdir():
+        if not csv_path.is_file() or csv_path.suffix.lower() != ".csv":
+            continue
+        table_name = csv_path.stem
+        if table_name in csv_files:
+            raise ValueError(f"Multiple CSV files map to table `{table_name}`.")
+        csv_files[table_name] = csv_path
+    return csv_files
+
+
+def _match_csv_import_files(
+    selected_tables: list[str],
+    csv_files: dict[str, Path],
+) -> list[tuple[str, Path]]:
+    if len(set(selected_tables)) != len(selected_tables):
+        raise ValueError("The tables list must not contain duplicates.")
+    if not selected_tables:
+        raise ValueError("No CSV files were selected for import.")
+
+    missing_files = set(selected_tables) - csv_files.keys()
+    if missing_files:
+        raise FileNotFoundError(
+            f"Missing CSV file(s): {', '.join(f'{name}.csv' for name in sorted(missing_files))}."
+        )
+    return [(table_name, csv_files[table_name]) for table_name in selected_tables]
+
+
+def _resolve_csv_import_files(
+    source_path: str | Path,
+    tables: list[str] | None,
+) -> list[tuple[str, Path]]:
+    source = Path(source_path)
+    if not source.exists():
+        raise FileNotFoundError(source)
+    if not source.is_dir() and not source.is_file():
+        raise ValueError(f"CSV source must be a file or directory: {source}")
+    if tables is not None and not tables:
+        return []
+
+    if source.is_dir():
+        csv_files = _csv_files_in_directory(source)
+        selected_tables = sorted(csv_files) if tables is None else list(tables)
+    else:
+        if source.suffix.lower() != ".csv":
+            raise ValueError(f"CSV source file must have a .csv extension: {source}")
+        table_name = source.stem
+        if tables is not None and tables != [table_name]:
+            raise ValueError("A single CSV file can only be imported into its matching table.")
+        csv_files = {table_name: source}
+        selected_tables = [table_name]
+
+    return _match_csv_import_files(selected_tables, csv_files)
+
+
+def _import_csv_table(connection: sqlite3.Connection, table_name: str, csv_path: Path) -> None:
+    quoted_table = _quote_sqlite_identifier(table_name)
+    schema = connection.execute(f"PRAGMA table_info({quoted_table})").fetchall()
+    table_columns = [column[1] for column in schema]
+
+    with csv_path.open(encoding="utf-8-sig", newline="") as csv_file:
+        reader = csv.reader(csv_file)
+        header = next(reader, None)
+        if not header:
+            raise ValueError(f"CSV file has no header row: {csv_path}")
+        if len(header) != len(set(header)):
+            raise ValueError(f"CSV header contains duplicate columns: {csv_path}")
+        unknown_columns = set(header) - set(table_columns)
+        if unknown_columns:
+            raise ValueError(f"Unknown column(s) in {csv_path}: {', '.join(sorted(unknown_columns))}.")
+
+        quoted_columns = ", ".join(_quote_sqlite_identifier(column) for column in header)
+        placeholders = ", ".join("?" for _ in header)
+        insert_query = f"INSERT INTO {quoted_table} ({quoted_columns}) VALUES ({placeholders})"
+        batch: list[tuple[str | bytes | None, ...]] = []
+        for row in reader:
+            if len(row) != len(header):
+                raise ValueError(
+                    f"CSV row {reader.line_num} in {csv_path} has {len(row)} fields; expected {len(header)}."
+                )
+            batch.append(tuple(_decode_csv_value(value) for value in row))
+            if len(batch) >= 1000:
+                connection.executemany(insert_query, batch)
+                batch.clear()
+        if batch:
+            connection.executemany(insert_query, batch)
 
 
 class PropertyRecord(TypedDict, total=False):
@@ -105,6 +297,9 @@ class PropertyRecord(TypedDict, total=False):
     scenario_name : str | None
         Name of associated scenario
     """
+
+    property: str
+    value: float | str | None
 
 
 class PlexosDB:
@@ -439,8 +634,55 @@ class PlexosDB:
         *,
         position: int | None = None,
     ) -> int:
-        """Add a custom column to a class."""
-        raise NotImplementedError  # pragma: no cover
+        """Add a custom column to a class.
+
+        Parameters
+        ----------
+        class_enum : ClassEnum
+            Class to associate with the custom column.
+        name : str
+            Name of the custom column.
+        position : int | None, optional
+            Optional column position. If omitted, the database stores ``NULL``.
+
+        Returns
+        -------
+        int
+            ID of the created custom column.
+
+        Notes
+        -----
+        A UUID is generated for the new custom column. If ``position`` is
+        omitted, the database stores ``NULL`` for its position.
+
+        Raises
+        ------
+        AssertionError
+            If the class does not exist in the database.
+        sqlite3.IntegrityError
+            If inserting the custom column violates a database constraint.
+
+        Examples
+        --------
+        >>> db = PlexosDB()
+        >>> db.create_schema(seed_defaults=True)
+        >>> column_id = db.add_custom_column(ClassEnum.Generator, "Operator note", position=0)
+        """
+        class_id = self.get_class_id(class_enum)
+        query = """
+            INSERT INTO t_custom_column(column_id, class_id, name, position, GUID)
+            VALUES (?, ?, ?, ?, ?)
+        """
+        with self._db.transaction():
+            result = self._db.fetchone("SELECT COALESCE(MAX(column_id), 0) + 1 FROM t_custom_column")
+            assert result
+            column_id = cast(int, result[0])
+            success = self._db.execute(
+                query,
+                (column_id, class_id, name, position, str(uuid.uuid4())),
+            )
+            assert success
+        return column_id
 
     def add_datafile_tag(
         self,
@@ -705,8 +947,27 @@ class PlexosDB:
         *,
         state: int | None = None,
     ) -> None:
-        """Add metadata to an entity (object, membership, or data)."""
-        raise NotImplementedError  # pragma: no cover
+        """Insert metadata for an object, membership, or data record.
+
+        The entity ID, metadata class, and property identify the row. When
+        ``state`` is omitted, NULL is stored.
+
+        Raises
+        ------
+        ValueError
+            If ``entity_type`` is not ``"object"``, ``"membership"``, or ``"data"``.
+        sqlite3.Error
+            If the entity does not exist or the metadata key already exists.
+        """
+        table_name, entity_id_column = _metadata_table_for_entity(entity_type)
+        query = f"""
+            INSERT INTO {table_name} (
+                {entity_id_column}, "class", "property", value, state
+            )
+            VALUES (?, ?, ?, ?, ?)
+        """
+        with self._db.transaction():
+            self._db.execute(query, (entity_id, class_name, property_name, value, state))
 
     def add_object(
         self,
@@ -1546,8 +1807,97 @@ class PlexosDB:
         end_datetime: str,
         description: str | None = None,
     ) -> int:
-        """Add a time slice definition to the database."""
-        raise NotImplementedError  # pragma: no cover
+        """Create a native Timeslice object with dated Include property rows.
+
+        ``interval`` accepts a positive fixed duration such as ``PT1H`` or
+        ``1 hour``. The generated periods start at ``start_datetime`` and end
+        at ``end_datetime``; the final period is shortened when necessary.
+
+        Returns
+        -------
+        int
+            ID of the created Timeslice object.
+
+        Raises
+        ------
+        ValueError
+            If the interval or date-time range is invalid.
+        """
+        duration = _parse_fixed_duration(interval)
+        start = _parse_datetime_string(start_datetime, "start_datetime")
+        end = _parse_datetime_string(end_datetime, "end_datetime")
+        try:
+            if start >= end:
+                raise ValueError("end_datetime must be later than start_datetime.")
+        except TypeError as error:
+            raise ValueError("start_datetime and end_datetime must use compatible time zones.") from error
+
+        with self._db.transaction():
+            object_id = self.add_object(
+                ClassEnum.Timeslice,
+                name,
+                description=description,
+                collection_enum=CollectionEnum.Timeslices,
+            )
+            _, _, property_id, membership_id = self._resolve_property_context(
+                name,
+                "Include",
+                object_class=ClassEnum.Timeslice,
+                collection=CollectionEnum.Timeslices,
+                parent_class=ClassEnum.System,
+            )
+            latest_data_id_row = self._db.fetchone("SELECT COALESCE(MAX(data_id), 0) FROM t_data")
+            assert latest_data_id_row is not None
+            latest_data_id = cast(int, latest_data_id_row[0])
+
+            def insert_interval_batch(intervals: list[tuple[datetime, datetime]]) -> None:
+                nonlocal latest_data_id
+                self._db.executemany(
+                    "INSERT INTO t_data(membership_id, property_id, value) VALUES (?, ?, ?)",
+                    [(membership_id, property_id, -1)] * len(intervals),
+                )
+                data_id_rows = self._db.query(
+                    """
+                    SELECT data_id
+                    FROM t_data
+                    WHERE data_id > ? AND membership_id = ? AND property_id = ?
+                    ORDER BY data_id
+                    """,
+                    (latest_data_id, membership_id, property_id),
+                )
+                if len(data_id_rows) != len(intervals):
+                    raise RuntimeError("Could not resolve all data IDs for the Timeslice Include rows.")
+
+                self._db.executemany(
+                    "INSERT INTO t_date_from(data_id, date) VALUES (?, ?)",
+                    [
+                        (data_id_row[0], interval_start.isoformat())
+                        for data_id_row, (interval_start, _) in zip(data_id_rows, intervals, strict=True)
+                    ],
+                )
+                self._db.executemany(
+                    "INSERT INTO t_date_to(data_id, date) VALUES (?, ?)",
+                    [
+                        (data_id_row[0], interval_end.isoformat())
+                        for data_id_row, (_, interval_end) in zip(data_id_rows, intervals, strict=True)
+                    ],
+                )
+                latest_data_id = cast(int, data_id_rows[-1][0])
+
+            intervals: list[tuple[datetime, datetime]] = []
+            interval_start = start
+            while interval_start < end:
+                remaining = end - interval_start
+                interval_end = end if duration >= remaining else interval_start + duration
+                intervals.append((interval_start, interval_end))
+                if len(intervals) == 1000:
+                    insert_interval_batch(intervals)
+                    intervals.clear()
+                interval_start = interval_end
+            if intervals:
+                insert_interval_batch(intervals)
+
+        return object_id
 
     def add_variable_tag(
         self,
@@ -1557,12 +1907,54 @@ class PlexosDB:
         *,
         value: str | float | None = None,
     ) -> int:
-        """Add a Variable tag to a property data record."""
-        raise NotImplementedError  # pragma: no cover
+        """Tag a property data record with an existing Variable object.
+
+        When ``value`` is provided, it also replaces the value on the tagged
+        property data record.
+
+        Returns
+        -------
+        int
+            The tagged data ID.
+
+        Raises
+        ------
+        NotFoundError
+            If the data record or Variable object does not exist.
+        sqlite3.IntegrityError
+            If the Variable is already tagged to the data record.
+        """
+        if not checks_module.check_data_id_exist(self, data_id):
+            raise NotFoundError(f"Data record `{data_id}` was not found.")
+        if not checks_module.check_object_exists(self, ClassEnum.Variable, variable_name):
+            raise NotFoundError(f"Variable `{variable_name}` was not found.")
+
+        variable_id = self.get_object_id(ClassEnum.Variable, variable_name)
+        with self._db.transaction():
+            if value is not None:
+                self._db.execute("UPDATE t_data SET value = ? WHERE data_id = ?", (value, data_id))
+            self._db.execute("INSERT INTO t_tag(data_id, object_id) VALUES (?, ?)", (data_id, variable_id))
+        return data_id
 
     def backup_database(self, target_path: str | Path) -> None:
-        """Backup the in-memory database to a file."""
-        raise NotImplementedError  # pragma: no cover
+        """Create a SQLite backup at ``target_path``.
+
+        Parent directories are created when needed. The backup works for
+        both in-memory and file-backed databases.
+
+        Raises
+        ------
+        ValueError
+            If the target is the same file as the source database.
+        OSError
+            If the backup cannot be written.
+        """
+        target = Path(target_path)
+        source = self._db.connection.execute("PRAGMA database_list").fetchone()
+        if source is not None and source[2] and Path(source[2]).resolve() == target.resolve():
+            raise ValueError("The backup target must differ from the source database.")
+        if not self._db.backup(target):
+            raise OSError(f"Could not back up database to {target}.")
 
     def copy_object(
         self,
@@ -1776,6 +2168,128 @@ class PlexosDB:
         """
         return self._db.execute(query, (new_object_id, old_object_id))
 
+    def _copy_scenario_property_rows(
+        self,
+        membership_id: int,
+        base_scenario_id: int,
+        scenario_id: int,
+    ) -> set[int]:
+        """Copy scenario-specific data rows and their qualifiers to another scenario."""
+        source_filter = """
+            d.membership_id = ?
+            AND EXISTS (
+                SELECT 1
+                FROM t_tag AS scenario_tag
+                WHERE scenario_tag.data_id = d.data_id
+                  AND scenario_tag.object_id = ?
+            )
+        """
+        source_count_row = self._db.fetchone(
+            f"SELECT COUNT(*) FROM t_data AS d WHERE {source_filter}",
+            (membership_id, base_scenario_id),
+        )
+        assert source_count_row is not None
+        source_count = cast(int, source_count_row[0])
+        if source_count == 0:
+            return set()
+
+        property_rows = self._db.query(
+            (
+                "SELECT DISTINCT d.property_id FROM t_data AS d "
+                f"WHERE {source_filter} AND d.property_id IS NOT NULL"
+            ),
+            (membership_id, base_scenario_id),
+        )
+        property_ids = {cast(int, row[0]) for row in property_rows}
+
+        latest_data_id_row = self._db.fetchone("SELECT COALESCE(MAX(data_id), 0) FROM t_data")
+        assert latest_data_id_row is not None
+        latest_data_id = cast(int, latest_data_id_row[0])
+
+        self._db.execute("DROP TABLE IF EXISTS temp_scenario_data_mapping")
+        self._db.execute(
+            "CREATE TEMPORARY TABLE temp_scenario_data_mapping "
+            "(old_id INTEGER PRIMARY KEY, new_id INTEGER NOT NULL UNIQUE)"
+        )
+        self._db.execute(
+            f"""
+            INSERT INTO t_data (membership_id, property_id, value, state)
+            SELECT d.membership_id, d.property_id, d.value, d.state
+            FROM t_data AS d
+            WHERE {source_filter}
+            ORDER BY d.data_id
+            """,
+            (membership_id, base_scenario_id),
+        )
+        self._db.execute(
+            """
+            WITH source_rows AS (
+                SELECT d.data_id AS old_id,
+                       ROW_NUMBER() OVER (ORDER BY d.data_id) AS row_number
+                FROM t_data AS d
+                WHERE d.membership_id = ?
+                  AND EXISTS (
+                      SELECT 1 FROM t_tag AS scenario_tag
+                      WHERE scenario_tag.data_id = d.data_id
+                        AND scenario_tag.object_id = ?
+                  )
+            ),
+            new_rows AS (
+                SELECT d.data_id AS new_id,
+                       ROW_NUMBER() OVER (ORDER BY d.data_id) AS row_number
+                FROM t_data AS d
+                WHERE d.membership_id = ?
+                  AND d.data_id > ?
+            )
+            INSERT INTO temp_scenario_data_mapping (old_id, new_id)
+            SELECT source_rows.old_id, new_rows.new_id
+            FROM source_rows
+            JOIN new_rows USING (row_number)
+            """,
+            (membership_id, base_scenario_id, membership_id, latest_data_id),
+        )
+        mapping_count_row = self._db.fetchone("SELECT COUNT(*) FROM temp_scenario_data_mapping")
+        assert mapping_count_row is not None
+        if cast(int, mapping_count_row[0]) != source_count:
+            raise RuntimeError("Could not map all copied scenario property records.")
+
+        self._db.execute(
+            """
+            INSERT INTO t_tag (data_id, object_id, state, action_id)
+            SELECT mapping.new_id,
+                   CASE WHEN source_tag.object_id = ? THEN ? ELSE source_tag.object_id END,
+                   source_tag.state,
+                   source_tag.action_id
+            FROM t_tag AS source_tag
+            JOIN temp_scenario_data_mapping AS mapping ON mapping.old_id = source_tag.data_id
+            WHERE source_tag.object_id = ?
+               OR NOT EXISTS (
+                   SELECT 1 FROM t_object AS tagged_object
+                   WHERE tagged_object.object_id = source_tag.object_id
+                     AND tagged_object.class_id = ?
+               )
+            """,
+            (base_scenario_id, scenario_id, base_scenario_id, self.get_class_id(ClassEnum.Scenario)),
+        )
+        for table, columns in (
+            ("t_text", "class_id, value, state, action_id"),
+            ("t_band", "band_id, state"),
+            ("t_date_from", "date, state"),
+            ("t_date_to", "date, state"),
+            ("t_memo_data", "value, state"),
+            ("t_data_meta", '"class", property, value, state'),
+        ):
+            self._db.execute(
+                f"""
+                INSERT INTO {table} (data_id, {columns})
+                SELECT mapping.new_id, {columns}
+                FROM {table} AS source
+                JOIN temp_scenario_data_mapping AS mapping ON mapping.old_id = source.data_id
+                """
+            )
+        self._db.execute("DROP TABLE temp_scenario_data_mapping")
+        return property_ids
+
     def create_object_scenario(
         self,
         object_name: str,
@@ -1789,8 +2303,121 @@ class PlexosDB:
         parent_class: ClassEnum | None = None,
         base_scenario: str | None = None,
     ) -> int:
-        """Create a new scenario with specific property values for an object."""
-        raise NotImplementedError  # pragma: no cover
+        """Create a scenario and assign property values for one object.
+
+        When ``base_scenario`` is provided, all of its property data rows for
+        the same object are inherited with their bands, dates, non-scenario
+        tags, and text metadata. Other scenario tags are not inherited.
+        Values in ``properties`` replace the values for matching property
+        names without removing those qualifiers. A property not present in
+        the base scenario is added as an unqualified row.
+        The scenario and its property records are created atomically.
+
+        Parameters
+        ----------
+        object_name : str
+            Name of the object receiving the scenario property values.
+        scenario_name : str
+            Name of the scenario to create.
+        properties : dict[str, Any]
+            Property names and values to assign in the new scenario.
+        object_class : ClassEnum
+            Class of the object receiving the properties.
+        description : str | None, optional
+            Description for the new scenario.
+        collection : CollectionEnum | None, optional
+            Collection containing the object's properties. Defaults to the
+            collection for ``object_class``.
+        parent_class : ClassEnum | None, optional
+            Parent class for the object's membership. Defaults to System.
+        base_scenario : str | None, optional
+            Existing scenario whose property values for this object are
+            inherited before applying ``properties``.
+
+        Returns
+        -------
+        int
+            ID of the newly created scenario.
+
+        Raises
+        ------
+        NameError
+            If ``scenario_name`` already exists or a property is invalid.
+        NotFoundError
+            If the object or ``base_scenario`` does not exist.
+        """
+        if not checks_module.check_object_exists(self, object_class, object_name):
+            raise NotFoundError(f"Object `{object_name}` does not exist in class `{object_class}`.")
+
+        collection = collection or get_default_collection(object_class)
+        parent_class = parent_class or ClassEnum.System
+
+        with self._db.transaction():
+            scenario_id = self.add_scenario(scenario_name)
+            if description is not None:
+                result = self._db.execute(
+                    "UPDATE t_object SET description = ? WHERE object_id = ?", (description, scenario_id)
+                )
+                assert result
+
+            inherited_property_ids: set[int] = set()
+            if base_scenario is not None:
+                if not checks_module.check_scenario_exists(self, base_scenario):
+                    raise NotFoundError(f"Base scenario `{base_scenario}` does not exist.")
+                membership_id = resolve_membership_id(
+                    self,
+                    object_name,
+                    object_class=object_class,
+                    collection=collection,
+                    parent_class=parent_class,
+                )
+                inherited_property_ids = self._copy_scenario_property_rows(
+                    membership_id,
+                    self.get_scenario_id(base_scenario),
+                    scenario_id,
+                )
+
+            for property_name, value in properties.items():
+                property_name = self._validate_properties(
+                    property_name,
+                    collection,
+                    object_class,
+                    parent_class=parent_class,
+                )[0]
+                property_id = self.get_property_id(
+                    property_name,
+                    collection_enum=collection,
+                    child_class_enum=object_class,
+                    parent_class_enum=parent_class,
+                )
+                if property_id in inherited_property_ids:
+                    self._db.execute(
+                        """
+                        UPDATE t_data
+                        SET value = ?
+                        WHERE membership_id = ?
+                          AND property_id = ?
+                          AND EXISTS (
+                              SELECT 1
+                              FROM t_tag AS scenario_tag
+                              WHERE scenario_tag.data_id = t_data.data_id
+                                AND scenario_tag.object_id = ?
+                          )
+                        """,
+                        (value, membership_id, property_id, scenario_id),
+                    )
+                else:
+                    self.add_property(
+                        object_class,
+                        object_name,
+                        property_name,
+                        value,
+                        scenario=scenario_name,
+                        collection_enum=collection,
+                        parent_class_enum=parent_class,
+                    )
+
+        return scenario_id
 
     def _seed_default_model_data(self) -> None:
         """Seed minimal lookup data so object workflows work on a fresh schema.
@@ -2062,8 +2689,32 @@ class PlexosDB:
             self._db.execute(delete_query, (object_id, attribute_id))
 
     def delete_category(self, category: str, /, *, class_name: ClassEnum) -> None:
-        """Delete a category from the database."""
-        raise NotImplementedError  # pragma: no cover
+        """Delete an unused category from a class.
+
+        Categories assigned to objects cannot be deleted. Reassign those
+        objects first, then retry.
+
+        Raises
+        ------
+        NotFoundError
+            If the category does not exist for ``class_name``.
+        ValueError
+            If any object still uses the category.
+        """
+        with self._db.transaction():
+            if not checks_module.check_category_exists(self, class_name, category):
+                raise NotFoundError(f"Category `{category}` does not exist for class `{class_name}`.")
+
+            category_id = self.get_category_id(class_name, category)
+            assigned_objects = self._db.fetchone(
+                "SELECT 1 FROM t_object WHERE category_id = ? LIMIT 1",
+                (category_id,),
+            )
+            if assigned_objects:
+                raise ValueError(f"Category `{category}` cannot be deleted because objects still use it.")
+
+            result = self._db.execute("DELETE FROM t_category WHERE category_id = ?", (category_id,))
+            assert result
 
     def delete_membership(
         self,
@@ -2075,8 +2726,55 @@ class PlexosDB:
         child_class: ClassEnum,
         collection: CollectionEnum,
     ) -> None:
-        """Delete a membership between two objects."""
-        raise NotImplementedError  # pragma: no cover
+        """Delete a membership and its dependent property and metadata rows.
+
+        Raises
+        ------
+        NotFoundError
+            If either object or the specified membership does not exist.
+        """
+        if not checks_module.check_object_exists(self, parent_class, parent_object_name):
+            raise NotFoundError(
+                f"Parent object `{parent_object_name}` does not exist for class `{parent_class}`."
+            )
+        if not checks_module.check_object_exists(self, child_class, child_object_name):
+            raise NotFoundError(
+                f"Child object `{child_object_name}` does not exist for class `{child_class}`."
+            )
+
+        parent_object_id = self.get_object_id(parent_class, parent_object_name)
+        child_object_id = self.get_object_id(child_class, child_object_name)
+        parent_class_id = self.get_class_id(parent_class)
+        child_class_id = self.get_class_id(child_class)
+        collection_id = self.get_collection_id(
+            collection,
+            parent_class_enum=parent_class,
+            child_class_enum=child_class,
+        )
+
+        with self._db.transaction():
+            membership = self._db.fetchone(
+                """
+                SELECT membership_id
+                FROM t_membership
+                WHERE parent_object_id = ?
+                  AND child_object_id = ?
+                  AND parent_class_id = ?
+                  AND child_class_id = ?
+                  AND collection_id = ?
+                """,
+                (parent_object_id, child_object_id, parent_class_id, child_class_id, collection_id),
+            )
+            if membership is None:
+                raise NotFoundError(
+                    f"Membership from `{parent_object_name}` to `{child_object_name}` "
+                    f"in collection `{collection}` does not exist."
+                )
+            result = self._db.execute(
+                "DELETE FROM t_membership WHERE membership_id = ?",
+                (membership[0],),
+            )
+            assert result
 
     def delete_metadata(
         self,
@@ -2085,8 +2783,22 @@ class PlexosDB:
         class_name: str,
         property_name: str,
     ) -> None:
-        """Delete metadata from an entity."""
-        raise NotImplementedError  # pragma: no cover
+        """Delete metadata matching an entity ID, class, and property.
+
+        Missing metadata is ignored.
+
+        Raises
+        ------
+        ValueError
+            If ``entity_type`` is not ``"object"``, ``"membership"``, or ``"data"``.
+        """
+        table_name, entity_id_column = _metadata_table_for_entity(entity_type)
+        query = f"""
+            DELETE FROM {table_name}
+            WHERE {entity_id_column} = ? AND "class" = ? AND "property" = ?
+        """
+        with self._db.transaction():
+            self._db.execute(query, (entity_id, class_name, property_name))
 
     def delete_object(self, class_enum: ClassEnum, /, *, name: str) -> None:
         """Delete an object and its memberships from the database.
@@ -2226,8 +2938,23 @@ class PlexosDB:
         *,
         class_id: int,
     ) -> None:
-        """Delete text data from a property data record."""
-        raise NotImplementedError  # pragma: no cover
+        """Delete text metadata for a property data record.
+
+        Raises
+        ------
+        NotFoundError
+            If the text record does not exist.
+        """
+        with self._db.transaction():
+            text_row = self._db.fetchone(
+                "SELECT 1 FROM t_text WHERE data_id = ? AND class_id = ?",
+                (data_id, class_id),
+            )
+            if text_row is None:
+                raise NotFoundError(
+                    f"Text record for data_id `{data_id}` and class_id `{class_id}` was not found."
+                )
+            self._db.execute("DELETE FROM t_text WHERE data_id = ? AND class_id = ?", (data_id, class_id))
 
     def get_attribute(
         self,
@@ -2900,15 +3627,7 @@ class PlexosDB:
         ...     "object", object_id, class_name="PLEXOS", property_name="Source"
         ... )
         """
-        metadata_tables = {
-            "object": ("t_object_meta", "object_id"),
-            "membership": ("t_membership_meta", "membership_id"),
-            "data": ("t_data_meta", "data_id"),
-        }
-        try:
-            table_name, entity_id_column = metadata_tables[entity_type]
-        except KeyError:
-            raise ValueError(f"Unsupported metadata entity type: {entity_type!r}") from None
+        table_name, entity_id_column = _metadata_table_for_entity(entity_type)
 
         conditions = [f"metadata.{entity_id_column} = ?"]
         params: list[Any] = [entity_id]
@@ -3498,8 +4217,57 @@ class PlexosDB:
         return bool(self._db.query(query, tuple(params)))
 
     def import_from_csv(self, source_path: str | Path, /, *, tables: list[str] | None = None) -> None:
-        """Import data from CSV files into the database."""
-        raise NotImplementedError  # pragma: no cover
+        r"""Append table data from CSV files to this database.
+
+        ``source_path`` may be a directory containing ``<table>.csv`` files or
+        a single CSV file named after its table. The target tables must already
+        exist. CSV files must have a header row; imports are atomic across all
+        selected tables.
+
+        NULL values use ``\N``. Text values beginning with a backslash are
+        escaped with an additional backslash, and BLOB values use a ``\B``
+        prefix followed by base64 data. These conventions preserve empty
+        strings, NULLs, backslashes, and binary values on round-trip.
+
+        Parameters
+        ----------
+        source_path : str | Path
+            CSV file or directory of table-named CSV files.
+        tables : list[str] | None, optional
+            Tables to import. If omitted for a directory, every CSV file in
+            that directory is imported. For a single-file source, its table
+            name is inferred from the file stem.
+
+        Raises
+        ------
+        FileNotFoundError
+            If the source file or a selected table's CSV file is missing.
+        ValueError
+            If a table, CSV header, or row does not match the database schema.
+        sqlite3.Error
+            If inserting any row violates a database constraint.
+        """
+        import_files = _resolve_csv_import_files(source_path, tables)
+        if not import_files:
+            return
+
+        database_tables = {name for name in self._db.tables if not name.startswith("sqlite_")}
+        selected_tables = [table_name for table_name, _ in import_files]
+        unknown_tables = set(selected_tables) - database_tables
+        if unknown_tables:
+            raise ValueError(f"Unknown database table(s): {', '.join(sorted(unknown_tables))}.")
+        if any("/" in name or "\\" in name for name in selected_tables):
+            raise ValueError("CSV table names cannot contain path separators.")
+
+        connection = self._db.connection
+        try:
+            with self._db.transaction():
+                connection.execute("PRAGMA defer_foreign_keys = ON")
+                for table_name, csv_path in import_files:
+                    _import_csv_table(connection, table_name, csv_path)
+        except sqlite3.Error:
+            connection.rollback()
+            raise
 
     def iterate_properties(
         self,
@@ -4093,8 +4861,38 @@ class PlexosDB:
         return result
 
     def list_reports(self) -> list[dict[str, Any]]:
-        """List all defined reports in the database."""
-        raise NotImplementedError  # pragma: no cover
+        """List configured reports with their report, property, and collection names.
+
+        Returns
+        -------
+        list[dict[str, Any]]
+            Report rows, including their IDs, phase/settings, and related names.
+            Returns an empty list when no reports are configured.
+        """
+        query = """
+            SELECT
+                report.object_id,
+                report_object.name AS report_name,
+                report.property_id,
+                report_property.name AS property_name,
+                report_property.collection_id,
+                collection.name AS collection_name,
+                report.phase_id,
+                report.report_period,
+                report.report_summary,
+                report.report_statistics,
+                report.report_samples,
+                report.write_flat_files,
+                report.state
+            FROM t_report AS report
+            LEFT JOIN t_object AS report_object ON report_object.object_id = report.object_id
+            LEFT JOIN t_property_report AS report_property
+                ON report_property.property_id = report.property_id
+            LEFT JOIN t_collection AS collection
+                ON collection.collection_id = report_property.collection_id
+            ORDER BY report_object.name, report.phase_id, report_property.name
+        """
+        return self._db.fetchall_dict(query)
 
     def list_scenarios(self) -> list[str]:
         """Return all scenarios in the database.
@@ -4364,8 +5162,14 @@ class PlexosDB:
         return self._db.query(query=query_string, params=params)
 
     def set_config(self, element: str, value: str) -> None:
-        """Set a configuration value in the database."""
-        raise NotImplementedError  # pragma: no cover
+        """Insert a configuration value or update the value for an existing element."""
+        query = """
+            INSERT INTO t_config (element, value)
+            VALUES (?, ?)
+            ON CONFLICT (element) DO UPDATE SET value = excluded.value
+        """
+        with self._db.transaction():
+            self._db.execute(query, (element, value))
 
     def set_date_range(
         self,
@@ -4375,12 +5179,103 @@ class PlexosDB:
         date_from: str | None = None,
         date_to: str | None = None,
     ) -> None:
-        """Set the date range for a property data record."""
-        raise NotImplementedError  # pragma: no cover
+        """Set supplied ISO 8601 date boundaries on a property data record.
+
+        A boundary omitted as ``None`` is left unchanged. The resulting
+        ``date_from`` must not be later than ``date_to`` when both exist.
+
+        Raises
+        ------
+        NotFoundError
+            If ``data_id`` does not exist.
+        ValueError
+            If a date boundary is invalid or the range is reversed.
+        """
+        if not checks_module.check_data_id_exist(self, data_id):
+            raise NotFoundError(f"Data record `{data_id}` was not found.")
+
+        parsed_from = _parse_datetime_string(date_from, "date_from") if date_from is not None else None
+        parsed_to = _parse_datetime_string(date_to, "date_to") if date_to is not None else None
+
+        with self._db.transaction():
+            if (date_from is None) != (date_to is None):
+                table = "t_date_from" if date_from is None else "t_date_to"
+                row = self._db.fetchone(f"SELECT date FROM {table} WHERE data_id = ?", (data_id,))
+                if row is not None and row[0] is not None:
+                    if date_from is None:
+                        parsed_from = _parse_datetime_string(row[0], "stored date_from")
+                    else:
+                        parsed_to = _parse_datetime_string(row[0], "stored date_to")
+
+            if parsed_from is not None and parsed_to is not None:
+                try:
+                    if parsed_from > parsed_to:
+                        raise ValueError("date_from must not be later than date_to.")
+                except TypeError as error:
+                    raise ValueError("date_from and date_to must use compatible time zones.") from error
+
+            if date_from is not None:
+                self._db.execute(
+                    """
+                    INSERT INTO t_date_from(data_id, date) VALUES (?, ?)
+                    ON CONFLICT(data_id) DO UPDATE SET date = excluded.date
+                    """,
+                    (data_id, date_from),
+                )
+            if date_to is not None:
+                self._db.execute(
+                    """
+                    INSERT INTO t_date_to(data_id, date) VALUES (?, ?)
+                    ON CONFLICT(data_id) DO UPDATE SET date = excluded.date
+                    """,
+                    (data_id, date_to),
+                )
 
     def to_csv(self, target_path: str | Path, /, *, tables: list[str] | None = None) -> None:
-        """Export selected tables or the entire database to CSV files."""
-        raise NotImplementedError  # pragma: no cover
+        """Export selected tables or all user tables as table-named CSV files.
+
+        ``target_path`` is a directory; each exported table is written to
+        ``<table>.csv`` with a header row. NULL and BLOB values use the encoding
+        conventions documented by :meth:`import_from_csv`.
+
+        Parameters
+        ----------
+        target_path : str | Path
+            Directory where the CSV files are written. It is created if needed.
+        tables : list[str] | None, optional
+            Tables to export. If omitted, all non-internal database tables are
+            exported.
+
+        Raises
+        ------
+        ValueError
+            If a requested table does not exist or cannot be represented as a
+            table-named CSV file.
+        OSError
+            If the target directory or a CSV file cannot be written.
+        """
+        available_tables = {name for name in self._db.tables if not name.startswith("sqlite_")}
+        selected_tables = sorted(available_tables) if tables is None else list(tables)
+        if len(set(selected_tables)) != len(selected_tables):
+            raise ValueError("The tables list must not contain duplicates.")
+        unknown_tables = set(selected_tables) - available_tables
+        if unknown_tables:
+            raise ValueError(f"Unknown database table(s): {', '.join(sorted(unknown_tables))}.")
+        if any("/" in name or "\\" in name for name in selected_tables):
+            raise ValueError("CSV table names cannot contain path separators.")
+
+        target = Path(target_path)
+        target.mkdir(parents=True, exist_ok=True)
+        connection = self._db.connection
+        for table_name in selected_tables:
+            quoted_table = _quote_sqlite_identifier(table_name)
+            with closing(connection.execute(f"SELECT * FROM {quoted_table}")) as cursor:
+                columns = [description[0] for description in cursor.description or ()]
+                with (target / f"{table_name}.csv").open("w", encoding="utf-8", newline="") as csv_file:
+                    writer = csv.writer(csv_file)
+                    writer.writerow(columns)
+                    for row in cursor:
+                        writer.writerow(_encode_csv_value(value) for value in row)
 
     def to_xml(self, target_path: str | Path) -> bool:
         """Convert SQLite to XML format.
@@ -4467,12 +5362,59 @@ class PlexosDB:
         object_name: str,
         object_class: ClassEnum,
     ) -> None:
-        """Update an attribute value for an object."""
-        raise NotImplementedError  # pragma: no cover
+        """Update an assigned attribute value without changing its state.
+
+        Raises
+        ------
+        NotFoundError
+            If the object, attribute definition, or assigned value does not exist.
+        """
+        if not checks_module.check_object_exists(self, object_class, object_name):
+            raise NotFoundError(f"Object `{object_name}` does not exist for class `{object_class}`.")
+
+        object_id = self.get_object_id(object_class, object_name)
+        attribute_id = self.get_attribute_id(object_class, attribute_name)
+        with self._db.transaction():
+            assigned_value = self._db.fetchone(
+                "SELECT 1 FROM t_attribute_data WHERE object_id = ? AND attribute_id = ?",
+                (object_id, attribute_id),
+            )
+            if assigned_value is None:
+                raise NotFoundError(
+                    f"Attribute `{attribute_name}` is not assigned to object `{object_name}`."
+                )
+            result = self._db.execute(
+                "UPDATE t_attribute_data SET value = ? WHERE object_id = ? AND attribute_id = ?",
+                (new_value, object_id, attribute_id),
+            )
+            assert result
 
     def update_category(self, category: str, new_name: str, /, *, class_name: ClassEnum) -> None:
-        """Update a category name."""
-        raise NotImplementedError  # pragma: no cover
+        """Rename a category for a class.
+
+        Objects assigned to the category remain assigned to it.
+
+        Raises
+        ------
+        NotFoundError
+            If ``category`` does not exist for ``class_name``.
+        ValueError
+            If ``new_name`` is already used by another category for the class.
+        """
+        with self._db.transaction():
+            if not checks_module.check_category_exists(self, class_name, category):
+                raise NotFoundError(f"Category `{category}` does not exist for class `{class_name}`.")
+            if category == new_name:
+                return
+            if checks_module.check_category_exists(self, class_name, new_name):
+                raise ValueError(f"Category `{new_name}` already exists for class `{class_name}`.")
+
+            category_id = self.get_category_id(class_name, category)
+            result = self._db.execute(
+                "UPDATE t_category SET name = ? WHERE category_id = ?",
+                (new_name, category_id),
+            )
+            assert result
 
     def update_object(
         self,
@@ -5019,8 +5961,56 @@ class PlexosDB:
         new_category: str | None = None,
         new_description: str | None = None,
     ) -> None:
-        """Update a scenario's properties."""
-        raise NotImplementedError  # pragma: no cover
+        """Update a scenario's name, category, and/or description.
+
+        Any field left as ``None`` remains unchanged.
+
+        Parameters
+        ----------
+        scenario_name : str
+            Current name of the scenario.
+        new_name : str | None, optional
+            Replacement name for the scenario.
+        new_category : str | None, optional
+            Existing Scenario category to assign.
+        new_description : str | None, optional
+            Replacement description for the scenario.
+
+        Raises
+        ------
+        NotFoundError
+            If ``scenario_name`` does not identify an existing scenario.
+        AssertionError
+            If ``new_category`` does not identify an existing Scenario category.
+        sqlite3.IntegrityError
+            If ``new_name`` conflicts with another object name in the database.
+        """
+        if not checks_module.check_scenario_exists(self, scenario_name):
+            raise NotFoundError(f"Scenario `{scenario_name}` does not exist.")
+
+        set_clauses: list[str] = []
+        params: list[Any] = []
+        if new_name is not None:
+            set_clauses.append("name = ?")
+            params.append(new_name)
+        if new_category is not None:
+            set_clauses.append("category_id = ?")
+            params.append(self.get_category_id(ClassEnum.Scenario, new_category))
+        if new_description is not None:
+            set_clauses.append("description = ?")
+            params.append(new_description)
+
+        if not set_clauses:
+            return
+
+        scenario_id = self.get_scenario_id(scenario_name)
+        params.append(scenario_id)
+        with self._db.transaction():
+            result = self._db.execute(
+                f"UPDATE {Schema.Objects.name} SET {', '.join(set_clauses)} WHERE object_id = ?",
+                tuple(params),
+            )
+            assert result
 
     def update_text(
         self,
@@ -5030,8 +6020,26 @@ class PlexosDB:
         *,
         class_id: int,
     ) -> None:
-        """Update text data for a property data record."""
-        raise NotImplementedError  # pragma: no cover
+        """Replace text metadata for a property data record.
+
+        Raises
+        ------
+        NotFoundError
+            If the text record does not exist.
+        """
+        with self._db.transaction():
+            text_row = self._db.fetchone(
+                "SELECT 1 FROM t_text WHERE data_id = ? AND class_id = ?",
+                (data_id, class_id),
+            )
+            if text_row is None:
+                raise NotFoundError(
+                    f"Text record for data_id `{data_id}` and class_id `{class_id}` was not found."
+                )
+            self._db.execute(
+                "UPDATE t_text SET value = ? WHERE data_id = ? AND class_id = ?",
+                (text_value, data_id, class_id),
+            )
 
     @staticmethod
     def validate_value_by_rule(value: SQLiteValue, validation_rule: str) -> ValidationResult:

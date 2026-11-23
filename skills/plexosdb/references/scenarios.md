@@ -23,17 +23,17 @@ Scenarios:
 - `db.list_models() -> list[str]`
 - `db.get_scenario_id(name) -> int`
 - `db.check_scenario_exists(name) -> bool`
-- `db.update_scenario(...)` and `db.create_object_scenario(...)` are not
-  implemented in current plexosdb (both raise `NotImplementedError`). Create
-  scenario-tagged values with `add_property(..., scenario=...)`.
+- `db.update_scenario(...)` changes a scenario's name, category, or description.
+- `db.create_object_scenario(...)` creates a scenario with property values for
+  one object, optionally inheriting from a base scenario.
 
 Tag-level APIs (per `data_id`):
 
 - `db.add_datafile_tag(data_id, file_path, *, description=None)`
 - `db.add_text(text_class, text_value, data_id)`
 - `db.check_tag_exists(data_id, object_id) -> bool`
-- `db.add_variable_tag(...)`, `db.delete_text(...)`, and `db.update_text(...)`
-  are not implemented in current plexosdb (they raise `NotImplementedError`).
+- `db.add_variable_tag(data_id, variable_name, *, value=None)` links a Variable.
+- `db.delete_text(...)` and `db.update_text(...)` manage existing text metadata.
 
 Reports:
 
@@ -42,8 +42,7 @@ Reports:
   `add_object(ClassEnum.Report, name=...)`.
 - `db.list_valid_properties_report(collection_enum, parent_class_enum, child_class_enum)`,
   property names eligible for report output.
-- `db.list_reports()` is not implemented in current plexosdb (raises
-  `NotImplementedError`).
+- `db.list_reports()` lists configured report rows and their related names.
 
 ## What is a scenario
 
@@ -97,15 +96,14 @@ db.add_property(
 )
 ```
 
-Retagging an existing row in place (`create_object_scenario`) is not implemented
-in current plexosdb.
+Use `create_object_scenario(...)` to create a new scenario for an object,
+optionally copying qualified property rows from `base_scenario` before applying
+overrides. It creates new rows rather than retagging existing rows.
 
 ## Variable tags
 
-`add_variable_tag(...)` is not implemented in current plexosdb (it raises
-`NotImplementedError`). Until it lands, drive time- or scenario-varying values
-through scenario-tagged properties (`add_property(..., scenario=...)`) or
-datafile-backed properties (`datafile_text=`, below).
+Use `add_variable_tag(data_id, variable_name)` to link an existing Variable to a
+property data row. An optional `value` also updates that row's value.
 
 ## Datafile tags
 
@@ -167,19 +165,15 @@ db.list_valid_properties_report(
 
 Use `list_valid_properties_report(...)` before adding a report to avoid
 attaching an ineligible property name (`add_report` raises `NameError` on an
-invalid property). `list_reports()` is not implemented in current plexosdb.
+invalid property). Use `list_reports()` to inspect configured reports.
 
 ## Common mistakes
 
-- Creating a scenario-tagged property without first creating the scenario object
-  itself (`add_scenario(...)`). The tagged property is accepted into SQLite but
-  has no anchor in the scenarios table.
 - Forgetting to wire the scenario into the model — the override exists in the
   database but is inactive for every run.
-- Reaching for `update_scenario`, `create_object_scenario`, or `update_property`
-  to edit scenario values — all are stubs. Create new tagged rows with
-  `add_property(..., scenario=...)` and remove old ones with
-  `delete_property(..., scenario=...)`.
+- Using `update_scenario` to change property values: it changes the scenario's
+  name, category, or description. Use `update_property(..., scenario=...)` for
+  an existing value or `create_object_scenario(...)` for a new scenario.
 
 ## Related references
 

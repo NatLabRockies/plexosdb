@@ -71,6 +71,21 @@ step_count = db.get_attribute(
 print(step_count)
 ```
 
+## Updating an assigned attribute
+
+Use `update_attribute()` to change an existing attribute value. It updates only
+the value and preserves the record's state; the attribute must already be
+assigned to the object.
+
+```python
+db.update_attribute(
+    "Latitude",
+    101.2,
+    object_name="Generator1",
+    object_class=ClassEnum.Generator,
+)
+```
+
 ## Extracting all assigned attributes from an object
 
 We can use `get_attributes()` to retrieve all values assigned to an object.

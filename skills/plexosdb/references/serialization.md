@@ -47,10 +47,15 @@ Quick rule:
 `MasterDataSet` root element. There is no sibling directory (unlike infrasys
 time-series archives).
 
-The SQLite projection is held by the private `PlexosDB._db` (a `SQLiteManager`);
-there is no public accessor, and `backup_database` is not implemented in current
-plexosdb. To cache an expensive `from_xml(...)` load, materialize to a file path
-at construction instead:
+Use `backup_database(...)` to save a snapshot of an in-memory or file-backed
+database to a separate SQLite file:
+
+```python
+db.backup_database("backups/model_state.sqlite")
+```
+
+To cache an expensive `from_xml(...)` load, materialize to a file path at
+construction:
 
 ```python
 # Load once, persisted to a SQLite file
