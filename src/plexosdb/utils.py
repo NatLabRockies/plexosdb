@@ -72,6 +72,9 @@ def _iterate_property_filter_batches(
     in_clause_count = int(bool(scenarios)) + int(bool(scenario_categories))
     chunk_size = sqlite_query_chunk_size(parameters_per_item=max(in_clause_count, 1))
     scenario_batches = batched(scenarios, chunk_size) if scenarios else [()]
+    seen: set[tuple[int, int | None]] | None = (
+        set() if len(scenarios) > chunk_size or len(scenario_categories) > chunk_size else None
+    )
 
     for scenario_batch in scenario_batches:
         category_batches = batched(scenario_categories, chunk_size) if scenario_categories else [()]
@@ -91,7 +94,13 @@ def _iterate_property_filter_batches(
             query = Template(PROPERTY_QUERY).safe_substitute(where_clause=where_clause)
             params = tuple(query_params) if query_params else None
             rows = db._db.iter_dicts(query, params=params, batch_size=batch_size)
-            yield from cast(Iterator["PropertyRecord"], rows)
+            for row in rows:
+                key = (row.pop("_membership_id"), row.pop("_data_id"))
+                if seen is not None:
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                yield cast("PropertyRecord", row)
 
 
 def validate_string(value: str) -> Any:

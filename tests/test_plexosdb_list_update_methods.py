@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import pytest
+
 from plexosdb import ClassEnum
+from plexosdb.exceptions import NameError as PlexosNameError
 import plexosdb.checks as checks_module
 
 
@@ -112,6 +115,30 @@ def test_get_object_data_ids_with_multiple_property_names(db_base: object) -> No
 
     assert isinstance(data_ids, list)
     assert len(data_ids) > 0
+
+
+def test_get_object_data_ids_with_generator_filter(db_base: object, monkeypatch: pytest.MonkeyPatch) -> None:
+    from plexosdb.db import PlexosDB
+
+    db: PlexosDB = db_base
+    db.add_object(ClassEnum.Generator, "Generator")
+    capacity_id = db.add_property(ClassEnum.Generator, "Generator", "Max Capacity", 100.0)
+    heat_rate_id = db.add_property(ClassEnum.Generator, "Generator", "Heat Rate", 10.0)
+
+    assert db.get_object_data_ids(
+        ClassEnum.Generator, "Generator", property_names=(name for name in ["Max Capacity", "Max Capacity"])
+    ) == [capacity_id]
+    monkeypatch.setattr("plexosdb.db.sqlite_query_chunk_size", lambda **kwargs: 1)
+    assert db.get_object_data_ids(
+        ClassEnum.Generator, "Generator", property_names=(name for name in ["Heat Rate", "Max Capacity"])
+    ) == sorted([capacity_id, heat_rate_id])
+    assert db.get_object_data_ids(
+        ClassEnum.Generator, "Generator", property_names=(name for name in [])
+    ) == db.get_object_data_ids(ClassEnum.Generator, "Generator", property_names=[])
+    with pytest.raises(PlexosNameError, match="Invalid property"):
+        db.get_object_data_ids(
+            ClassEnum.Generator, "Generator", property_names=(name for name in ["Invalid Property"])
+        )
 
 
 def test_update_object_name(db_base: object) -> None:

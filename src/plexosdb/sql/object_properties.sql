@@ -1,6 +1,8 @@
 -- Query to get all the objects and nested objects
 -- We do not include scenario tags on nested objects.
 SELECT
+	membership.membership_id AS _membership_id,
+	data.data_id AS _data_id,
 	parent_class.name AS parent_class,
 	child_class.name AS child_class,
 	parent_object.object_id AS parent_id,

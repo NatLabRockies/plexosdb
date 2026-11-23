@@ -3005,21 +3005,20 @@ class PlexosDB:
             filters += " AND cat.name = ?"
             params.append(category)
 
-        properties: list[str] = []
-        if property_names:
+        properties = normalize_names(property_names) if property_names else []
+        if properties:
             if not checks_module.check_property_exists(
                 self,
                 collection_enum,
                 class_enum,
-                property_names,
+                properties,
                 parent_class=parent_class_enum,
             ):
                 msg = (
-                    f"Invalid property {property_names} for {collection_enum=}."
+                    f"Invalid property {properties} for {collection_enum=}."
                     " Use `list_valid_properties` to check property requested."
                 )
                 raise NameError(msg)
-            properties = normalize_names(property_names)
         query_template = f"""
         SELECT
             d.data_id

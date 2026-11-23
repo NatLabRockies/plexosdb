@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 if TYPE_CHECKING:
-    from plexosdb import PlexosDB
+    from plexosdb import PlexosDB, PropertyRecord
 
 
 def test_iterate_properties_with_class_enum_only(db_with_topology: PlexosDB) -> None:
@@ -250,6 +250,76 @@ def test_iterate_properties_chunks_combined_scenario_filters(db_with_topology: P
 
     assert len(results) == 1
     assert results[0]["scenario_name"] == "ScenarioA"
+
+
+@pytest.mark.parametrize(
+    ("scenarios", "categories"),
+    [
+        (["SharedA", "SharedB"], None),
+        (None, ["SharedCatA", "SharedCatB"]),
+        (["SharedA", "SharedB"], ["SharedCatA", "SharedCatB"]),
+    ],
+)
+def test_scenario_filter_batches_group_shared_tags_by_data_id(
+    db_base: PlexosDB,
+    monkeypatch: pytest.MonkeyPatch,
+    scenarios: list[str] | None,
+    categories: list[str] | None,
+) -> None:
+    from plexosdb import ClassEnum
+
+    db_base.add_object(ClassEnum.Generator, "SharedGenerator")
+    db_base.add_scenario("SharedA", category="SharedCatA")
+    scenario_b_id = db_base.add_scenario("SharedB", category="SharedCatB")
+    for _ in range(2):
+        data_id = db_base.add_property(
+            ClassEnum.Generator, "SharedGenerator", "Max Capacity", 100.0, scenario="SharedA"
+        )
+        db_base._db.execute("INSERT INTO t_tag (data_id, object_id) VALUES (?, ?)", (data_id, scenario_b_id))
+
+    def iterate() -> list[PropertyRecord]:
+        return list(
+            db_base.iterate_properties(
+                class_enum=ClassEnum.Generator,
+                object_names="SharedGenerator",
+                property_names="Max Capacity",
+                scenario=scenarios,
+                scenario_category=categories,
+            )
+        )
+
+    expected = iterate()
+    assert len(expected) == 2
+    assert expected[0] == expected[1]
+
+    monkeypatch.setattr("plexosdb.utils.sqlite_query_chunk_size", lambda **kwargs: 1)
+    records = iterate()
+    assert len(records) == 2
+    assert all(
+        {**record, "scenario_name": None} == {**expected[0], "scenario_name": None} for record in records
+    )
+    assert all(record["scenario_name"] in {"SharedA", "SharedB"} for record in records)
+    assert (
+        len(
+            db_base.get_object_properties(
+                ClassEnum.Generator,
+                "SharedGenerator",
+                property_names="Max Capacity",
+                scenario=scenarios,
+                scenario_category=categories,
+            )
+        )
+        == 2
+    )
+    assert not list(
+        db_base.iterate_properties(
+            class_enum=ClassEnum.Generator,
+            object_names="SharedGenerator",
+            property_names="Max Capacity",
+            scenario=["SharedA"],
+            scenario_category=["SharedCatB"],
+        )
+    )
 
 
 def test_get_object_properties_filters_by_scenario(db_with_topology: PlexosDB) -> None:
