@@ -141,12 +141,10 @@ db.add_property(
 # Inspect
 props = db.get_object_properties(ClassEnum.Generator, "GEN01")
 
-# Change a value: update_property is not implemented in current plexosdb,
-# so delete the existing row and re-add it.
-db.delete_property(
-    ClassEnum.Generator, "GEN01", property_name="Max Capacity"
+# Change a value without removing qualifiers.
+db.update_property(
+    "GEN01", "Max Capacity", "120.0", object_class=ClassEnum.Generator
 )
-db.add_property(ClassEnum.Generator, "GEN01", "Max Capacity", 120.0)
 db.delete_object(ClassEnum.Generator, name="GEN01")
 ```
 

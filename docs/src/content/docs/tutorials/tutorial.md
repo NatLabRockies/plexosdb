@@ -425,9 +425,8 @@ print(f"Dynamic enabled: {config.get('Dynamic')}")
 ```
 
 Use `db.get_config()` to retrieve configuration entries, or
-`db.get_config("Dynamic")` to retrieve one entry. `set_config()` is not yet
-implemented; use `query(...)` when you need to inspect `t_config` with a custom
-selection.
+`db.get_config("Dynamic")` to retrieve one entry. Use
+`db.set_config("Dynamic", "1")` to insert or update a configuration value.
 
 ### 5. Configure report outputs
 

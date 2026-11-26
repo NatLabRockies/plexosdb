@@ -5,17 +5,10 @@ title: "PlexosDB Class"
 See [Validating a Database](/plexosdb/how-to/validate_database/) for
 `validate_database()`, structured findings, limited repairs, and text reports.
 
-The reference below includes the complete `PlexosDB` class surface. Some
-declared methods are reserved for future implementation and currently raise
-`NotImplementedError`; they are listed in the API for transparency but should
-not be used as supported workflows yet.
-
-Currently unimplemented methods include `add_custom_column`, `add_metadata`,
-`add_time_slice`, `add_variable_tag`, `backup_database`,
-`create_object_scenario`, `delete_category`, `delete_membership`,
-`delete_metadata`, `delete_text`, `import_from_csv`, `list_reports`,
-`set_config`, `set_date_range`, `to_csv`, `update_attribute`, `update_category`,
-`update_properties`, `update_property`, `update_scenario`, and `update_text`.
+The reference below includes the complete `PlexosDB` class surface. For
+examples of updating property values, see
+[Updating Properties](/plexosdb/how-to/add_properties/#updating-properties) and
+[Bulk Updating Properties](/plexosdb/how-to/bulk_operations/#bulk-updating-properties).
 
 <!-- Generated API reference -->
 
@@ -25,7 +18,7 @@ Currently unimplemented methods include `add_custom_column`, `add_metadata`,
 
 #### PropertyRecord
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L60)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/7cd90c878feea8b41974fe3987eb0239bebbf385/src/plexosdb/db.py#L74)
 
 Type definition for property records returned by iterate_properties.
 
@@ -58,7 +51,7 @@ Full reference:
 
 #### PlexosDB
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L110)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/7cd90c878feea8b41974fe3987eb0239bebbf385/src/plexosdb/db.py#L124)
 
 High-level API for PlexosDB schema manipulation.
 
@@ -217,6 +210,40 @@ add_custom_column(self, class_enum: ClassEnum, name: str, /, *, position: int | 
 
 Add a custom column to a class.
 
+**Parameters**
+
+- `class_enum : ClassEnum`
+  Class to associate with the custom column.
+- `name : str`
+  Name of the custom column.
+- `position : int | None, optional`
+  Optional column position. If omitted, the database stores ``NULL``.
+
+**Returns**
+
+- `int`
+  ID of the created custom column.
+
+**Notes**
+
+A UUID is generated for the new custom column. If ``position`` is
+omitted, the database stores ``NULL`` for its position.
+
+**Raises**
+
+- `AssertionError`
+  If the class does not exist in the database.
+- `sqlite3.IntegrityError`
+  If inserting the custom column violates a database constraint.
+
+**Examples**
+
+```python
+>>> db = PlexosDB()
+>>> db.create_schema(seed_defaults=True)
+>>> column_id = db.add_custom_column(ClassEnum.Generator, "Operator note", position=0)
+```
+
 ###### add_datafile_tag
 
 ```text
@@ -369,7 +396,17 @@ True
 add_metadata(self, entity_type: Literal['object', 'membership', 'data'], entity_id: int, class_name: str, property_name: str, value: str, /, *, state: int | None=None) -> None
 ```
 
-Add metadata to an entity (object, membership, or data).
+Insert metadata for an object, membership, or data record.
+
+The entity ID, metadata class, and property identify the row. When
+``state`` is omitted, NULL is stored.
+
+**Raises**
+
+- `ValueError`
+  If ``entity_type`` is not ``"object"``, ``"membership"``, or ``"data"``.
+- `sqlite3.Error`
+  If the entity does not exist or the metadata key already exists.
 
 ###### add_object
 
@@ -791,7 +828,10 @@ Add text data to a property data record.
 add_time_slice(self, name: str, /, *, interval: str, start_datetime: str, end_datetime: str, description: str | None=None) -> int
 ```
 
-Add a time slice definition to the database.
+Create a native Timeslice object and dated `Include` property rows. `interval`
+accepts a positive fixed duration such as `PT1H` or `1 hour`. Periods begin at
+`start_datetime`; the final period is shortened when needed to end at
+`end_datetime`. The returned integer is the Timeslice object ID.
 
 ###### add_variable_tag
 
@@ -799,7 +839,8 @@ Add a time slice definition to the database.
 add_variable_tag(self, data_id: int, variable_name: str, /, *, value: str | float | None=None) -> int
 ```
 
-Add a Variable tag to a property data record.
+Link an existing Variable object to a property data record. If `value` is
+provided, it also replaces that property's value. Returns the tagged `data_id`.
 
 ###### backup_database
 
@@ -807,7 +848,8 @@ Add a Variable tag to a property data record.
 backup_database(self, target_path: str | Path) -> None
 ```
 
-Backup the in-memory database to a file.
+Create a SQLite backup at the target path. Works for in-memory and file-backed
+databases and creates missing parent directories.
 
 ###### copy_object
 
@@ -831,7 +873,11 @@ Copy all existing memberships of old object to the new object.
 create_object_scenario(self, object_name: str, scenario_name: str, properties: dict[str, Any], /, *, object_class: ClassEnum, description: str | None=None, collection: CollectionEnum | None=None, parent_class: ClassEnum | None=None, base_scenario: str | None=None) -> int
 ```
 
-Create a new scenario with specific property values for an object.
+Create a scenario for an object, optionally inheriting property data rows from a
+base scenario with their bands, dates, non-scenario tags, and text metadata.
+Other scenario tags are not copied. Overrides update values on every inherited
+row with the matching property name; properties absent from the base scenario
+are added as unqualified rows. The operation is atomic.
 
 ###### create_schema
 
@@ -952,7 +998,8 @@ Removes an object-level attribute value from the database.
 delete_category(self, category: str, /, *, class_name: ClassEnum) -> None
 ```
 
-Delete a category from the database.
+Delete an unused category from a class. A category assigned to an object cannot
+be deleted.
 
 ###### delete_membership
 
@@ -960,7 +1007,7 @@ Delete a category from the database.
 delete_membership(self, parent_object_name: str, child_object_name: str, /, *, parent_class: ClassEnum, child_class: ClassEnum, collection: CollectionEnum) -> None
 ```
 
-Delete a membership between two objects.
+Delete a membership and its dependent property and metadata rows.
 
 ###### delete_metadata
 
@@ -968,7 +1015,14 @@ Delete a membership between two objects.
 delete_metadata(self, entity_type: Literal['object', 'membership', 'data'], entity_id: int, class_name: str, property_name: str) -> None
 ```
 
-Delete metadata from an entity.
+Delete metadata matching an entity ID, class, and property.
+
+Missing metadata is ignored.
+
+**Raises**
+
+- `ValueError`
+  If ``entity_type`` is not ``"object"``, ``"membership"``, or ``"data"``.
 
 ###### delete_object
 
@@ -1037,7 +1091,8 @@ only the property data associated with that scenario is deleted.
 delete_text(self, data_id: int, /, *, class_id: int) -> None
 ```
 
-Delete text data from a property data record.
+Delete the text record identified by `data_id` and `class_id`. Raises
+`NotFoundError` if no matching text record exists.
 
 ###### get_attribute
 
@@ -1834,7 +1889,8 @@ True
 import_from_csv(self, source_path: str | Path, /, *, tables: list[str] | None=None) -> None
 ```
 
-Import data from CSV files into the database.
+Append data from table-named CSV files to existing database tables. Imports are
+atomic across the selected tables.
 
 ###### iterate_properties
 
@@ -2200,7 +2256,7 @@ specified child object, optionally filtered by parent class and collection.
 list_reports(self) -> list[dict[str, Any]]
 ```
 
-List all defined reports in the database.
+List configured reports with their report, property, and collection names.
 
 ###### list_scenarios
 
@@ -2437,7 +2493,7 @@ use execute() instead.
 set_config(self, element: str, value: str) -> None
 ```
 
-Set a configuration value in the database.
+Insert a configuration value or update the value for an existing element.
 
 ###### set_date_range
 
@@ -2445,7 +2501,10 @@ Set a configuration value in the database.
 set_date_range(self, data_id: int, /, *, date_from: str | None=None, date_to: str | None=None) -> None
 ```
 
-Set the date range for a property data record.
+Insert or update the supplied ISO 8601 date boundaries for a property data
+record. A boundary passed as `None` is left unchanged. The resulting range,
+including any stored boundary, must be ordered and use compatible time zones.
+An invalid range raises `ValueError`; a missing data row raises `NotFoundError`.
 
 ###### to_csv
 
@@ -2453,7 +2512,8 @@ Set the date range for a property data record.
 to_csv(self, target_path: str | Path, /, *, tables: list[str] | None=None) -> None
 ```
 
-Export selected tables or the entire database to CSV files.
+Export selected tables or all non-internal tables to `<table>.csv` files in the
+target directory.
 
 ###### to_xml
 
@@ -2517,7 +2577,7 @@ True
 update_attribute(self, attribute_name: str, new_value: str | float | int, /, *, object_name: str, object_class: ClassEnum) -> None
 ```
 
-Update an attribute value for an object.
+Update an assigned attribute value without changing its state.
 
 ###### update_category
 
@@ -2525,7 +2585,7 @@ Update an attribute value for an object.
 update_category(self, category: str, new_name: str, /, *, class_name: ClassEnum) -> None
 ```
 
-Update a category name.
+Rename a category for a class; objects assigned to it remain assigned.
 
 ###### update_object
 
@@ -2640,7 +2700,8 @@ and text metadata are preserved.
 update_scenario(self, scenario_name: str, /, *, new_name: str | None=None, new_category: str | None=None, new_description: str | None=None) -> None
 ```
 
-Update a scenario's properties.
+Update a scenario's name, category, and/or description. Unspecified fields
+remain unchanged.
 
 ###### update_text
 
@@ -2648,7 +2709,9 @@ Update a scenario's properties.
 update_text(self, data_id: int, text_value: str, /, *, class_id: int) -> None
 ```
 
-Update text data for a property data record.
+Replace the value of the text record identified by `data_id` and `class_id`,
+preserving its other fields. Raises `NotFoundError` if no matching text record
+exists.
 
 ###### validate_value_by_rule
 

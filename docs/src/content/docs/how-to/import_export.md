@@ -71,11 +71,38 @@ else:
     print("Export failed")
 ```
 
+Custom columns and object, membership, and data metadata are preserved when an
+exported XML model is imported with `PlexosDB.from_xml()`.
+
 ## CSV and database backups
 
-The `import_from_csv()`, `to_csv()`, and `backup_database()` methods are part of
-the declared API but currently raise `NotImplementedError`. Use XML import and
-export for supported file-based workflows.
+Export tables to a directory as `<table>.csv` files, then import those files
+into an existing database with the matching schema:
+
+```python
+# Export every non-internal table, or select specific tables.
+db.to_csv("/path/to/model-csv")
+db.to_csv("/path/to/model-csv", tables=["t_object", "t_data"])
+
+# The target database must already have the corresponding tables.
+restored = PlexosDB()
+restored.create_schema()
+restored.import_from_csv("/path/to/model-csv")
+```
+
+`import_from_csv()` appends rows and imports the selected tables atomically. A
+single `<table>.csv` file can also be imported directly. CSV exports include a
+header row; `\N` represents NULL, backslash-prefixed strings are escaped, and
+BLOB values are written as base64 with a `\B` prefix.
+
+Back up an in-memory or file-backed SQLite database to a separate file:
+
+```python
+db.backup_database("/path/to/backups/model.sqlite")
+```
+
+The backup method creates missing parent directories and rejects a destination
+that is the same file as the source database.
 
 ## Creating databases
 
@@ -88,8 +115,7 @@ db.create_schema(version=10)
 
 :::caution
 
-When working with large XML files, ensure you have sufficient memory and disk
-space for the operations. CSV conversion and database backup are not currently
-implemented.
+When working with large XML or CSV files, ensure you have sufficient memory and
+disk space for the operations.
 
 :::

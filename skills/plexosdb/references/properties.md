@@ -43,9 +43,8 @@ A **property** is a (possibly scenario-tagged) value attached to a
   returns the property rows attached to a single object.
 - `db.iterate_properties(*, class_enum=None, object_names=None, property_names=None, ...) -> Iterator[PropertyRecord]`,
   streams property rows across many objects (preferred for large models).
-- `db.update_property(...)` and `db.update_properties(...)` are not implemented
-  in current plexosdb (both raise `NotImplementedError`). To change a value,
-  `delete_property(...)` the row and re-add it.
+- `db.update_property(...)` updates exactly one matching property row;
+  `db.update_properties(...)` updates matching rows in bulk.
 - `db.delete_property(object_class, object_name, *, property_name, scenario=None, collection=None, parent_class=None, parent_object_name=None)`,
   removes a property row.
 - `db.list_valid_properties(collection_enum, parent_class_enum, child_class_enum) -> list[str]`,
@@ -55,8 +54,8 @@ A **property** is a (possibly scenario-tagged) value attached to a
 - `db.add_band(data_id, band_id, *, state=None)` and
   `db.add_datafile_tag(data_id, file_path, *, description=None)` for lower-level
   overrides. `db.add_text(text_class, text_value, data_id)` attaches a text
-  override. `db.add_variable_tag(...)` is not implemented (raises
-  `NotImplementedError`).
+  override, and `db.add_variable_tag(data_id, variable_name)` tags an existing
+  data row with a Variable.
 
 ## Single-value pattern
 
@@ -149,12 +148,10 @@ prefer it to repeated `get_object_properties(...)` calls.
 ## Updating and deleting
 
 ```python
-# update_property / update_properties are not implemented in current
-# plexosdb. To change a value, delete the existing row and re-add it.
-db.delete_property(
-    ClassEnum.Generator, "GEN01", property_name="Max Capacity"
+# Update one existing property row, preserving its qualifiers.
+db.update_property(
+    "GEN01", "Max Capacity", "120.0", object_class=ClassEnum.Generator
 )
-db.add_property(ClassEnum.Generator, "GEN01", "Max Capacity", 120.0)
 
 # Delete a scenario-tagged override (scoped by scenario)
 db.delete_property(
@@ -166,7 +163,9 @@ db.delete_property(
 ```
 
 `delete_property` takes `property_name` (and optional `scenario`) as keyword
-arguments; it removes the row and its tags/text.
+arguments; it removes the row and its tags/text. `update_property` requires
+selectors that match exactly one row. `update_properties` updates every row
+matching each selector, including all bands when `band` is omitted.
 
 ## Validation
 
@@ -190,8 +189,8 @@ arguments; it removes the row and its tags/text.
   override to an existing property `data_id`.
 - `add_datafile_tag(data_id, file_path)` links a property row to a `DataFile`
   object whose `Filename` matches `file_path`.
-- `add_variable_tag(...)` is not implemented in current plexosdb (raises
-  `NotImplementedError`).
+- `add_variable_tag(data_id, variable_name, value=...)` links an existing
+  Variable and optionally replaces the property value.
 
 ## Common mistakes
 
@@ -199,9 +198,8 @@ arguments; it removes the row and its tags/text.
   duplicate raises (see [memberships.md](./memberships.md)).
 - Forgetting `band=` for banded curves, causing duplicate-row collisions on
   subsequent inserts.
-- Reaching for `update_property`/`update_properties` — both are stubs; delete
-  the row and re-add it, and use `add_property(..., scenario=...)` for new
-  scenario overrides.
+- Omitting `band` in `update_properties` when only one band should change; all
+  matching bands are updated.
 - Running `add_property` in a per-row loop for thousands of rows instead of
   batching with `add_properties_from_records`.
 

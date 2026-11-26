@@ -109,3 +109,25 @@ def test_add_report_preserves_phase_ids(db_base: PlexosDB):
     )
 
     assert [row[0] for row in configured_phase_ids] == [1, 2, 3, 4]
+
+
+def test_list_reports_returns_report_details(db_base: PlexosDB) -> None:
+    from plexosdb import ClassEnum, CollectionEnum
+
+    report_name = "listed_report"
+    db_base.add_object(ClassEnum.Report, report_name)
+    db_base.add_report(
+        object_name=report_name,
+        property="Units",
+        collection=CollectionEnum.Generators,
+        parent_class=ClassEnum.System,
+        child_class=ClassEnum.Generator,
+        phase_id=2,
+    )
+
+    reports = db_base.list_reports()
+    report = next(record for record in reports if record["report_name"] == report_name)
+
+    assert report["property_name"] == "Units"
+    assert report["collection_name"] == CollectionEnum.Generators
+    assert report["phase_id"] == 2

@@ -6,11 +6,12 @@ import xml.etree.ElementTree as ET
 from contextlib import closing
 from datetime import datetime
 from pathlib import Path
+from typing import Literal
 from zipfile import ZipFile
 
 import pytest
 
-from plexosdb import PlexosDB, XMLHandler, XMLRecord
+from plexosdb import ClassEnum, PlexosDB, XMLHandler, XMLRecord
 from plexosdb.enums import Schema
 from plexosdb.solution_reader import PlexosSolution
 
@@ -70,6 +71,36 @@ def test_xml_records_preserve_raw_values(tmp_path: Path, value: str | None, in_m
     handler = XMLHandler.parse(source, in_memory=in_memory)
     records: list[XMLRecord] = handler.get_records(Schema.Text, rename_dict={"data_id": "record_id"})
     assert records == [{"record_id": "0001", "value": value}]
+
+
+def test_custom_columns_and_metadata_round_trip_through_xml(tmp_path: Path) -> None:
+    db = PlexosDB()
+    db.create_schema(seed_defaults=True)
+    object_id = db.add_object(ClassEnum.Generator, "Generator1")
+    membership_id = db.get_memberships_system("Generator1", object_class=ClassEnum.Generator)[0][
+        "membership_id"
+    ]
+    db._db.execute("INSERT INTO t_data(membership_id) VALUES (?)", (membership_id,))
+    data_id = db._db.last_insert_rowid()
+    db.add_custom_column(ClassEnum.Generator, "Notes & review", position=0)
+    db.add_custom_column(ClassEnum.Generator, "Unpositioned")
+    entities: tuple[tuple[Literal["object", "membership", "data"], int], ...] = (
+        ("object", object_id),
+        ("membership", membership_id),
+        ("data", data_id),
+    )
+    for entity_type, entity_id in entities:
+        db.add_metadata(entity_type, entity_id, "PLEXOS", "Source", "000123")
+        db.add_metadata(entity_type, entity_id, "Other", "Notes", "a & b < c", state=3)
+
+    xml_path = tmp_path / "metadata.xml"
+    db.to_xml(xml_path)
+    restored = PlexosDB.from_xml(xml_path)
+
+    for table in ("t_custom_column", "t_object_meta", "t_membership_meta", "t_data_meta"):
+        expected = db.query(f'SELECT * FROM "{table}" ORDER BY 1, 2, 3')
+        assert len(expected) == 2
+        assert restored.query(f'SELECT * FROM "{table}" ORDER BY 1, 2, 3') == expected
 
 
 @pytest.mark.parametrize("value", TEXT_VALUES)

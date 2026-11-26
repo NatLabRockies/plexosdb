@@ -3,7 +3,7 @@ title: "PlexosDB"
 editUrl: false
 ---
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L110)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L110)
 
 High-level API for PlexosDB schema manipulation.
 
@@ -31,7 +31,7 @@ Initialize the API using an XML file or other data sources.
 
 ### version
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L137)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L137)
 
 ```text
 version: tuple[int, ...] | None
@@ -41,7 +41,7 @@ Get the PLEXOS version of the loaded model.
 
 ### from_xml
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L231)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L231)
 
 ```text
 from_xml(cls, xml_path: str | Path, schema: str | None=None, **kwargs: Any) -> 'PlexosDB'
@@ -100,7 +100,7 @@ to an existing database, you should use other methods.
 
 ### add_attribute
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L315)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L315)
 
 ```text
 add_attribute(self, object_class: ClassEnum, /, object_name: str, *, attribute_name: str, attribute_value: str | float | int) -> int
@@ -125,7 +125,7 @@ mostly used for model configuration.
 
 ### add_band
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L356)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L356)
 
 ```text
 add_band(self, data_id: int, band_id: int, /, *, state: int | None=None) -> None
@@ -141,7 +141,7 @@ Add a band to a property data record.
 
 ### add_category
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L383)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L383)
 
 ```text
 add_category(self, class_enum: ClassEnum, /, name: str) -> int
@@ -186,7 +186,7 @@ category's unique identifier is automatically handled by the database.
 
 ### add_custom_column
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L434)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L434)
 
 ```text
 add_custom_column(self, class_enum: ClassEnum, name: str, /, *, position: int | None=None) -> int
@@ -194,9 +194,43 @@ add_custom_column(self, class_enum: ClassEnum, name: str, /, *, position: int | 
 
 Add a custom column to a class.
 
+**Parameters**
+
+- `class_enum : ClassEnum`
+  Class to associate with the custom column.
+- `name : str`
+  Name of the custom column.
+- `position : int | None, optional`
+  Optional column position. If omitted, the database stores ``NULL``.
+
+**Returns**
+
+- `int`
+  ID of the created custom column.
+
+**Notes**
+
+A UUID is generated for the new custom column. If ``position`` is
+omitted, the database stores ``NULL`` for its position.
+
+**Raises**
+
+- `AssertionError`
+  If the class does not exist in the database.
+- `sqlite3.IntegrityError`
+  If inserting the custom column violates a database constraint.
+
+**Examples**
+
+```python
+>>> db = PlexosDB()
+>>> db.create_schema(seed_defaults=True)
+>>> column_id = db.add_custom_column(ClassEnum.Generator, "Operator note", position=0)
+```
+
 ### add_datafile_tag
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L445)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L492)
 
 ```text
 add_datafile_tag(self, data_id: int, file_path: str, /, *, description: str | None=None) -> int
@@ -226,7 +260,7 @@ path.
 
 ### add_membership
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L503)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L550)
 
 ```text
 add_membership(self, parent_class_enum: ClassEnum, child_class_enum: ClassEnum, parent_object_name: str, child_object_name: str, collection_enum: CollectionEnum) -> int
@@ -275,7 +309,7 @@ database enforces uniqueness for parent-child-collection combinations.
 
 ### add_memberships_from_records
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L573)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L620)
 
 ```text
 add_memberships_from_records(self, records: list[dict[str, int]], /, *, chunksize: int=10000) -> bool
@@ -348,17 +382,27 @@ True
 
 ### add_metadata
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L697)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L744)
 
 ```text
 add_metadata(self, entity_type: Literal['object', 'membership', 'data'], entity_id: int, class_name: str, property_name: str, value: str, /, *, state: int | None=None) -> None
 ```
 
-Add metadata to an entity (object, membership, or data).
+Insert metadata for an object, membership, or data record.
+
+The entity ID, metadata class, and property identify the row. When
+``state`` is omitted, NULL is stored.
+
+**Raises**
+
+- `ValueError`
+  If ``entity_type`` is not ``"object"``, ``"membership"``, or ``"data"``.
+- `sqlite3.Error`
+  If the entity does not exist or the metadata key already exists.
 
 ### add_object
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L711)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L758)
 
 ```text
 add_object(self, class_enum: ClassEnum, /, name: str, *, description: str | None=None, category: str | None=None, collection_enum: CollectionEnum | Literal[False] | None=None) -> int
@@ -416,7 +460,7 @@ The database enforces uniqueness on the combination of name and class_id.
 
 ### add_objects
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L798)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L845)
 
 ```text
 add_objects(self, class_enum: ClassEnum, *object_names: str, category: str | None=None) -> None
@@ -458,7 +502,7 @@ times. It also creates system memberships for all objects in bulk.
 
 ### add_properties_from_records
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L871)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L918)
 
 ```text
 add_properties_from_records(self, records: list[dict[str, Any]], /, *, object_class: ClassEnum, parent_class: ClassEnum=ClassEnum.System, collection: CollectionEnum, scenario: str, chunksize: int=10000) -> None
@@ -544,7 +588,7 @@ fields if present in the records.
 
 ### add_attributes_from_records
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L1021)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L1068)
 
 ```text
 add_attributes_from_records(self, records: list[dict[str, Any]], /, *, object_class: ClassEnum, chunksize: int=10000) -> None
@@ -594,7 +638,7 @@ Optional: - 'state'
 
 ### add_property
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L1235)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L1282)
 
 ```text
 add_property(self, object_class_enum: ClassEnum, /, object_name: str, name: str, value: str | int | float, *, scenario: str | None=None, band: int | None=None, date_from: datetime | None=None, date_to: datetime | None=None, datafile_text: str | None=None, timeslice: str | None=None, collection_enum: CollectionEnum | None=None, parent_class_enum: ClassEnum | None=None, parent_object_name: str | None=None) -> int
@@ -670,7 +714,7 @@ timeslice parameter stores timeslice name metadata.
 
 ### add_scenario
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L1360)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L1407)
 
 ```text
 add_scenario(self, name: str, category: str | None=None) -> int
@@ -700,7 +744,7 @@ Add a scenario object in the database.
 
 ### add_report
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L1392)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L1439)
 
 ```text
 add_report(self, /, *, object_name: str, property: str, collection: CollectionEnum, parent_class: ClassEnum, child_class: ClassEnum, phase_id: int=4, report_period: bool | None=None, report_summary: bool | None=True, report_statistics: bool | None=None, report_samples: bool | None=None, write_flat_files: bool=False) -> None
@@ -764,7 +808,7 @@ post-processing after simulation runs.
 
 ### add_text
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L1508)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L1555)
 
 ```text
 add_text(self, text_class: ClassEnum, text_value: str | int | float, data_id: int) -> int
@@ -788,37 +832,42 @@ Add text data to a property data record.
 
 ### add_time_slice
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L1539)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L1586)
 
 ```text
 add_time_slice(self, name: str, /, *, interval: str, start_datetime: str, end_datetime: str, description: str | None=None) -> int
 ```
 
-Add a time slice definition to the database.
+Create a native Timeslice object and dated `Include` property rows. `interval`
+accepts a positive fixed duration such as `PT1H` or `1 hour`. Periods begin at
+`start_datetime`; the final period is shortened when needed to end at
+`end_datetime`. The returned integer is the Timeslice object ID.
 
 ### add_variable_tag
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L1552)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L1599)
 
 ```text
 add_variable_tag(self, data_id: int, variable_name: str, /, *, value: str | float | None=None) -> int
 ```
 
-Add a Variable tag to a property data record.
+Link an existing Variable object to a property data record. If `value` is
+provided, it also replaces that property's value. Returns the tagged `data_id`.
 
 ### backup_database
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L1563)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L1610)
 
 ```text
 backup_database(self, target_path: str | Path) -> None
 ```
 
-Backup the in-memory database to a file.
+Create a SQLite backup at the target path. Works for in-memory and file-backed
+databases and creates missing parent directories.
 
 ### copy_object
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L1567)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L1614)
 
 ```text
 copy_object(self, object_class: ClassEnum, original_object_name: str, new_object_name: str, copy_properties: bool=True, copy_attributes: bool=True) -> int
@@ -828,7 +877,7 @@ Copy an object and its memberships, attributes, properties, tags and texts.
 
 ### copy_object_memberships
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L1612)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L1659)
 
 ```text
 copy_object_memberships(self, object_class: ClassEnum, original_name: str, new_name: str) -> dict[int, int]
@@ -838,17 +887,21 @@ Copy all existing memberships of old object to the new object.
 
 ### create_object_scenario
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L1779)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L1826)
 
 ```text
 create_object_scenario(self, object_name: str, scenario_name: str, properties: dict[str, Any], /, *, object_class: ClassEnum, description: str | None=None, collection: CollectionEnum | None=None, parent_class: ClassEnum | None=None, base_scenario: str | None=None) -> int
 ```
 
-Create a new scenario with specific property values for an object.
+Create a scenario for an object, optionally inheriting property data rows from a
+base scenario with their bands, dates, non-scenario tags, and text metadata.
+Other scenario tags are not copied. Overrides update values on every inherited
+row with the matching property name; properties absent from the base scenario
+are added as unqualified rows. The operation is atomic.
 
 ### create_schema
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L1902)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L1949)
 
 ```text
 create_schema(self, schema: str | None=None, *, seed_defaults: bool=False, version: int | str | tuple[int, ...] | None=None) -> bool
@@ -928,7 +981,7 @@ True
 
 ### delete_attribute
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L1999)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L2046)
 
 ```text
 delete_attribute(self, attribute_name: str, /, *, object_name: str, object_class: ClassEnum) -> None
@@ -965,37 +1018,45 @@ Removes an object-level attribute value from the database.
 
 ### delete_category
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L2064)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L2111)
 
 ```text
 delete_category(self, category: str, /, *, class_name: ClassEnum) -> None
 ```
 
-Delete a category from the database.
+Delete an unused category from a class. A category assigned to an object cannot
+be deleted.
 
 ### delete_membership
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L2068)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L2115)
 
 ```text
 delete_membership(self, parent_object_name: str, child_object_name: str, /, *, parent_class: ClassEnum, child_class: ClassEnum, collection: CollectionEnum) -> None
 ```
 
-Delete a membership between two objects.
+Delete a membership and its dependent property and metadata rows.
 
 ### delete_metadata
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L2081)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L2128)
 
 ```text
 delete_metadata(self, entity_type: Literal['object', 'membership', 'data'], entity_id: int, class_name: str, property_name: str) -> None
 ```
 
-Delete metadata from an entity.
+Delete metadata matching an entity ID, class, and property.
+
+Missing metadata is ignored.
+
+**Raises**
+
+- `ValueError`
+  If ``entity_type`` is not ``"object"``, ``"membership"``, or ``"data"``.
 
 ### delete_object
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L2091)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L2138)
 
 ```text
 delete_object(self, class_enum: ClassEnum, /, *, name: str) -> None
@@ -1008,7 +1069,7 @@ memberships and data.
 
 ### delete_property
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L2104)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L2151)
 
 ```text
 delete_property(self, object_class: ClassEnum, object_name: str, /, *, property_name: str, collection: CollectionEnum | None=None, parent_class: ClassEnum | None=None, parent_object_name: str | None=None, scenario: str | None=None) -> None
@@ -1060,17 +1121,18 @@ only the property data associated with that scenario is deleted.
 
 ### delete_text
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L2222)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L2269)
 
 ```text
 delete_text(self, data_id: int, /, *, class_id: int) -> None
 ```
 
-Delete text data from a property data record.
+Delete the text record identified by `data_id` and `class_id`. Raises
+`NotFoundError` if no matching text record exists.
 
 ### get_attribute
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L2232)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L2279)
 
 ```text
 get_attribute(self, object_class: ClassEnum, /, *, object_name: str, attribute_name: str) -> Any
@@ -1080,7 +1142,7 @@ Get an assigned attribute value for a specific object.
 
 ### get_attribute_id
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L2257)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L2304)
 
 ```text
 get_attribute_id(self, class_enum: ClassEnum, /, name: str) -> int
@@ -1106,7 +1168,7 @@ class.
 
 ### get_attributes
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L2296)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L2343)
 
 ```text
 get_attributes(self, object_name: str, /, *, object_class: ClassEnum, attribute_names: str | Iterable[str] | None=None) -> list[dict[str, Any]]
@@ -1133,7 +1195,7 @@ Retrieve assigned attribute values for a specific object.
 
 ### get_category_id
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L2364)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L2411)
 
 ```text
 get_category_id(self, class_enum: ClassEnum, /, name: str) -> int
@@ -1174,7 +1236,7 @@ class.
 
 ### get_category_max_id
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L2416)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L2463)
 
 ```text
 get_category_max_id(self, class_enum: ClassEnum) -> int
@@ -1213,7 +1275,7 @@ specified class, useful for adding new categories with unique ranks.
 
 ### get_class_id
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L2464)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L2511)
 
 ```text
 get_class_id(self, class_enum: ClassEnum) -> int
@@ -1250,7 +1312,7 @@ Retrieves the unique identifier for the specified class enumeration.
 
 ### get_collection_id
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L2500)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L2547)
 
 ```text
 get_collection_id(self, collection: CollectionEnum, /, parent_class_enum: ClassEnum, child_class_enum: ClassEnum) -> int
@@ -1292,7 +1354,7 @@ associated parent and child classes.
 
 ### get_config
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L2558)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L2605)
 
 ```text
 get_config(self, element: str | None=None) -> dict[str, Any] | list[dict[str, Any]]
@@ -1333,7 +1395,7 @@ Retrieve all entries, ordered by element, and inspect one:
 
 ### get_custom_columns
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L2602)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L2649)
 
 ```text
 get_custom_columns(self, class_enum: ClassEnum | None=None) -> list[dict[str, Any]]
@@ -1367,7 +1429,7 @@ For a database containing a custom column assigned to `Generator`:
 
 ### get_membership_id
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L2648)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L2695)
 
 ```text
 get_membership_id(self, /, parent_name: str, child_name: str, collection: CollectionEnum) -> int
@@ -1413,7 +1475,7 @@ objects in the specified collection.
 
 ### list_object_memberships
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L2711)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L2758)
 
 ```text
 list_object_memberships(self, class_enum: ClassEnum, /, name: str, category: str | None=None, collection: CollectionEnum | None=None, exclude_system_membership: bool=False) -> list[dict[str, Any]]
@@ -1445,7 +1507,7 @@ By default it returns the system membership.
 
 ### get_memberships_system
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L2792)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L2839)
 
 ```text
 get_memberships_system(self, *object_names: Iterable[str] | str, object_class: ClassEnum, collection: CollectionEnum | None=None) -> list[dict[str, Any]]
@@ -1470,7 +1532,7 @@ Retrieve memberships for the requested object names.
 
 ### get_metadata
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L2861)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L2908)
 
 ```text
 get_metadata(self, entity_type: Literal['object', 'membership', 'data'], entity_id: int, /, *, class_name: str | None=None, property_name: str | None=None) -> list[dict[str, Any]]
@@ -1509,7 +1571,7 @@ Retrieve all metadata for an object, or narrow it by class and property:
 
 ### get_object_data_ids
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L2931)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L2978)
 
 ```text
 get_object_data_ids(self, class_enum: ClassEnum, /, name: str, property_names: str | Iterable[str] | None=None, *, parent_class_enum: ClassEnum=ClassEnum.System, collection_enum: CollectionEnum | None=None, category: str | None=None) -> list[int]
@@ -1561,7 +1623,7 @@ optionally filtered by property names, parent class, collection, and category.
 
 ### get_object_properties
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L3037)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L3084)
 
 ```text
 get_object_properties(self, class_enum: ClassEnum, /, name: str, property_names: str | Iterable[str] | None=None, *, parent_class_enum: ClassEnum | None=None, collection_enum: CollectionEnum | None=None, category: str | None=None, scenario: str | Iterable[str] | None=None, scenario_category: str | Iterable[str] | None=None) -> list[PropertyRecord]
@@ -1626,7 +1688,7 @@ names, collection, and category.
 
 ### get_object_id
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L3133)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L3180)
 
 ```text
 get_object_id(self, class_enum: ClassEnum, /, name: str, *, category: str | None=None) -> int
@@ -1670,7 +1732,7 @@ optionally filtering by category.
 
 ### get_objects_id
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L3198)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L3245)
 
 ```text
 get_objects_id(self, *object_names: Iterable[str] | str, class_enum: ClassEnum) -> list[int]
@@ -1680,7 +1742,7 @@ Get object_ids for a list of names for a given class.
 
 ### get_plexos_version
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L3220)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L3267)
 
 ```text
 get_plexos_version(self) -> tuple[int, ...] | None
@@ -1690,7 +1752,7 @@ Return the version information of the PLEXOS model.
 
 ### get_property_id
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L3224)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L3271)
 
 ```text
 get_property_id(self, property_name: str, /, *, collection_enum: CollectionEnum, child_class_enum: ClassEnum, parent_class_enum: ClassEnum | None=None) -> int
@@ -1739,7 +1801,7 @@ collection and classes.
 
 ### get_property_unit
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L3286)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L3333)
 
 ```text
 get_property_unit(self, property_name: str, /, collection_enum: CollectionEnum, parent_class_enum: ClassEnum, child_class_enum: ClassEnum) -> str
@@ -1763,7 +1825,7 @@ Returns an empty string when the property has no unit value.
 
 ### get_scenario_id
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L3326)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L3373)
 
 ```text
 get_scenario_id(self, name: str) -> int
@@ -1798,7 +1860,7 @@ Retrieves the object id for a scenario based on its name.
 
 ### get_text
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L3358)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L3405)
 
 ```text
 get_text(self, data_id: int, /, *, class_id: int | None=None) -> list[dict[str, Any]]
@@ -1826,7 +1888,7 @@ Retrieve text data associated with a property data record.
 
 ### get_unit
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L3395)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L3442)
 
 ```text
 get_unit(self, unit_id: int) -> dict[str, Any]
@@ -1857,7 +1919,7 @@ Get details for a specific unit.
 
 ### has_properties
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L3423)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L3470)
 
 ```text
 has_properties(self, class_enum: ClassEnum, /, name: str, *, collection_enum: CollectionEnum | None=None, category: str | None=None) -> bool
@@ -1907,17 +1969,18 @@ True
 
 ### import_from_csv
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L3500)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L3547)
 
 ```text
 import_from_csv(self, source_path: str | Path, /, *, tables: list[str] | None=None) -> None
 ```
 
-Import data from CSV files into the database.
+Append data from table-named CSV files to existing database tables. Imports are
+atomic across the selected tables.
 
 ### iterate_properties
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L3504)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L3551)
 
 ```text
 iterate_properties(self, /, *, class_enum: ClassEnum | None=None, object_names: str | Iterable[str] | None=None, property_names: str | Iterable[str] | None=None, parent_class: ClassEnum | None=None, collection: CollectionEnum | None=None, category: str | None=None, scenario: str | Iterable[str] | None=None, scenario_category: str | Iterable[str] | None=None, batch_size: int=1000) -> Iterator[PropertyRecord]
@@ -1965,7 +2028,7 @@ yielded one at a time as dictionaries.
 
 ### list_attributes
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L3629)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L3676)
 
 ```text
 list_attributes(self, class_enum: ClassEnum) -> list[str]
@@ -1989,7 +2052,7 @@ Retrieves the names of attributes associated with the specified class.
 
 ### list_categories
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L3663)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L3710)
 
 ```text
 list_categories(self, class_enum: ClassEnum) -> list[str]
@@ -2029,7 +2092,7 @@ Retrieves the names of all categories associated with the specified class.
 
 ### list_child_objects
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L3711)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L3758)
 
 ```text
 list_child_objects(self, object_name: str, /, *, parent_class: ClassEnum, child_class: ClassEnum | None=None, collection: CollectionEnum | None=None) -> list[dict[str, Any]]
@@ -2109,7 +2172,7 @@ specified parent object, optionally filtered by child class and collection.
 
 ### list_classes
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L3828)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L3875)
 
 ```text
 list_classes(self) -> list[str]
@@ -2140,7 +2203,7 @@ Return all classes names in the database.
 
 ### list_collections
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L3857)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L3904)
 
 ```text
 list_collections(self, /, *, parent_class: ClassEnum | None=None, child_class: ClassEnum | None=None) -> list[dict[str, Any]]
@@ -2162,7 +2225,7 @@ List all available collections in the database.
 
 ### list_objects_by_class
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L3906)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L3953)
 
 ```text
 list_objects_by_class(self, class_enum: ClassEnum, /, *, category: str | None=None) -> list[str]
@@ -2215,7 +2278,7 @@ filtered by category.
 
 ### list_parent_objects
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L3981)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L4028)
 
 ```text
 list_parent_objects(self, object_name: str, /, *, child_class: ClassEnum, parent_class: ClassEnum | None=None, collection: CollectionEnum | None=None) -> list[dict[str, Any]]
@@ -2291,17 +2354,17 @@ specified child object, optionally filtered by parent class and collection.
 
 ### list_reports
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L4095)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L4142)
 
 ```text
 list_reports(self) -> list[dict[str, Any]]
 ```
 
-List all defined reports in the database.
+List configured reports with their report, property, and collection names.
 
 ### list_scenarios
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L4099)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L4146)
 
 ```text
 list_scenarios(self) -> list[str]
@@ -2340,7 +2403,7 @@ Return all scenarios in the database.
 
 ### list_models
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L4143)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L4190)
 
 ```text
 list_models(self) -> list[str]
@@ -2372,7 +2435,7 @@ Return all models in the database.
 
 ### list_scenarios_by_model
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L4180)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L4227)
 
 ```text
 list_scenarios_by_model(self, model_name: str) -> list[str]
@@ -2407,7 +2470,7 @@ List all scenarios associated with a given model.
 
 ### list_units
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L4220)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L4267)
 
 ```text
 list_units(self) -> list[dict[int, str]]
@@ -2417,7 +2480,7 @@ List all available units in the database.
 
 ### list_valid_properties
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L4227)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L4274)
 
 ```text
 list_valid_properties(self, collection_enum: CollectionEnum, /, parent_class_enum: ClassEnum, child_class_enum: ClassEnum) -> list[str]
@@ -2465,7 +2528,7 @@ optionally filtered by parent and child classes.
 
 ### list_valid_properties_report
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L4282)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L4329)
 
 ```text
 list_valid_properties_report(self, collection_enum: CollectionEnum, /, parent_class_enum: ClassEnum, child_class_enum: ClassEnum) -> list[str]
@@ -2499,7 +2562,7 @@ filtered by parent and child classes.
 
 ### query
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L4325)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L4372)
 
 ```text
 query(self, query_string: str, params: tuple[Any, ...] | dict[str, Any] | None=None) -> list[Any]
@@ -2544,37 +2607,41 @@ use execute() instead.
 
 ### set_config
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L4366)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L4413)
 
 ```text
 set_config(self, element: str, value: str) -> None
 ```
 
-Set a configuration value in the database.
+Insert a configuration value or update the value for an existing element.
 
 ### set_date_range
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L4370)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L4417)
 
 ```text
 set_date_range(self, data_id: int, /, *, date_from: str | None=None, date_to: str | None=None) -> None
 ```
 
-Set the date range for a property data record.
+Insert or update the supplied ISO 8601 date boundaries for a property data
+record. A boundary passed as `None` is left unchanged. The resulting range,
+including any stored boundary, must be ordered and use compatible time zones.
+An invalid range raises `ValueError`; a missing data row raises `NotFoundError`.
 
 ### to_csv
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L4381)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L4428)
 
 ```text
 to_csv(self, target_path: str | Path, /, *, tables: list[str] | None=None) -> None
 ```
 
-Export selected tables or the entire database to CSV files.
+Export selected tables or all non-internal tables to `<table>.csv` files in the
+target directory.
 
 ### to_xml
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L4385)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L4432)
 
 ```text
 to_xml(self, target_path: str | Path) -> bool
@@ -2632,27 +2699,27 @@ True
 
 ### update_attribute
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L4461)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L4508)
 
 ```text
 update_attribute(self, attribute_name: str, new_value: str | float | int, /, *, object_name: str, object_class: ClassEnum) -> None
 ```
 
-Update an attribute value for an object.
+Update an assigned attribute value without changing its state.
 
 ### update_category
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L4473)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L4520)
 
 ```text
 update_category(self, category: str, new_name: str, /, *, class_name: ClassEnum) -> None
 ```
 
-Update a category name.
+Rename a category for a class; objects assigned to it remain assigned.
 
 ### update_object
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L4477)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L4524)
 
 ```text
 update_object(self, class_enum: ClassEnum, object_name: str, *, new_name: str, new_category: str | None=None, new_description: str | None=None) -> bool
@@ -2707,7 +2774,7 @@ True
 
 ### update_properties
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L4557)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L4604)
 
 ```text
 update_properties(self, updates: list[dict[str, Any]]) -> None
@@ -2723,7 +2790,7 @@ only one band should be changed.
 
 ### update_property
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L4863)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L4910)
 
 ```text
 update_property(self, object_name: str, property_name: str, new_value: str | None, /, *, object_class: ClassEnum, scenario: str | None=None, band: str | int | None=None, collection: CollectionEnum | None=None, parent_class: ClassEnum | None=None, parent_object_name: str | None=None) -> None
@@ -2765,27 +2832,30 @@ and text metadata are preserved.
 
 ### update_scenario
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L5013)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L5060)
 
 ```text
 update_scenario(self, scenario_name: str, /, *, new_name: str | None=None, new_category: str | None=None, new_description: str | None=None) -> None
 ```
 
-Update a scenario's properties.
+Update a scenario's name, category, and/or description. Unspecified fields
+remain unchanged.
 
 ### update_text
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L5025)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L5072)
 
 ```text
 update_text(self, data_id: int, text_value: str, /, *, class_id: int) -> None
 ```
 
-Update text data for a property data record.
+Replace the value of the text record identified by `data_id` and `class_id`,
+preserving its other fields. Raises `NotFoundError` if no matching text record
+exists.
 
 ### validate_value_by_rule
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L5037)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L5084)
 
 ```text
 validate_value_by_rule(value: SQLiteValue, validation_rule: str) -> ValidationResult
@@ -2810,7 +2880,7 @@ True
 
 ### validate_database
 
-[Source](https://github.com/NatLabRockies/plexosdb/blob/36b632a1a0dd1fd24258b2fad2ec11ebd7e6a207/src/plexosdb/db.py#L5055)
+[Source](https://github.com/NatLabRockies/plexosdb/blob/08665b7729fc1a75a6be611f3b1aaa57644ba9af/src/plexosdb/db.py#L5102)
 
 ```text
 validate_database(self, /, *, fix_issues: bool=False) -> bool
