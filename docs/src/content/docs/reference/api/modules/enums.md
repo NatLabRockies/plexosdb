@@ -26,8 +26,7 @@ Table name associated with this schema element.
 
 **Returns**
 
-- `str`
-  The underlying table name parsed from the enum value.
+- `str` The underlying table name parsed from the enum value.
 
 ###### label
 
@@ -39,8 +38,7 @@ Primary label column name for the schema element, if any.
 
 **Returns**
 
-- `str | None`
-  The label column used as a default identifier when available.
+- `str | None` The label column used as a default identifier when available.
 
 #### ClassEnum
 
@@ -64,7 +62,8 @@ plexos_class_mapping = {enum_member.name: enum_member.value for enum_member in C
 
 Enum that defines the different Plexos colections via Collection Name.
 
-Full reference: [`CollectionEnum`](/plexosdb/reference/python-api/collectionenum/).
+Full reference:
+[`CollectionEnum`](/plexosdb/reference/python-api/collectionenum/).
 
 #### PhaseEnum
 
@@ -88,7 +87,8 @@ Full reference: [`PeriodEnum`](/plexosdb/reference/python-api/periodenum/).
 
 DuckDB information_schema table types used by solution results.
 
-Full reference: [`TableTypeEnum`](/plexosdb/reference/python-api/tabletypeenum/).
+Full reference:
+[`TableTypeEnum`](/plexosdb/reference/python-api/tabletypeenum/).
 
 #### str2enum
 

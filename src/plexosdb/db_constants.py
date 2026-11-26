@@ -25,7 +25,9 @@ SQLITE_INT64_MIN = -(2**63)
 SQLITE_INT64_MAX = 2**63 - 1
 SQLITE_ASCII_CASE_FOLD = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
 SQLITE_BACKEND_KWARGS = {"in_memory"}
-SQLITE_QUERY_CHUNK_SIZE = 900
+SQLITE_QUERY_PARAMETER_LIMIT = 900
+
+
 CHECK_QUERY = "SELECT 1 FROM ${schema} ${where_clause}"
 PLEXOS_DEFAULT_SCHEMA = files("plexosdb").joinpath("schema.sql").read_text(encoding="utf-8-sig")
 PROPERTY_QUERY = files("plexosdb.sql").joinpath("object_properties.sql").read_text(encoding="utf-8-sig")

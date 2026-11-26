@@ -24,50 +24,30 @@ Type definition for property records returned by iterate_properties.
 
 **Attributes**
 
-- `parent_class : str`
-  Name of the parent class
-- `child_class : str`
-  Name of the child class
-- `parent_id : int`
-  ID of the parent object
-- `object_id : int`
-  ID of the child object
-- `name : str`
-  Name of the object
-- `category : str`
-  Category name of the object
-- `property : str`
-  Property name
-- `unit : str`
-  Unit of measurement
-- `value : float | str | None`
-  Property value
-- `band : int`
-  Band ID (defaults to 1)
-- `date_from : str | None`
-  Start date for the property
-- `date_to : str | None`
-  End date for the property
-- `text : str | None`
-  Associated text data
-- `text_class_name : str | None`
-  Class name of the text
-- `timeslice_id : str | None`
-  Name of associated timeslice
-- `datafile_name : str | None`
-  Name of associated data file
-- `datafile_id : int | None`
-  ID of associated data file
-- `variable_name : str | None`
-  Name of associated variable
-- `variable_id : int | None`
-  ID of associated variable
-- `action : str | None`
-  Action symbol
-- `scenario_name : str | None`
-  Name of associated scenario
+- `parent_class : str` Name of the parent class
+- `child_class : str` Name of the child class
+- `parent_id : int` ID of the parent object
+- `object_id : int` ID of the child object
+- `name : str` Name of the object
+- `category : str` Category name of the object
+- `property : str` Property name
+- `unit : str` Unit of measurement
+- `value : float | str | None` Property value
+- `band : int` Band ID (defaults to 1)
+- `date_from : str | None` Start date for the property
+- `date_to : str | None` End date for the property
+- `text : str | None` Associated text data
+- `text_class_name : str | None` Class name of the text
+- `timeslice_id : str | None` Name of associated timeslice
+- `datafile_name : str | None` Name of associated data file
+- `datafile_id : int | None` ID of associated data file
+- `variable_name : str | None` Name of associated variable
+- `variable_id : int | None` ID of associated variable
+- `action : str | None` Action symbol
+- `scenario_name : str | None` Name of associated scenario
 
-Full reference: [`PropertyRecord`](/plexosdb/reference/python-api/propertyrecord/).
+Full reference:
+[`PropertyRecord`](/plexosdb/reference/python-api/propertyrecord/).
 
 #### PlexosDB
 
@@ -99,22 +79,18 @@ valid XML elements into their corresponding database tables.
 
 **Parameters**
 
-- `xml_path : str | Path`
-  Path to the XML file to import data from
-- `schema: str | None`
-  SQL schema to initialize the database
-- `**kwargs : dict`
-  Additional keyword arguments to pass to the PlexosDB constructor
+- `xml_path : str | Path` Path to the XML file to import data from
+- `schema: str | None` SQL schema to initialize the database
+- `**kwargs : dict` Additional keyword arguments to pass to the PlexosDB
+  constructor
 
 **Returns**
 
-- `PlexosDB`
-  A new PlexosDB instance initialized with data from the XML file
+- `PlexosDB` A new PlexosDB instance initialized with data from the XML file
 
 **Raises**
 
-- `FileNotFoundError`
-  If the specified XML file does not exist
+- `FileNotFoundError` If the specified XML file does not exist
 
 **See Also**
 
@@ -125,18 +101,18 @@ valid XML elements into their corresponding database tables.
 
 **Notes**
 
-XML text is bound without Python literal evaluation. Text columns preserve
-their XML content; numeric columns use SQLite's affinity and precision
-rules. In particular, integers outside SQLite's signed 64-bit range may
-be stored as REAL and lose precision. Boolean words are converted to 0/1
-only for columns declared as BIT. Empty XML elements bind as NULL.
+XML text is bound without Python literal evaluation. Text columns preserve their
+XML content; numeric columns use SQLite's affinity and precision rules. In
+particular, integers outside SQLite's signed 64-bit range may be stored as REAL
+and lose precision. Boolean words are converted to 0/1 only for columns declared
+as BIT. Empty XML elements bind as NULL.
 
 This method groups records by their column structure to handle varying record
 formats in the XML data. Each group of records with consistent structure is
 processed separately to avoid SQL errors from column mismatches.
 
-This constructor assumes we are creating a new database. If you want to add
-data to an existing database, you should use other methods.
+This constructor assumes we are creating a new database. If you want to add data
+to an existing database, you should use other methods.
 
 **Examples**
 
@@ -154,24 +130,20 @@ add_attribute(self, object_class: ClassEnum, /, object_name: str, *, attribute_n
 
 Add attribute to a given object.
 
-Attributes are different from properties. They live on a separate table
-and are mostly used for model configuration.
+Attributes are different from properties. They live on a separate table and are
+mostly used for model configuration.
 
 **Parameters**
 
-- `object_class`
-  ClassEnum from the object to be added. E.g., for generators class_id=ClassEnum.Generators
-- `object_name : str`
-  Name to be added to the object
-- `attribute_name`
-  Valid name of the attribute to be added for the given class
-- `attribute_value`
-  Value to be added to the attribute
+- `object_class` ClassEnum from the object to be added. E.g., for generators
+  class_id=ClassEnum.Generators
+- `object_name : str` Name to be added to the object
+- `attribute_name` Valid name of the attribute to be added for the given class
+- `attribute_value` Value to be added to the attribute
 
 **Returns**
 
-- `int`
-  attribute_id
+- `int` attribute_id
 
 ###### add_band
 
@@ -183,12 +155,9 @@ Add a band to a property data record.
 
 **Parameters**
 
-- `data_id : int`
-  ID of the data record to add the band to
-- `band_id : int`
-  ID of the band to add
-- `state : int | None, optional`
-  State value, by default None
+- `data_id : int` ID of the data record to add the band to
+- `band_id : int` ID of the band to add
+- `state : int | None, optional` State value, by default None
 
 ###### add_category
 
@@ -203,15 +172,13 @@ it returns the ID of the existing category.
 
 **Parameters**
 
-- `class_name : ClassEnum`
-  Class enumeration for the category, e.g., for generators use ClassEnum.Generator
-- `name : str`
-  Name of the category to be added
+- `class_name : ClassEnum` Class enumeration for the category, e.g., for
+  generators use ClassEnum.Generator
+- `name : str` Name of the category to be added
 
 **Returns**
 
-- `int`
-  The ID of the created or existing category
+- `int` The ID of the created or existing category
 
 **See Also**
 
@@ -223,8 +190,8 @@ it returns the ID of the existing category.
 **Notes**
 
 The database schema does not enforce uniqueness on the `class_id`, which means
-multiple categories with the same name can exist for different classes. The category's
-unique identifier is automatically handled by the database.
+multiple categories with the same name can exist for different classes. The
+category's unique identifier is automatically handled by the database.
 
 **Examples**
 
@@ -285,28 +252,25 @@ add_datafile_tag(self, data_id: int, file_path: str, /, *, description: str | No
 
 Add a Data File tag to a property data record.
 
-Creates a link between a property data record and a DataFile object
-by finding the DataFile object that has a Filename property matching
-the provided file path.
+Creates a link between a property data record and a DataFile object by finding
+the DataFile object that has a Filename property matching the provided file
+path.
 
 **Parameters**
 
-- `data_id : int`
-  The data ID of the property to tag
-- `file_path : str`
-  The file path to link to, must match a DataFile's Filename property
-- `description : str, optional`
-  Optional description for the tag (currently unused)
+- `data_id : int` The data ID of the property to tag
+- `file_path : str` The file path to link to, must match a DataFile's Filename
+  property
+- `description : str, optional` Optional description for the tag (currently
+  unused)
 
 **Returns**
 
-- `int`
-  The data_id that was tagged
+- `int` The data_id that was tagged
 
 **Raises**
 
-- `ValueError`
-  If no DataFile with the matching file path is found
+- `ValueError` If no DataFile with the matching file path is found
 
 ###### add_membership
 
@@ -316,25 +280,21 @@ add_membership(self, parent_class_enum: ClassEnum, child_class_enum: ClassEnum, 
 
 Add a membership between two objects for a given collection.
 
-Creates a relationship between parent and child objects within the specified collection.
+Creates a relationship between parent and child objects within the specified
+collection.
 
 **Parameters**
 
-- `parent_class_enum : ClassEnum`
-  Class enumeration of the parent object
-- `child_class_enum : ClassEnum`
-  Class enumeration of the child object
-- `parent_object_name : str`
-  Name of the parent object
-- `child_object_name : str`
-  Name of the child object
-- `collection_enum : CollectionEnum`
-  Collection enumeration defining the relationship type
+- `parent_class_enum : ClassEnum` Class enumeration of the parent object
+- `child_class_enum : ClassEnum` Class enumeration of the child object
+- `parent_object_name : str` Name of the parent object
+- `child_object_name : str` Name of the child object
+- `collection_enum : CollectionEnum` Collection enumeration defining the
+  relationship type
 
 **Returns**
 
-- `int`
-  ID of the created membership
+- `int` ID of the created membership
 
 **See Also**
 
@@ -345,8 +305,8 @@ Creates a relationship between parent and child objects within the specified col
 
 **Notes**
 
-This method establishes relationships between objects in the PLEXOS model.
-The database enforces uniqueness for parent-child-collection combinations.
+This method establishes relationships between objects in the PLEXOS model. The
+database enforces uniqueness for parent-child-collection combinations.
 
 **Examples**
 
@@ -372,26 +332,23 @@ This method is much more efficient than calling `add_membership` multiple times.
 
 **Parameters**
 
-- `records : list[dict[str, int]]`
-  List of membership records. Each record should be a dictionary with these fields:
+- `records : list[dict[str, int]]` List of membership records. Each record
+  should be a dictionary with these fields:
   - 'parent_class_id': int - ID of the parent class
   - 'parent_object_id': int - ID of the parent object
   - 'collection_id': int - ID of the collection
   - 'child_class_id': int - ID of the child class
   - 'child_object_id': int - ID of the child object
-- `chunksize : int, optional`
-  Number of records to process in each batch, by default 10_000.
-  Useful for controlling memory usage with large datasets.
+- `chunksize : int, optional` Number of records to process in each batch, by
+  default 10_000. Useful for controlling memory usage with large datasets.
 
 **Returns**
 
-- `bool`
-  True if the operation was successful
+- `bool` True if the operation was successful
 
 **Raises**
 
-- `KeyError`
-  If any records are missing required fields
+- `KeyError` If any records are missing required fields
 
 **See Also**
 
@@ -459,32 +416,29 @@ add_object(self, class_enum: ClassEnum, /, name: str, *, description: str | None
 
 Add an object to the database and append a system membership.
 
-Creates a new object in the database with the given name and class. Automatically
-creates a system membership for the object.
+Creates a new object in the database with the given name and class.
+Automatically creates a system membership for the object.
 
 **Parameters**
 
-- `name : str`
-  Name of the object to be added
-- `class_enum : ClassEnum`
-  Class enumeration of the object, e.g., ClassEnum.Generator for a generator object
-- `category : str, optional`
-  Category of the object, by default "-"
-- `description : str | None, optional`
-  Description of the object, by default None
+- `name : str` Name of the object to be added
+- `class_enum : ClassEnum` Class enumeration of the object, e.g.,
+  ClassEnum.Generator for a generator object
+- `category : str, optional` Category of the object, by default "-"
+- `description : str | None, optional` Description of the object, by default
+  None
 - `collection_enum : CollectionEnum | None | Literal[False] = None, optional`
-  Collection for the system membership. If None, a default collection is determined
-  based on the class, by default None
+  Collection for the system membership. If None, a default collection is
+  determined based on the class, by default None
 
 **Returns**
 
-- `int`
-  ID of the created object
+- `int` ID of the created object
 
 **Raises**
 
-- `sqlite.IntegrityError`
-  If an object is inserted without a unique name/class pair
+- `sqlite.IntegrityError` If an object is inserted without a unique name/class
+  pair
 
 **See Also**
 
@@ -496,7 +450,8 @@ creates a system membership for the object.
 **Notes**
 
 All objects need to have a system membership. If you want to add additional
-membership(s) to other object(s), consider `add_membership` or `add_memberships`.
+membership(s) to other object(s), consider `add_membership` or
+`add_memberships`.
 
 The database enforces uniqueness on the combination of name and class_id.
 
@@ -517,18 +472,16 @@ add_objects(self, class_enum: ClassEnum, *object_names: str, category: str | Non
 
 Add multiple objects of the same class to the database in bulk.
 
-This method efficiently adds multiple objects to the database in a single operation,
-which is much more performant than calling add_object() multiple times. It also
-creates system memberships for all objects in bulk.
+This method efficiently adds multiple objects to the database in a single
+operation, which is much more performant than calling add_object() multiple
+times. It also creates system memberships for all objects in bulk.
 
 **Parameters**
 
-- `object_names : Iterable[str]`
-  Names of the objects to be added
-- `class_enum : ClassEnum`
-  Class enumeration of the objects
-- `category : str | None, optional`
-  Category of the objects, by default None (which uses "-" as default category)
+- `object_names : Iterable[str]` Names of the objects to be added
+- `class_enum : ClassEnum` Class enumeration of the objects
+- `category : str | None, optional` Category of the objects, by default None
+  (which uses "-" as default category)
 
 **Returns**
 
@@ -560,33 +513,31 @@ add_properties_from_records(self, records: list[dict[str, Any]], /, *, object_cl
 Bulk insert multiple properties from a list of records, with optional text data.
 
 Efficiently adds multiple properties to multiple objects in batches using
-transactions, which is significantly faster than calling add_property repeatedly.
+transactions, which is significantly faster than calling add_property
+repeatedly.
 
-Each record should contain an 'name' field and property-value pairs.
-If records contain 'datafile_text' or 'timeslice' fields, that data will be
-automatically attached to the property data records.
+Each record should contain an 'name' field and property-value pairs. If records
+contain 'datafile_text' or 'timeslice' fields, that data will be automatically
+attached to the property data records.
 
 All properties are automatically marked as dynamic and enabled in the database.
 
 **Parameters**
 
-- `records : list[dict]`
-  List of records where each record is a dictionary with:
+- `records : list[dict]` List of records where each record is a dictionary with:
   - 'name': str - Name of the object
   - property1: value1, property2: value2, ... - Property name-value pairs
   - 'datafile_text': str (optional) - File path text for DataFile
   - 'timeslice': str (optional) - Timeslice name
-- `object_class : ClassEnum`
-  Class enumeration of the objects (e.g., ClassEnum.Generator)
-- `parent_class : ClassEnum, optional`
-  Parent class enumeration, by default ClassEnum.System
-- `collection : CollectionEnum`
-  Collection enumeration for the properties (e.g., CollectionEnum.Generators)
-- `scenario : str`
-  Scenario name to associate with all properties
-- `chunksize : int, optional`
-  Number of records to process in each batch to control memory usage,
-  by default 10_000
+- `object_class : ClassEnum` Class enumeration of the objects (e.g.,
+  ClassEnum.Generator)
+- `parent_class : ClassEnum, optional` Parent class enumeration, by default
+  ClassEnum.System
+- `collection : CollectionEnum` Collection enumeration for the properties (e.g.,
+  CollectionEnum.Generators)
+- `scenario : str` Scenario name to associate with all properties
+- `chunksize : int, optional` Number of records to process in each batch to
+  control memory usage, by default 10_000
 
 **Returns**
 
@@ -594,10 +545,8 @@ All properties are automatically marked as dynamic and enabled in the database.
 
 **Raises**
 
-- `ValueError`
-  If records are improperly formatted or missing required fields
-- `KeyError`
-  If an object name doesn't exist in the database
+- `ValueError` If records are improperly formatted or missing required fields
+- `KeyError` If an object name doesn't exist in the database
 
 **See Also**
 
@@ -608,8 +557,8 @@ All properties are automatically marked as dynamic and enabled in the database.
 
 **Notes**
 
-This method uses SQLite transactions to ensure all insertions are atomic.
-If an error occurs during processing, the entire transaction is rolled back.
+This method uses SQLite transactions to ensure all insertions are atomic. If an
+error occurs during processing, the entire transaction is rolled back.
 
 Properties are inserted directly using SQL for optimal performance, and all
 added properties are automatically marked as dynamic and enabled.
@@ -647,28 +596,23 @@ add_attributes_from_records(self, records: list[dict[str, Any]], /, *, object_cl
 
 Bulk insert attribute values for objects.
 
-Efficiently adds multiple object-level attribute values in batches.
-This method is much more efficient than calling `add_attribute` repeatedly.
+Efficiently adds multiple object-level attribute values in batches. This method
+is much more efficient than calling `add_attribute` repeatedly.
 
-Each record should contain:
-    - 'name': object name
-    - 'attribute': attribute name
-    - 'value': attribute value
+Each record should contain: - 'name': object name - 'attribute': attribute
+name - 'value': attribute value
 
-Alternatively, records may be provided in the following format:
-    - {'name': ..., 'Attr1': val1, 'Attr2': val2}
+Alternatively, records may be provided in the following format: - {'name': ...,
+'Attr1': val1, 'Attr2': val2}
 
-Optional:
-    - 'state'
+Optional: - 'state'
 
 **Parameters**
 
-- `records : list[dict[str, Any]]`
-  List of attribute records in explicit or wide format.
-- `object_class : ClassEnum`
-  Class of the objects.
-- `chunksize : int, optional`
-  Batch size for inserts, by default 10_000.
+- `records : list[dict[str, Any]]` List of attribute records in explicit or wide
+  format.
+- `object_class : ClassEnum` Class of the objects.
+- `chunksize : int, optional` Batch size for inserts, by default 10_000.
 
 **Returns**
 
@@ -700,50 +644,43 @@ add_property(self, object_class_enum: ClassEnum, /, object_name: str, name: str,
 
 Add a property for a given object in the database.
 
-Adds a property with the specified value to an object, optionally associating
-it with a scenario, band, date range, datafile text, and timeslice data.
+Adds a property with the specified value to an object, optionally associating it
+with a scenario, band, date range, datafile text, and timeslice data.
 
 **Parameters**
 
-- `object_class_enum : ClassEnum`
-  Class enumeration of the object
-- `object_name : str`
-  Name of the object to add the property to
-- `name : str`
-  Name of the property to add
-- `value : str | int | float`
-  Value to assign to the property
-- `scenario : str | None, optional`
-  Name of the scenario to associate with this property, by default None
-- `band : str | int | None, optional`
-  Band to associate with this property, by default None
-- `date_from : datetime | None, optional`
-  Start date for this property, by default None
-- `date_to : datetime | None, optional`
-  End date for this property, by default None
-- `datafile_text : str | None, optional`
-  File path text to associate with this property (for DataFile objects), by default None
-- `timeslice : str | None, optional`
-  Timeslice name to associate with this property, by default None
-- `collection_enum : CollectionEnum | None, optional`
-  Collection enumeration for the property. If None, a default is determined
-  based on the object class, by default None
-- `parent_class_enum : ClassEnum | None, optional`
-  Class enumeration of the parent object. If None, defaults to ClassEnum.System,
-  by default None
-- `parent_object_name : str | None, optional`
-  Name of the parent object. If None, membership is resolved from
-  `parent_class_enum`, `collection_enum`, and `object_name`.
+- `object_class_enum : ClassEnum` Class enumeration of the object
+- `object_name : str` Name of the object to add the property to
+- `name : str` Name of the property to add
+- `value : str | int | float` Value to assign to the property
+- `scenario : str | None, optional` Name of the scenario to associate with this
+  property, by default None
+- `band : str | int | None, optional` Band to associate with this property, by
+  default None
+- `date_from : datetime | None, optional` Start date for this property, by
+  default None
+- `date_to : datetime | None, optional` End date for this property, by default
+  None
+- `datafile_text : str | None, optional` File path text to associate with this
+  property (for DataFile objects), by default None
+- `timeslice : str | None, optional` Timeslice name to associate with this
+  property, by default None
+- `collection_enum : CollectionEnum | None, optional` Collection enumeration for
+  the property. If None, a default is determined based on the object class, by
+  default None
+- `parent_class_enum : ClassEnum | None, optional` Class enumeration of the
+  parent object. If None, defaults to ClassEnum.System, by default None
+- `parent_object_name : str | None, optional` Name of the parent object. If
+  None, membership is resolved from `parent_class_enum`, `collection_enum`, and
+  `object_name`.
 
 **Returns**
 
-- `int`
-  ID of the created property data record
+- `int` ID of the created property data record
 
 **Raises**
 
-- `NameError`
-  If the property name does not exist for the specified collection
+- `NameError` If the property name does not exist for the specified collection
   If the object name does not exist
 
 **See Also**
@@ -760,8 +697,8 @@ it with a scenario, band, date range, datafile text, and timeslice data.
 
 The method validates that the property name is valid for the given collection.
 If a scenario is provided but doesn't exist, it will be created automatically.
-The datafile_text parameter stores file path metadata for DataFile objects.
-The timeslice parameter stores timeslice name metadata.
+The datafile_text parameter stores file path metadata for DataFile objects. The
+timeslice parameter stores timeslice name metadata.
 
 **Examples**
 
@@ -783,10 +720,8 @@ Add a scenario object in the database.
 
 **Parameters**
 
-- `name: str`
-  Name of the scenario
-- `category: str | None`
-  Name of the category for the scenario
+- `name: str` Name of the scenario
+- `category: str | None` Name of the category for the scenario
 
 **See Also**
 
@@ -811,41 +746,36 @@ add_report(self, /, *, object_name: str, property: str, collection: CollectionEn
 
 Add an output property configuration to an existing report.
 
-Adds a property and its output options to the specified ``Report`` object.
-The report object must already exist; call `add_object` first only when
-creating a new report object. Reports define what data will be available for
+Adds a property and its output options to the specified `Report` object. The
+report object must already exist; call `add_object` first only when creating a
+new report object. Reports define what data will be available for
 post-processing after simulation runs.
 
 **Parameters**
 
-- `object_name : str`
-  Name of the existing report object to add the configuration to
-- `property : str`
-  Name of the property to report on
-- `collection : CollectionEnum`
-  Collection enumeration that contains the property
-- `parent_class : ClassEnum`
-  Parent class enumeration for the collection
-- `child_class : ClassEnum`
-  Child class enumeration for the collection
-- `phase_id : int, optional`
-  Phase ID for the report (1=LT Plan, 2=PASA, 3=MT Schedule, 4=ST Schedule),
-  by default 4 (ST Schedule)
-- `report_period : bool | None, optional`
-  Whether to report period data, by default None
-- `report_summary : bool | None, optional`
-  Whether to report summary data, by default True
-- `report_statistics : bool | None, optional`
-  Whether to report statistics, by default None
-- `report_samples : bool | None, optional`
-  Whether to report samples, by default None
-- `write_flat_files : bool, optional`
-  Whether to output flat files, by default False
+- `object_name : str` Name of the existing report object to add the
+  configuration to
+- `property : str` Name of the property to report on
+- `collection : CollectionEnum` Collection enumeration that contains the
+  property
+- `parent_class : ClassEnum` Parent class enumeration for the collection
+- `child_class : ClassEnum` Child class enumeration for the collection
+- `phase_id : int, optional` Phase ID for the report (1=LT Plan, 2=PASA, 3=MT
+  Schedule, 4=ST Schedule), by default 4 (ST Schedule)
+- `report_period : bool | None, optional` Whether to report period data, by
+  default None
+- `report_summary : bool | None, optional` Whether to report summary data, by
+  default True
+- `report_statistics : bool | None, optional` Whether to report statistics, by
+  default None
+- `report_samples : bool | None, optional` Whether to report samples, by default
+  None
+- `write_flat_files : bool, optional` Whether to output flat files, by default
+  False
 
 **Raises**
 
-- `NameError`
-  If the specified property does not exist for the collection
+- `NameError` If the specified property does not exist for the collection
 
 **See Also**
 
@@ -880,22 +810,17 @@ Add text data to a property data record.
 
 **Parameters**
 
-- `text_class : ClassEnum`
-  Name of the Text class to be added
-- `text_value : str`
-  Value of the text to be added
-- `data_id : int`
-  Data to be tagged with the Text object
+- `text_class : ClassEnum` Name of the Text class to be added
+- `text_value : str` Value of the text to be added
+- `data_id : int` Data to be tagged with the Text object
 
 **Raises**
 
-- `AssertionError`
-  If the class does not exist
+- `AssertionError` If the class does not exist
 
 **Returns**
 
-- `bool`
-  True if the query was succesfull
+- `bool` True if the query was succesfull
 
 ###### add_time_slice
 
@@ -962,31 +887,28 @@ create_schema(self, schema: str | None=None, *, seed_defaults: bool=False, versi
 
 Create database schema from SQL script.
 
-Initializes the database schema by executing SQL statements, either from
-the default schema or from a provided schema string. Optionally, this can
-preload a versioned master template into the new schema.
+Initializes the database schema by executing SQL statements, either from the
+default schema or from a provided schema string. Optionally, this can preload a
+versioned master template into the new schema.
 
 **Parameters**
 
-- `schema : str | None, optional`
-  Direct SQL schema content to execute. If None, uses the default schema,
-  by default None
-- `seed_defaults : bool, optional`
-  If True, seed minimal classes/collections/System object after schema
-  creation so workflows like ``add_object`` work immediately on a fresh
-  database without loading XML. Mutually exclusive with ``version``;
-  passing both raises ``ValueError``, by default False
-- `version : int | str | tuple[int, ...] | None, optional`
-  PLEXOS major version used to preload the matching master template
-  from ``plexosdb/config``. Supported versions are 9, 10, 11, and 12.
-  All forms are equivalent: ``9``, ``"9.2"``, ``"v9.2R6"``, and
-  ``(9, 2, 6)`` all load the v9 master template.
-  If None, no master template is loaded.
+- `schema : str | None, optional` Direct SQL schema content to execute. If None,
+  uses the default schema, by default None
+- `seed_defaults : bool, optional` If True, seed minimal
+  classes/collections/System object after schema creation so workflows like
+  `add_object` work immediately on a fresh database without loading XML.
+  Mutually exclusive with `version`; passing both raises `ValueError`, by
+  default False
+- `version : int | str | tuple[int, ...] | None, optional` PLEXOS major version
+  used to preload the matching master template from `plexosdb/config`. Supported
+  versions are 9, 10, 11, and 12. All forms are equivalent: `9`, `"9.2"`,
+  `"v9.2R6"`, and `(9, 2, 6)` all load the v9 master template. If None, no
+  master template is loaded.
 
 **Returns**
 
-- `bool`
-  True if initialization succeeded, False if it failed
+- `bool` True if initialization succeeded, False if it failed
 
 **See Also**
 
@@ -998,10 +920,10 @@ preload a versioned master template into the new schema.
 This is typically the first method called after initializing a new PlexosDB
 instance, as it sets up the required tables for the database.
 
-Calling this method with defaults creates schema structure only; it does
-not seed lookup/model rows needed by higher-level object workflows.
-Use ``seed_defaults=True`` (or load XML / provide seeded custom schema)
-when you want methods like ``add_object`` to work immediately.
+Calling this method with defaults creates schema structure only; it does not
+seed lookup/model rows needed by higher-level object workflows. Use
+`seed_defaults=True` (or load XML / provide seeded custom schema) when you want
+methods like `add_object` to work immediately.
 
 **Examples**
 
@@ -1047,12 +969,9 @@ Removes an object-level attribute value from the database.
 
 **Parameters**
 
-- `attribute_name : str`
-  Name of the attribute to delete.
-- `object_name : str`
-  Name of the object the attribute belongs to.
-- `object_class : ClassEnum`
-  Class enumeration of the object.
+- `attribute_name : str` Name of the attribute to delete.
+- `object_name : str` Name of the object the attribute belongs to.
+- `object_class : ClassEnum` Class enumeration of the object.
 
 **Returns**
 
@@ -1060,9 +979,8 @@ Removes an object-level attribute value from the database.
 
 **Raises**
 
-- `NotFoundError`
-  If the object does not exist, the attribute is not defined for the
-  object's class or the attribute value is not assigned to the object.
+- `NotFoundError` If the object does not exist, the attribute is not defined for
+  the object's class or the attribute value is not assigned to the object.
 
 **Examples**
 
@@ -1114,7 +1032,8 @@ delete_object(self, class_enum: ClassEnum, /, *, name: str) -> None
 
 Delete an object and its memberships from the database.
 
-Default behaviour is to remove all the references of the object including memberships and data.
+Default behaviour is to remove all the references of the object including
+memberships and data.
 
 ###### delete_property
 
@@ -1124,37 +1043,31 @@ delete_property(self, object_class: ClassEnum, object_name: str, /, *, property_
 
 Delete a property from an object.
 
-Removes a specific property from an object, including all associated data
-such as tags (scenarios), text data, and date ranges. If a scenario is
-specified, only the property data associated with that scenario is deleted.
+Removes a specific property from an object, including all associated data such
+as tags (scenarios), text data, and date ranges. If a scenario is specified,
+only the property data associated with that scenario is deleted.
 
 **Parameters**
 
-- `object_class : ClassEnum`
-  Class enumeration of the object
-- `object_name : str`
-  Name of the object containing the property
-- `property_name : str`
-  Name of the property to delete
-- `collection : CollectionEnum | None, optional`
-  Collection enumeration for the property. If None, uses the default
-  collection for the object class, by default None
-- `parent_class : ClassEnum | None, optional`
-  Parent class enumeration for the property. If None, defaults to
-  ClassEnum.System, by default None
-- `parent_object_name : str | None, optional`
-  Parent object name. If None, membership is resolved by parent class,
-  child class, collection, and child object name.
-- `scenario : str | None, optional`
-  Name of the scenario to filter by. If specified, only deletes
-  property data associated with this scenario, by default None
+- `object_class : ClassEnum` Class enumeration of the object
+- `object_name : str` Name of the object containing the property
+- `property_name : str` Name of the property to delete
+- `collection : CollectionEnum | None, optional` Collection enumeration for the
+  property. If None, uses the default collection for the object class, by
+  default None
+- `parent_class : ClassEnum | None, optional` Parent class enumeration for the
+  property. If None, defaults to ClassEnum.System, by default None
+- `parent_object_name : str | None, optional` Parent object name. If None,
+  membership is resolved by parent class, child class, collection, and child
+  object name.
+- `scenario : str | None, optional` Name of the scenario to filter by. If
+  specified, only deletes property data associated with this scenario, by
+  default None
 
 **Raises**
 
-- `NotFoundError`
-  If the object does not exist
-  If the property does not exist for the object
-  If the specified scenario does not exist
+- `NotFoundError` If the object does not exist If the property does not exist
+  for the object If the specified scenario does not exist
 
 **See Also**
 
@@ -1197,24 +1110,21 @@ get_attribute_id(self, class_enum: ClassEnum, /, name: str) -> int
 
 Return the ID for a given attribute.
 
-Retrieves the unique identifier for an attribute with the specified name and class.
+Retrieves the unique identifier for an attribute with the specified name and
+class.
 
 **Parameters**
 
-- `class_enum : ClassEnum`
-  Class enumeration the category belongs to
-- `name : str`
-  Name of the attribute
+- `class_enum : ClassEnum` Class enumeration the category belongs to
+- `name : str` Name of the attribute
 
 **Returns**
 
-- `int`
-  ID of the attribute
+- `int` ID of the attribute
 
 **Raises**
 
-- `NotFoundError`
-  If the attribute does not exist for the specified class.
+- `NotFoundError` If the attribute does not exist for the specified class.
 
 ###### get_attributes
 
@@ -1226,25 +1136,20 @@ Retrieve assigned attribute values for a specific object.
 
 **Parameters**
 
-- `object_name : str`
-  Name of the object.
-- `object_class : ClassEnum`
-  Class of the object.
-- `attribute_names : str | Iterable[str] | None, optional`
-  Attribute name or names to retrieve. If omitted, retrieves all
-  assigned attribute values.
+- `object_name : str` Name of the object.
+- `object_class : ClassEnum` Class of the object.
+- `attribute_names : str | Iterable[str] | None, optional` Attribute name or
+  names to retrieve. If omitted, retrieves all assigned attribute values.
 
 **Returns**
 
-- `list[dict[str, Any]]`
-  Attribute-value records with ``name``, ``attribute``, ``value``,
-  and ``state`` keys. Returns an empty list when the object has no
+- `list[dict[str, Any]]` Attribute-value records with `name`, `attribute`,
+  `value`, and `state` keys. Returns an empty list when the object has no
   assigned attribute values.
 
 **Raises**
 
-- `NotFoundError`
-  If the object does not exist for the requested class.
+- `NotFoundError` If the object does not exist for the requested class.
 
 ###### get_category_id
 
@@ -1254,24 +1159,21 @@ get_category_id(self, class_enum: ClassEnum, /, name: str) -> int
 
 Return the ID for a given category.
 
-Retrieves the unique identifier for a category with the specified name and class.
+Retrieves the unique identifier for a category with the specified name and
+class.
 
 **Parameters**
 
-- `category : str`
-  Name of the category
-- `class_enum : ClassEnum`
-  Class enumeration the category belongs to
+- `category : str` Name of the category
+- `class_enum : ClassEnum` Class enumeration the category belongs to
 
 **Returns**
 
-- `int`
-  ID of the category
+- `int` ID of the category
 
 **Raises**
 
-- `AssertionError`
-  If the category does not exist
+- `AssertionError` If the category does not exist
 
 **See Also**
 
@@ -1296,23 +1198,20 @@ get_category_max_id(self, class_enum: ClassEnum) -> int
 
 Return the current maximum rank for a given category class.
 
-Determines the highest rank value currently assigned to any category
-of the specified class, useful for adding new categories with unique ranks.
+Determines the highest rank value currently assigned to any category of the
+specified class, useful for adding new categories with unique ranks.
 
 **Parameters**
 
-- `class_enum : ClassEnum`
-  Class enumeration to check
+- `class_enum : ClassEnum` Class enumeration to check
 
 **Returns**
 
-- `int`
-  Maximum rank value for the class's categories
+- `int` Maximum rank value for the class's categories
 
 **Raises**
 
-- `AssertionError`
-  If the query fails
+- `AssertionError` If the query fails
 
 **See Also**
 
@@ -1340,18 +1239,15 @@ Retrieves the unique identifier for the specified class enumeration.
 
 **Parameters**
 
-- `class_enum : ClassEnum`
-  Class enumeration to get the ID for
+- `class_enum : ClassEnum` Class enumeration to get the ID for
 
 **Returns**
 
-- `int`
-  ID of the class
+- `int` ID of the class
 
 **Raises**
 
-- `AssertionError`
-  If the class does not exist
+- `AssertionError` If the class does not exist
 
 **See Also**
 
@@ -1374,27 +1270,23 @@ get_collection_id(self, collection: CollectionEnum, /, parent_class_enum: ClassE
 
 Return the ID for a given collection.
 
-Retrieves the unique identifier for a collection based on its name and associated
-parent and child classes.
+Retrieves the unique identifier for a collection based on its name and
+associated parent and child classes.
 
 **Parameters**
 
-- `collection : CollectionEnum`
-  Collection enumeration to get the ID for
-- `parent_class_enum : ClassEnum`
-  Parent class enumeration for the collection
-- `child_class_enum : ClassEnum`
-  Child class enumeration for the collection
+- `collection : CollectionEnum` Collection enumeration to get the ID for
+- `parent_class_enum : ClassEnum` Parent class enumeration for the collection
+- `child_class_enum : ClassEnum` Child class enumeration for the collection
 
 **Returns**
 
-- `int`
-  ID of the collection
+- `int` ID of the collection
 
 **Raises**
 
-- `AssertionError`
-  If the collection does not exist with the specified parent and child classes
+- `AssertionError` If the collection does not exist with the specified parent
+  and child classes
 
 **See Also**
 
@@ -1420,20 +1312,17 @@ Get configuration values from the database.
 
 **Parameters**
 
-- `element : str | None, optional`
-  Configuration element to retrieve. If omitted, return all
-  configuration entries.
+- `element : str | None, optional` Configuration element to retrieve. If
+  omitted, return all configuration entries.
 
 **Returns**
 
-- `dict[str, Any] | list[dict[str, Any]]`
-  A single configuration record when ``element`` is provided, or
-  all configuration records ordered by element.
+- `dict[str, Any] | list[dict[str, Any]]` A single configuration record when
+  `element` is provided, or all configuration records ordered by element.
 
 **Raises**
 
-- `NotFoundError`
-  If the requested element does not exist.
+- `NotFoundError` If the requested element does not exist.
 
 **Examples**
 
@@ -1462,19 +1351,18 @@ Get custom columns, optionally filtered by class.
 
 **Parameters**
 
-- `class_enum : ClassEnum | None, optional`
-  Class to filter by. If omitted, return custom columns for all
-  classes, including columns without an assigned class.
+- `class_enum : ClassEnum | None, optional` Class to filter by. If omitted,
+  return custom columns for all classes, including columns without an assigned
+  class.
 
 **Returns**
 
-- `list[dict[str, Any]]`
-  Custom-column records with their database fields and the related
-  class name, when available.
+- `list[dict[str, Any]]` Custom-column records with their database fields and
+  the related class name, when available.
 
 **Examples**
 
-For a database containing a custom column assigned to ``Generator``:
+For a database containing a custom column assigned to `Generator`:
 
 ```python
 >>> custom_columns = db.get_custom_columns()
@@ -1493,27 +1381,23 @@ get_membership_id(self, /, parent_name: str, child_name: str, collection: Collec
 
 Return the ID for a given membership.
 
-Retrieves the unique identifier for a membership between parent and child objects
-in the specified collection.
+Retrieves the unique identifier for a membership between parent and child
+objects in the specified collection.
 
 **Parameters**
 
-- `parent_name : str`
-  Name of the parent object
-- `child_name : str`
-  Name of the child object
-- `collection : CollectionEnum`
-  Collection enumeration defining the relationship type
+- `parent_name : str` Name of the parent object
+- `child_name : str` Name of the child object
+- `collection : CollectionEnum` Collection enumeration defining the relationship
+  type
 
 **Returns**
 
-- `int`
-  ID of the membership
+- `int` ID of the membership
 
 **Raises**
 
-- `AssertionError`
-  If the membership does not exist
+- `AssertionError` If the membership does not exist
 
 **See Also**
 
@@ -1545,27 +1429,23 @@ By default it returns the system membership.
 
 **Parameters**
 
-- `class_enum : ClassEnum`
-  Class of the object
-- `name : str`
-  Name of the object to get its memberships.
-- `collection : CollectionEnum | None, optional`
-  Collection to filter memberships.
-- `exclude_system_membership : bool, optional`
-  If True, exclude system memberships.
+- `class_enum : ClassEnum` Class of the object
+- `name : str` Name of the object to get its memberships.
+- `collection : CollectionEnum | None, optional` Collection to filter
+  memberships.
+- `exclude_system_membership : bool, optional` If True, exclude system
+  memberships.
 
 **Returns**
 
-- `list[dict]`
-  A list of dicts representing memberships. Each tuple is structured as:
-  (parent_class_id, child_class_id, parent_object_name, child_object_name, collection_id,
-  return self.query(query_string=query_string, params=params)
-  parent_class_name, collection_name).
+- `list[dict]` A list of dicts representing memberships. Each tuple is
+  structured as: (parent_class_id, child_class_id, parent_object_name,
+  child_object_name, collection_id, return self.query(query_string=query_string,
+  params=params) parent_class_name, collection_name).
 
 **Raises**
 
-- `KeyError`
-  If any of the object_names do not exist.
+- `KeyError` If any of the object_names do not exist.
 
 ###### get_memberships_system
 
@@ -1577,21 +1457,18 @@ Retrieve memberships for the requested object names.
 
 **Parameters**
 
-- `object_names : str or list[str]`
-  Name or list of names of the objects to get their memberships.
-  You can pass multiple string arguments or a single list of strings.
-- `object_class : ClassEnum`
-  Class of the objects.
-- `collection : CollectionEnum | None, optional`
-  Collection used to filter memberships. When provided, results are
-  limited to memberships under the System parent class for that
-  collection.
+- `object_names : str or list[str]` Name or list of names of the objects to get
+  their memberships. You can pass multiple string arguments or a single list of
+  strings.
+- `object_class : ClassEnum` Class of the objects.
+- `collection : CollectionEnum | None, optional` Collection used to filter
+  memberships. When provided, results are limited to memberships under the
+  System parent class for that collection.
 
 **Returns**
 
-- `list[dict[str, Any]]`
-  Membership rows for the requested object names in ``object_class``.
-  Names that do not exist are ignored.
+- `list[dict[str, Any]]` Membership rows for the requested object names in
+  `object_class`. Names that do not exist are ignored.
 
 ###### get_metadata
 
@@ -1603,25 +1480,21 @@ Retrieve metadata for an entity, optionally filtered by class and property.
 
 **Parameters**
 
-- `entity_type : Literal["object", "membership", "data"]`
-  Type of entity whose metadata to retrieve.
-- `entity_id : int`
-  Identifier of the object, membership, or data record.
-- `class_name : str | None, optional`
-  Metadata class to filter by.
-- `property_name : str | None, optional`
-  Metadata property to filter by.
+- `entity_type : Literal["object", "membership", "data"]` Type of entity whose
+  metadata to retrieve.
+- `entity_id : int` Identifier of the object, membership, or data record.
+- `class_name : str | None, optional` Metadata class to filter by.
+- `property_name : str | None, optional` Metadata property to filter by.
 
 **Returns**
 
-- `list[dict[str, Any]]`
-  Matching metadata records with the entity ID, class, property,
-  value, and state fields. Returns an empty list when no records match.
+- `list[dict[str, Any]]` Matching metadata records with the entity ID, class,
+  property, value, and state fields. Returns an empty list when no records
+  match.
 
 **Raises**
 
-- `ValueError`
-  If ``entity_type`` is not ``"object"``, ``"membership"``, or ``"data"``.
+- `ValueError` If `entity_type` is not `"object"`, `"membership"`, or `"data"`.
 
 **Examples**
 
@@ -1647,31 +1520,25 @@ optionally filtered by property names, parent class, collection, and category.
 
 **Parameters**
 
-- `class_enum : ClassEnum`
-  Class enumeration of the object
-- `name : str`
-  Name of the object to retrieve data IDs for
-- `property_names : str | Iterable[str] | None, optional`
-  Names of specific properties to filter by, by default None
-- `parent_class_enum : ClassEnum, optional`
-  Parent class enumeration, by default ClassEnum.System
-- `collection_enum : CollectionEnum | None, optional`
-  Collection enumeration to filter by, by default None
-  (if not specified, the default collection for the class is used)
-- `category : str | None, optional`
-  Category to filter by, by default None
+- `class_enum : ClassEnum` Class enumeration of the object
+- `name : str` Name of the object to retrieve data IDs for
+- `property_names : str | Iterable[str] | None, optional` Names of specific
+  properties to filter by, by default None
+- `parent_class_enum : ClassEnum, optional` Parent class enumeration, by default
+  ClassEnum.System
+- `collection_enum : CollectionEnum | None, optional` Collection enumeration to
+  filter by, by default None (if not specified, the default collection for the
+  class is used)
+- `category : str | None, optional` Category to filter by, by default None
 
 **Returns**
 
-- `list[int]`
-  List of data_id values that match the criteria
+- `list[int]` List of data_id values that match the criteria
 
 **Raises**
 
-- `KeyError`
-  If the specified category does not exist
-- `NameError`
-  If any specified property does not exist for the collection
+- `KeyError` If the specified category does not exist
+- `NameError` If any specified property does not exist for the collection
 
 **See Also**
 
@@ -1698,49 +1565,43 @@ get_object_properties(self, class_enum: ClassEnum, /, name: str, property_names:
 
 Retrieve properties for a specific object.
 
-Gets all properties for the specified object, optionally filtered by
-property names, collection, and category.
+Gets all properties for the specified object, optionally filtered by property
+names, collection, and category.
 
 **Parameters**
 
-- `class_enum : ClassEnum`
-  Class enumeration of the object
-- `name : str`
-  Name of the object to retrieve properties for
-- `property_names : str | Iterable[str] | None, optional`
-  Names of specific properties to retrieve. If None, gets all properties, by default None
-- `parent_class_enum : ClassEnum | None, optional`
-  Parent class enumeration for filtering properties, by default None
-  (defaults to ClassEnum.System if not specified)
-- `collection_enum : CollectionEnum | None, optional`
-  Collection enumeration to filter properties by, by default None
-  (if not specified, the default collection for the class is used)
-- `category : str | None, optional`
-  Category to filter by, by default None
-- `scenario : str | Iterable[str] | None, optional`
-  Scenario name(s) to filter properties by, by default None
-- `scenario_category : str | Iterable[str] | None, optional`
-  Scenario category name(s) to filter properties by, by default None
+- `class_enum : ClassEnum` Class enumeration of the object
+- `name : str` Name of the object to retrieve properties for
+- `property_names : str | Iterable[str] | None, optional` Names of specific
+  properties to retrieve. If None, gets all properties, by default None
+- `parent_class_enum : ClassEnum | None, optional` Parent class enumeration for
+  filtering properties, by default None (defaults to ClassEnum.System if not
+  specified)
+- `collection_enum : CollectionEnum | None, optional` Collection enumeration to
+  filter properties by, by default None (if not specified, the default
+  collection for the class is used)
+- `category : str | None, optional` Category to filter by, by default None
+- `scenario : str | Iterable[str] | None, optional` Scenario name(s) to filter
+  properties by, by default None
+- `scenario_category : str | Iterable[str] | None, optional` Scenario category
+  name(s) to filter properties by, by default None
 
 **Returns**
 
-- `list[PropertyRecord]`
-  List of dictionaries containing property information.
-  See PropertyRecord TypedDict for full field definitions including:
-  name, property, value, unit, category, scenario_name, etc.
+- `list[PropertyRecord]` List of dictionaries containing property information.
+  See PropertyRecord TypedDict for full field definitions including: name,
+  property, value, unit, category, scenario_name, etc.
 
 **Raises**
 
-- `NoPropertiesError`
-  If the specified object does not have any properties
-- `NameError`
-  If the specified property does not exist for the collection
-- `KeyError`
-  If the specified category does not exist
+- `NoPropertiesError` If the specified object does not have any properties
+- `NameError` If the specified property does not exist for the collection
+- `KeyError` If the specified category does not exist
 
 **See Also**
 
-- `iterate_properties` : Iterate through properties with efficient memory handling
+- `iterate_properties` : Iterate through properties with efficient memory
+  handling
 - `check_property_exists` : Check if properties exist for a collection
 - `list_valid_properties` : List valid property names for a collection
 - `has_properties` : Check if an object has any properties
@@ -1772,24 +1633,18 @@ optionally filtering by category.
 
 **Parameters**
 
-- `object_name : str`
-  Name of the object
-- `class_enum : ClassEnum`
-  Class enumeration of the object
-- `category : str | None, optional`
-  Category name to filter by, by default None
+- `object_name : str` Name of the object
+- `class_enum : ClassEnum` Class enumeration of the object
+- `category : str | None, optional` Category name to filter by, by default None
 
 **Returns**
 
-- `int`
-  ID of the object
+- `int` ID of the object
 
 **Raises**
 
-- `AssertionError`
-  If the object does not exist
-- `KeyError`
-  If no object matches the criteria
+- `AssertionError` If the object does not exist
+- `KeyError` If no object matches the criteria
 
 **See Also**
 
@@ -1836,24 +1691,20 @@ collection and classes.
 
 **Parameters**
 
-- `property_name : str`
-  Name of the property
-- `collection_enum : CollectionEnum`
-  Collection enumeration the property belongs to
-- `child_class_enum : ClassEnum`
-  Child class enumeration for the property
-- `parent_class_enum : ClassEnum | None, optional`
-  Parent class enumeration for the property, by default None
+- `property_name : str` Name of the property
+- `collection_enum : CollectionEnum` Collection enumeration the property belongs
+  to
+- `child_class_enum : ClassEnum` Child class enumeration for the property
+- `parent_class_enum : ClassEnum | None, optional` Parent class enumeration for
+  the property, by default None
 
 **Returns**
 
-- `int`
-  ID of the property
+- `int` ID of the property
 
 **Raises**
 
-- `AssertionError`
-  If the property does not exist
+- `AssertionError` If the property does not exist
 
 **See Also**
 
@@ -1908,18 +1759,15 @@ Retrieves the object id for a scenario based on its name.
 
 **Parameters**
 
-- `name : str`
-  Name of the scenario
+- `name : str` Name of the scenario
 
 **Returns**
 
-- `int`
-  ID of the property
+- `int` ID of the property
 
 **Raises**
 
-- `AssertionError`
-  If the property does not exist
+- `AssertionError` If the property does not exist
 
 **Examples**
 
@@ -1942,15 +1790,12 @@ Retrieve text data associated with a property data record.
 
 **Parameters**
 
-- `data_id : int`
-  Property data record identifier.
-- `class_id : int | None, optional`
-  Limit results to a text class.
+- `data_id : int` Property data record identifier.
+- `class_id : int | None, optional` Limit results to a text class.
 
 **Returns**
 
-- `list[dict[str, Any]]`
-  Matching text records ordered by class ID.
+- `list[dict[str, Any]]` Matching text records ordered by class ID.
 
 **Examples**
 
@@ -1971,8 +1816,7 @@ Get details for a specific unit.
 
 **Raises**
 
-- `NotFoundError`
-  If the unit does not exist.
+- `NotFoundError` If the unit does not exist.
 
 **Examples**
 
@@ -1999,31 +1843,26 @@ has_properties(self, class_enum: ClassEnum, /, name: str, *, collection_enum: Co
 
 Check if the given object has any properties associated with it.
 
-Determines whether an object has any properties in the database that match
-the specified criteria, optionally filtered by collection and category.
+Determines whether an object has any properties in the database that match the
+specified criteria, optionally filtered by collection and category.
 
 **Parameters**
 
-- `class_enum : ClassEnum`
-  Class enumeration of the object
-- `name : str`
-  Name of the object to check
-- `collection_enum : CollectionEnum | None, optional`
-  Collection enumeration to filter by, by default None
-  (if not specified, the default collection for the class is used)
-- `category : str | None, optional`
-  Category to filter by, by default None
+- `class_enum : ClassEnum` Class enumeration of the object
+- `name : str` Name of the object to check
+- `collection_enum : CollectionEnum | None, optional` Collection enumeration to
+  filter by, by default None (if not specified, the default collection for the
+  class is used)
+- `category : str | None, optional` Category to filter by, by default None
 
 **Returns**
 
-- `bool`
-  True if the object has at least one property matching the criteria,
+- `bool` True if the object has at least one property matching the criteria,
   False otherwise
 
 **Raises**
 
-- `KeyError`
-  If the specified category does not exist
+- `KeyError` If the specified category does not exist
 
 **See Also**
 
@@ -2059,49 +1898,45 @@ atomic across the selected tables.
 iterate_properties(self, /, *, class_enum: ClassEnum | None=None, object_names: str | Iterable[str] | None=None, property_names: str | Iterable[str] | None=None, parent_class: ClassEnum | None=None, collection: CollectionEnum | None=None, category: str | None=None, scenario: str | Iterable[str] | None=None, scenario_category: str | Iterable[str] | None=None, batch_size: int=1000) -> Iterator[PropertyRecord]
 ```
 
-Iterate through properties with chunked processing to handle large datasets efficiently.
+Iterate through properties with chunked processing to handle large datasets
+efficiently.
 
-This method efficiently retrieves properties for multiple objects of the specified class,
-processing data in chunks to minimize memory usage. Results are yielded one at a time
-as dictionaries.
+This method efficiently retrieves properties for multiple objects of the
+specified class, processing data in chunks to minimize memory usage. Results are
+yielded one at a time as dictionaries.
 
 **Parameters**
 
-- `class_enum : ClassEnum | None, optional`
-  Class enumeration of the objects to retrieve properties for
-- `object_names : str | Iterable[str] | None, optional`
-  Names of specific objects to retrieve properties for. If None, gets properties
-  for all objects of the specified class
-- `property_names : str | Iterable[str] | None, optional`
-  Names of specific properties to retrieve. If None, gets all properties
-- `parent_class : ClassEnum | None, optional`
-  Parent class enumeration for filtering properties, defaults to ClassEnum.System
-- `collection : CollectionEnum | None, optional`
-  Collection enumeration to filter properties by
-- `category : str | None, optional`
-  Category name to filter objects by
-- `scenario : str | Iterable[str] | None, optional`
-  Scenario name(s) to filter property rows by
-- `scenario_category : str | Iterable[str] | None, optional`
-  Scenario category name(s) to filter property rows by
-- `batch_size : int, optional`
-  Number of records to process in each database query chunk, by default 1000
+- `class_enum : ClassEnum | None, optional` Class enumeration of the objects to
+  retrieve properties for
+- `object_names : str | Iterable[str] | None, optional` Names of specific
+  objects to retrieve properties for. If None, gets properties for all objects
+  of the specified class
+- `property_names : str | Iterable[str] | None, optional` Names of specific
+  properties to retrieve. If None, gets all properties
+- `parent_class : ClassEnum | None, optional` Parent class enumeration for
+  filtering properties, defaults to ClassEnum.System
+- `collection : CollectionEnum | None, optional` Collection enumeration to
+  filter properties by
+- `category : str | None, optional` Category name to filter objects by
+- `scenario : str | Iterable[str] | None, optional` Scenario name(s) to filter
+  property rows by
+- `scenario_category : str | Iterable[str] | None, optional` Scenario category
+  name(s) to filter property rows by
+- `batch_size : int, optional` Number of records to process in each database
+  query chunk, by default 1000
 
 **Yields**
 
-- `PropertyRecord`
-  Dictionary containing property information with keys such as:
-  name, property, value, unit, category, scenario_name, etc.
-  See PropertyRecord TypedDict for full field definitions.
+- `PropertyRecord` Dictionary containing property information with keys such as:
+  name, property, value, unit, category, scenario_name, etc. See PropertyRecord
+  TypedDict for full field definitions.
 
 **Raises**
 
-- `NameError`
-  If a specified property does not exist for the collection
-- `NotFoundError`
-  If specified objects or category do not exist
-- `KeyError`
-  If specified category does not exist
+- `NameError` If a specified property does not exist for the collection
+- `NotFoundError` If specified objects or category do not exist
+- `KeyError` If specified category does not exist
 
 ###### list_attributes
 
@@ -2115,18 +1950,15 @@ Retrieves the names of attributes associated with the specified class.
 
 **Parameters**
 
-- `class_enum : ClassEnum`
-  Class enumeration to list attributes
+- `class_enum : ClassEnum` Class enumeration to list attributes
 
 **Returns**
 
-- `list[str]`
-  List of attributes names
+- `list[str]` List of attributes names
 
 **Raises**
 
-- `AssertionError`
-  If the query fails
+- `AssertionError` If the query fails
 
 ###### list_categories
 
@@ -2140,18 +1972,15 @@ Retrieves the names of all categories associated with the specified class.
 
 **Parameters**
 
-- `class_enum : ClassEnum`
-  Class enumeration to list categories for
+- `class_enum : ClassEnum` Class enumeration to list categories for
 
 **Returns**
 
-- `list[str]`
-  List of category names
+- `list[str]` List of category names
 
 **Raises**
 
-- `AssertionError`
-  If the query fails
+- `AssertionError` If the query fails
 
 **See Also**
 
@@ -2177,24 +2006,22 @@ list_child_objects(self, object_name: str, /, *, parent_class: ClassEnum, child_
 
 List all child objects for a given parent object.
 
-Retrieves all child objects that have a membership relationship with the specified
-parent object, optionally filtered by child class and collection.
+Retrieves all child objects that have a membership relationship with the
+specified parent object, optionally filtered by child class and collection.
 
 **Parameters**
 
-- `object_name : str`
-  Name of the parent object
-- `parent_class : ClassEnum`
-  Class enumeration of the parent object
-- `child_class : ClassEnum | None, optional`
-  Class enumeration to filter child objects by, by default None
-- `collection : CollectionEnum | None, optional`
-  Collection enumeration to filter relationships by, by default None
+- `object_name : str` Name of the parent object
+- `parent_class : ClassEnum` Class enumeration of the parent object
+- `child_class : ClassEnum | None, optional` Class enumeration to filter child
+  objects by, by default None
+- `collection : CollectionEnum | None, optional` Collection enumeration to
+  filter relationships by, by default None
 
 **Returns**
 
-- `list[dict]`
-  List of dictionaries containing child object information with keys:
+- `list[dict]` List of dictionaries containing child object information with
+  keys:
   - object_id: ID of the child object
   - name: Name of the child object
   - class_name: Class name of the child object
@@ -2203,8 +2030,7 @@ parent object, optionally filtered by child class and collection.
 
 **Raises**
 
-- `AssertionError`
-  If the parent object does not exist
+- `AssertionError` If the parent object does not exist
 
 **See Also**
 
@@ -2260,13 +2086,11 @@ Return all classes names in the database.
 
 **Returns**
 
-- `list[str]`
-  List of valid classes names
+- `list[str]` List of valid classes names
 
 **Raises**
 
-- `AssertionError`
-  If the query fails
+- `AssertionError` If the query fails
 
 **See Also**
 
@@ -2291,15 +2115,14 @@ List all available collections in the database.
 
 **Parameters**
 
-- `parent_class : ClassEnum | None, optional`
-  Filter by parent class, by default None
-- `child_class : ClassEnum | None, optional`
-  Filter by child class, by default None
+- `parent_class : ClassEnum | None, optional` Filter by parent class, by default
+  None
+- `child_class : ClassEnum | None, optional` Filter by child class, by default
+  None
 
 **Returns**
 
-- `list[dict]`
-  List of collections with their details including id, name,
+- `list[dict]` List of collections with their details including id, name,
   parent_class, child_class, description, etc.
 
 ###### list_objects_by_class
@@ -2310,20 +2133,17 @@ list_objects_by_class(self, class_enum: ClassEnum, /, *, category: str | None=No
 
 Return all objects of a specific class.
 
-Retrieves names of all objects belonging to the specified class,
-optionally filtered by category.
+Retrieves names of all objects belonging to the specified class, optionally
+filtered by category.
 
 **Parameters**
 
-- `class_enum : ClassEnum`
-  Class enumeration to filter oRaises
-- `category : str | None, optional`
-  Category name to filter by, by default None
+- `class_enum : ClassEnum` Class enumeration to filter oRaises
+- `category : str | None, optional` Category name to filter by, by default None
 
 **Raises**
 
-- `AssertionError`
-  If the query fails
+- `AssertionError` If the query fails
 
 **See Also**
 
@@ -2333,13 +2153,11 @@ optionally filtered by category.
 
 **Returns**
 
-- `list[dict]`
-  List of object names
+- `list[dict]` List of object names
 
 **Raises**
 
-- `AssertionError`
-  If the query fails
+- `AssertionError` If the query fails
 
 **See Also**
 
@@ -2366,24 +2184,22 @@ list_parent_objects(self, object_name: str, /, *, child_class: ClassEnum, parent
 
 List all parent objects for a given child object.
 
-Retrieves all parent objects that have a membership relationship with the specified
-child object, optionally filtered by parent class and collection.
+Retrieves all parent objects that have a membership relationship with the
+specified child object, optionally filtered by parent class and collection.
 
 **Parameters**
 
-- `object_name : str`
-  Name of the child object
-- `child_class : ClassEnum`
-  Class enumeration of the child object
-- `parent_class : ClassEnum | None, optional`
-  Class enumeration to filter parent objects by, by default None
-- `collection : CollectionEnum | None, optional`
-  Collection enumeration to filter relationships by, by default None
+- `object_name : str` Name of the child object
+- `child_class : ClassEnum` Class enumeration of the child object
+- `parent_class : ClassEnum | None, optional` Class enumeration to filter parent
+  objects by, by default None
+- `collection : CollectionEnum | None, optional` Collection enumeration to
+  filter relationships by, by default None
 
 **Returns**
 
-- `list[dict]`
-  List of dictionaries containing parent object information with keys:
+- `list[dict]` List of dictionaries containing parent object information with
+  keys:
   - object_id: ID of the parent object
   - name: Name of the parent object
   - class_name: Class name of the parent object
@@ -2392,8 +2208,7 @@ child object, optionally filtered by parent class and collection.
 
 **Raises**
 
-- `AssertionError`
-  If the child object does not exist
+- `AssertionError` If the child object does not exist
 
 **See Also**
 
@@ -2453,13 +2268,11 @@ Return all scenarios in the database.
 
 **Returns**
 
-- `list[str]`
-  List of valid scenario names
+- `list[str]` List of valid scenario names
 
 **Raises**
 
-- `AssertionError`
-  If the query fails
+- `AssertionError` If the query fails
 
 **See Also**
 
@@ -2492,13 +2305,11 @@ Return all models in the database.
 
 **Returns**
 
-- `list[str]`
-  List of valid models names
+- `list[str]` List of valid models names
 
 **Raises**
 
-- `AssertionError`
-  If the query fails
+- `AssertionError` If the query fails
 
 **See Also**
 
@@ -2524,13 +2335,12 @@ List all scenarios associated with a given model.
 
 **Parameters**
 
-- `model_name : str`
-  Name of the model to list scenarios for.
+- `model_name : str` Name of the model to list scenarios for.
 
 **Returns**
 
-- `list[str]`
-  List of scenario names associated with the model. Returns an empty list if none found.
+- `list[str]` List of scenario names associated with the model. Returns an empty
+  list if none found.
 
 **Examples**
 
@@ -2569,22 +2379,20 @@ optionally filtered by parent and child classes.
 
 **Parameters**
 
-- `collection_enum : CollectionEnum`
-  Collection enumeration to list properties for
-- `parent_class_enum : ClassEnum | None, optional`
-  Parent class enumeration to filter by, by default None
-- `child_class_enum : ClassEnum | None, optional`
-  Child class enumeration to filter by, by default None
+- `collection_enum : CollectionEnum` Collection enumeration to list properties
+  for
+- `parent_class_enum : ClassEnum | None, optional` Parent class enumeration to
+  filter by, by default None
+- `child_class_enum : ClassEnum | None, optional` Child class enumeration to
+  filter by, by default None
 
 **Returns**
 
-- `list[str]`
-  List of valid property names
+- `list[str]` List of valid property names
 
 **Raises**
 
-- `AssertionError`
-  If the query fails
+- `AssertionError` If the query fails
 
 **See Also**
 
@@ -2612,27 +2420,25 @@ list_valid_properties_report(self, collection_enum: CollectionEnum, /, parent_cl
 
 Return list of valid property names for reports.
 
-Retrieves all valid property names that can be used with a specific collection filtered by parent and
-child classes.
+Retrieves all valid property names that can be used with a specific collection
+filtered by parent and child classes.
 
 **Parameters**
 
-- `collection_enum : CollectionEnum`
-  Collection enumeration to list properties for
-- `parent_class_enum : ClassEnum | None, optional`
-  Parent class enumeration to filter by, by default None
-- `child_class_enum : ClassEnum | None, optional`
-  Child class enumeration to filter by, by default None
+- `collection_enum : CollectionEnum` Collection enumeration to list properties
+  for
+- `parent_class_enum : ClassEnum | None, optional` Parent class enumeration to
+  filter by, by default None
+- `child_class_enum : ClassEnum | None, optional` Child class enumeration to
+  filter by, by default None
 
 **Returns**
 
-- `list[str]`
-  List of valid property report names
+- `list[str]` List of valid property report names
 
 **Raises**
 
-- `AssertionError`
-  If the query fails
+- `AssertionError` If the query fails
 
 **See Also**
 
@@ -2650,20 +2456,17 @@ Executes a SQL SELECT query against the database and returns the results.
 
 **Parameters**
 
-- `query_string : str`
-  SQL query to execute (SELECT statements only)
-- `params : tuple[Any, ...] | dict[str, Any] | None, optional`
-  Parameters to bind to the query, by default None
+- `query_string : str` SQL query to execute (SELECT statements only)
+- `params : tuple[Any, ...] | dict[str, Any] | None, optional` Parameters to
+  bind to the query, by default None
 
 **Returns**
 
-- `list`
-  Query results (tuples or named tuples based on initialization)
+- `list` Query results (tuples or named tuples based on initialization)
 
 **Raises**
 
-- `sqlite3.Error`
-  If a database error occurs
+- `sqlite3.Error` If a database error occurs
 
 **See Also**
 
@@ -2721,18 +2524,16 @@ to_xml(self, target_path: str | Path) -> bool
 Convert SQLite to XML format.
 
 This method takes all the tables of the SQLite database and creates the
-appropriate tags based on the column name, exporting the complete database
-as a PLEXOS-compatible XML file.
+appropriate tags based on the column name, exporting the complete database as a
+PLEXOS-compatible XML file.
 
 **Parameters**
 
-- `target_path: str | Path`
-  Path to serialize the database
+- `target_path: str | Path` Path to serialize the database
 
 **Returns**
 
-- `bool`
-  True if the creation succeeded, False if it failed
+- `bool` True if the creation succeeded, False if it failed
 
 **See Also**
 
@@ -2796,26 +2597,21 @@ Update an object's attributes.
 
 **Parameters**
 
-- `class_enum : ClassEnum`
-  Class enumeration of the object
-- `object_name : str`
-  Current name of the object to update
-- `new_name : str`
-  New name for the object
-- `new_category : str | None, optional`
-  New category for the object, by default None
-- `new_description : str | None, optional`
-  New description for the object, by default None
+- `class_enum : ClassEnum` Class enumeration of the object
+- `object_name : str` Current name of the object to update
+- `new_name : str` New name for the object
+- `new_category : str | None, optional` New category for the object, by default
+  None
+- `new_description : str | None, optional` New description for the object, by
+  default None
 
 **Returns**
 
-- `bool`
-  True if the update was successful
+- `bool` True if the update was successful
 
 **Raises**
 
-- `AssertionError`
-  If the query fails
+- `AssertionError` If the query fails
 
 **See Also**
 
@@ -2852,11 +2648,11 @@ update_properties(self, updates: list[dict[str, Any]]) -> None
 
 Update multiple matching property data records in one transaction.
 
-Each update mapping uses the selectors accepted by `update_property`.
-Unlike `update_property`, a bulk selector may match multiple data
-records; every matching record is updated. In particular, omitting
-``band`` updates all bands for the selected object, property, scenario,
-and membership. Include ``band`` when only one band should be changed.
+Each update mapping uses the selectors accepted by `update_property`. Unlike
+`update_property`, a bulk selector may match multiple data records; every
+matching record is updated. In particular, omitting `band` updates all bands for
+the selected object, property, scenario, and membership. Include `band` when
+only one band should be changed.
 
 ###### update_property
 
@@ -2868,42 +2664,35 @@ Update exactly one existing property data record.
 
 **Parameters**
 
-- `object_name : str`
-  Name of the object whose property is updated.
-- `property_name : str`
-  Name of the property to update.
-- `new_value : str | None`
-  New value to store in the property data record.
-- `object_class : ClassEnum`
-  Class of the object.
-- `scenario : str | None, optional`
-  Scenario used to select the property data record. If omitted, only
-  an unscoped property record is considered.
-- `band : str | int | None, optional`
-  Band number used to select the property data record. Strings and
-  integers are accepted. If omitted, the selector must match exactly
-  one data record or ``ValueError`` is raised.
-- `collection : CollectionEnum | None, optional`
-  Property collection. Defaults to the collection for ``object_class``.
-- `parent_class : ClassEnum | None, optional`
-  Parent class for the membership. Defaults to ``ClassEnum.System``.
-- `parent_object_name : str | None, optional`
-  Explicit parent object used to disambiguate memberships.
+- `object_name : str` Name of the object whose property is updated.
+- `property_name : str` Name of the property to update.
+- `new_value : str | None` New value to store in the property data record.
+- `object_class : ClassEnum` Class of the object.
+- `scenario : str | None, optional` Scenario used to select the property data
+  record. If omitted, only an unscoped property record is considered.
+- `band : str | int | None, optional` Band number used to select the property
+  data record. Strings and integers are accepted. If omitted, the selector must
+  match exactly one data record or `ValueError` is raised.
+- `collection : CollectionEnum | None, optional` Property collection. Defaults
+  to the collection for `object_class`.
+- `parent_class : ClassEnum | None, optional` Parent class for the membership.
+  Defaults to `ClassEnum.System`.
+- `parent_object_name : str | None, optional` Explicit parent object used to
+  disambiguate memberships.
 
 **Raises**
 
-- `NotFoundError`
-  If the object, membership, or selected property data record does not exist.
-- `NameError`
-  If ``property_name`` is invalid for the selected collection and classes.
-- `ValueError`
-  If more than one property data record matches the selectors or if
-  ``band`` is not an integer.
+- `NotFoundError` If the object, membership, or selected property data record
+  does not exist.
+- `NameError` If `property_name` is invalid for the selected collection and
+  classes.
+- `ValueError` If more than one property data record matches the selectors or if
+  `band` is not an integer.
 
 **Notes**
 
-The update changes only ``t_data.value``. Existing scenario tags, bands,
-dates, and text metadata are preserved.
+The update changes only `t_data.value`. Existing scenario tags, bands, dates,
+and text metadata are preserved.
 
 ###### update_scenario
 
@@ -2932,11 +2721,11 @@ validate_value_by_rule(value: SQLiteValue, validation_rule: str) -> ValidationRe
 
 Validate a numeric value against a PLEXOS validation rule.
 
-Supports inclusive ``Between X And Y``, ``In (X,Y,Z)``, and comparisons
-``>=X``, ``<=X``, ``<X``, and ``>X``. Surrounding whitespace is ignored.
-Empty rules accept any value. Non-numeric values, malformed rules, and
-unsupported rules return an invalid ``ValidationResult`` with an error
-message; valid results have an empty error message.
+Supports inclusive `Between X And Y`, `In (X,Y,Z)`, and comparisons `>=X`,
+`<=X`, `<X`, and `>X`. Surrounding whitespace is ignored. Empty rules accept any
+value. Non-numeric values, malformed rules, and unsupported rules return an
+invalid `ValidationResult` with an error message; valid results have an empty
+error message.
 
 **Examples**
 
@@ -2955,35 +2744,31 @@ validate_database(self, /, *, fix_issues: bool=False) -> bool
 
 Validate the packaged PLEXOS schema and database relationships.
 
-Checks that required tables and columns exist, SQLite integrity and
-foreign keys are valid, classes are consistent across objects,
-memberships, attributes, and properties, and integer-valued attributes
-marked with ``is_integer``. By default, validation does not modify the
-database. Findings are ``DatabaseValidationFinding`` instances with a
-``DatabaseValidationCategory`` and a message.
+Checks that required tables and columns exist, SQLite integrity and foreign keys
+are valid, classes are consistent across objects, memberships, attributes, and
+properties, and integer-valued attributes marked with `is_integer`. By default,
+validation does not modify the database. Findings are
+`DatabaseValidationFinding` instances with a `DatabaseValidationCategory` and a
+message.
 
 **Parameters**
 
-- `fix_issues : bool, optional`
-  If True, repair membership class IDs only when the referenced object
-  and collection agree, and only when membership findings are the sole
-  findings. Repairs are retained only if validation then passes.
-  Otherwise, only the repairs are rolled back and findings are raised.
-  An existing caller transaction remains open and is not committed or
-  rolled back; without one, successful repairs are committed.
+- `fix_issues : bool, optional` If True, repair membership class IDs only when
+  the referenced object and collection agree, and only when membership findings
+  are the sole findings. Repairs are retained only if validation then passes.
+  Otherwise, only the repairs are rolled back and findings are raised. An
+  existing caller transaction remains open and is not committed or rolled back;
+  without one, successful repairs are committed.
 
 **Returns**
 
-- `bool`
-  True when the database passes all supported checks.
+- `bool` True when the database passes all supported checks.
 
 **Raises**
 
-- `DatabaseValidationError`
-  If one or more checks fail. The exception's ``findings`` attribute
-  contains typed validation findings.
-- `TypeError`
-  If ``fix_issues`` is not a bool.
+- `DatabaseValidationError` If one or more checks fail. The exception's
+  `findings` attribute contains typed validation findings.
+- `TypeError` If `fix_issues` is not a bool.
 
 Full reference: [`PlexosDB`](/plexosdb/reference/python-api/plexosdb/).
 

@@ -7,17 +7,23 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from datetime import datetime
 from itertools import islice
-from typing import TYPE_CHECKING, Any
+from string import Template
+from typing import TYPE_CHECKING, Any, cast
 
 from loguru import logger
 
-from .db_constants import SQLITE_INT64_MIN, SQLITE_INT64_MAX
+from .db_constants import (
+    PROPERTY_QUERY,
+    SQLITE_INT64_MAX,
+    SQLITE_INT64_MIN,
+    SQLITE_QUERY_PARAMETER_LIMIT,
+)
 from .db_constants import get_sql_query as get_sql_query
 from .enums import ClassEnum
 from .exceptions import NotFoundError
 
 if TYPE_CHECKING:
-    from plexosdb import CollectionEnum, PlexosDB
+    from plexosdb import CollectionEnum, PlexosDB, PropertyRecord
     from plexosdb.db_manager import SQLiteManager
 
 
@@ -39,6 +45,62 @@ def batched(iterable: Iterable[Any], n: int) -> Iterator[tuple[Any, ...]]:
     """
     it = iter(iterable)
     return iter(lambda: tuple(islice(it, n)), ())
+
+
+def sqlite_query_chunk_size(*, fixed_parameters: int = 0, parameters_per_item: int = 1) -> int:
+    """Return a conservative batch size that stays within SQLite's bind limit."""
+    if fixed_parameters < 0:
+        raise ValueError("fixed_parameters must be non-negative")
+    if parameters_per_item < 1:
+        raise ValueError("parameters_per_item must be positive")
+
+    chunk_size = (SQLITE_QUERY_PARAMETER_LIMIT - fixed_parameters) // parameters_per_item
+    if chunk_size < 1:
+        raise ValueError("fixed_parameters and parameters_per_item exceed the SQLite query parameter limit")
+    return chunk_size
+
+
+def _iterate_property_filter_batches(
+    db: PlexosDB,
+    conditions: list[str],
+    *,
+    scenarios: list[str],
+    scenario_categories: list[str],
+    batch_size: int,
+) -> Iterator[PropertyRecord]:
+    """Query property rows using parameter-safe scenario filter batches."""
+    in_clause_count = int(bool(scenarios)) + int(bool(scenario_categories))
+    chunk_size = sqlite_query_chunk_size(parameters_per_item=max(in_clause_count, 1))
+    scenario_batches = batched(scenarios, chunk_size) if scenarios else [()]
+    seen: set[tuple[int, int | None]] | None = (
+        set() if len(scenarios) > chunk_size or len(scenario_categories) > chunk_size else None
+    )
+
+    for scenario_batch in scenario_batches:
+        category_batches = batched(scenario_categories, chunk_size) if scenario_categories else [()]
+        for category_batch in category_batches:
+            batch_conditions = list(conditions)
+            query_params: list[str] = []
+            if scenario_batch:
+                placeholders = ", ".join("?" for _ in scenario_batch)
+                batch_conditions.append(f"scenario.name IN ({placeholders})")
+                query_params.extend(scenario_batch)
+            if category_batch:
+                placeholders = ", ".join("?" for _ in category_batch)
+                batch_conditions.append(f"scenario_category.name IN ({placeholders})")
+                query_params.extend(category_batch)
+
+            where_clause = "WHERE " + " AND ".join(batch_conditions) if batch_conditions else ""
+            query = Template(PROPERTY_QUERY).safe_substitute(where_clause=where_clause)
+            params = tuple(query_params) if query_params else None
+            rows = db._db.iter_dicts(query, params=params, batch_size=batch_size)
+            for row in rows:
+                key = (row.pop("_membership_id"), row.pop("_data_id"))
+                if seen is not None:
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                yield cast("PropertyRecord", row)
 
 
 def validate_string(value: str) -> Any:
@@ -368,18 +430,23 @@ def _resolve_membership_map(
         )
         parent_class_id = db.get_class_id(parent_class)
         child_class_id = db.get_class_id(object_class)
-        placeholders = ",".join("?" for _ in component_names)
-        query = f"""
-            SELECT child_object.name, mem.membership_id
-            FROM t_membership AS mem
-            INNER JOIN t_object AS child_object ON child_object.object_id = mem.child_object_id
-            WHERE mem.parent_class_id = ?
-              AND mem.child_class_id = ?
-              AND mem.collection_id = ?
-              AND child_object.name IN ({placeholders})
-        """
-        params: tuple[Any, ...] = (parent_class_id, child_class_id, collection_id, *component_names)
-        memberships = db._db.fetchall(query, params)
+        memberships = []
+        for name_batch in batched(
+            component_names,
+            sqlite_query_chunk_size(fixed_parameters=3),
+        ):
+            placeholders = ",".join("?" for _ in name_batch)
+            query = f"""
+                SELECT child_object.name, mem.membership_id
+                FROM t_membership AS mem
+                INNER JOIN t_object AS child_object ON child_object.object_id = mem.child_object_id
+                WHERE mem.parent_class_id = ?
+                  AND mem.child_class_id = ?
+                  AND mem.collection_id = ?
+                  AND child_object.name IN ({placeholders})
+            """
+            params = (parent_class_id, child_class_id, collection_id, *name_batch)
+            memberships.extend(db._db.fetchall(query, params))
 
     if not memberships:
         missing = ", ".join(sorted(name for name in component_names if name))
@@ -611,10 +678,7 @@ def insert_property_values(
 
     unique_membership_ids = list({mid for mid, _, _ in params})
     membership_to_name: dict[int, str] = {}
-    # Specify bound parameter limit
-    CHUNK = 900  # noqa: N806
-    for i in range(0, len(unique_membership_ids), CHUNK):
-        chunk = tuple(unique_membership_ids[i : i + CHUNK])
+    for chunk in batched(unique_membership_ids, sqlite_query_chunk_size()):
         ph = ",".join("?" * len(chunk))
         rows = db._db.fetchall(
             f"""SELECT m.membership_id, o.name
